@@ -104,6 +104,9 @@ knowledge:
     - "Cadences Weather V1 : current 600 s, hourly 1800 s, daily 10800 s ; horizon hourly 48 h et daily 10 jours."
     - "La clé OpenWeather runtime est séparée du TOML et stockée par défaut dans /etc/pulsedeck/secrets/openweather_api_key ; root et le service pulsedeck peuvent la mettre à jour pour permettre la configuration Web."
     - "À partir de patch_0008, les scripts installent le socle sans questions métier ; Weather est configuré via PulseDeck Admin, qui gère clé, géocodage, test fournisseur, activation et cadences."
+    - "À partir de patch_0009, PulseDeck Admin utilise une navigation Vue d’ensemble / Weather / Services / Sécurité, des notifications homogènes et un catalogue commun destiné aux collectors présents et futurs."
+    - "Ordre de développement prévu après le framework Admin : News, PC gamer, Printer."
+    - "News utilisera GNews comme fournisseur, exclusivement en HTTPS, avec authentification fournisseur par header X-Api-Key ; le schéma MQTT et la cadence News restent à définir avant implémentation."
   unresolved:
     - "Schémas exacts des payloads applicatifs hors Weather."
     - "Politique exacte de cache."
@@ -127,6 +130,11 @@ contracts:
     - "Le collector utilise current, timeline/1h et timeline/1day ; les timelines 1min et 15min restent hors patch_0007."
     - "Les snapshots Weather restent retained lors d'une erreur fournisseur ; weather/availability porte l'état de la source."
     - "Les unités MQTT sont normalisées explicitement en Celsius, hPa, pourcentage, m/s et millimètres selon les champs."
+  news:
+    - "Fournisseur prévu : GNews."
+    - "Transport fournisseur : HTTPS uniquement."
+    - "Authentification fournisseur : header X-Api-Key."
+    - "Le schéma MQTT, la cadence, les filtres et les limites News restent unresolved jusqu’au patch d’implémentation."
   persistence:
     - "L'ESP32 conserve localement les dernières données valides afin de rester utilisable lorsque le Pi ou MQTT est indisponible."
     - "La politique détaillée de cache reste unresolved."

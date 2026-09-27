@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from .. import __version__
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
 from ..config import DEFAULT_OPENWEATHER_KEY_PATH, WeatherConfig, weather_config_from_mapping
+from .catalog import build_service_catalog
 from .security import (
     COOKIE_NAME,
     PASSWORD_HASH_PATH,
@@ -214,6 +215,14 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             "weather": state["weather"],
             "admin": {"listen": runtime.config.admin.listen, "port": runtime.config.admin.port},
             "system": _system_metrics(),
+        }
+
+    @app.get("/api/services")
+    def services(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        state = runtime.health.snapshot()
+        return {
+            "services": build_service_catalog(state["weather"], runtime.config.weather.enabled),
         }
 
     @app.get("/api/weather/config")
