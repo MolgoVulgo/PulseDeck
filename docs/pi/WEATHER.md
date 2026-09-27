@@ -79,7 +79,7 @@ daily   : 10800 s / 3 h
 
 L'horaire récupère jusqu'à 48 heures. Comme One Call 4.0 limite la timeline `1h` à 20 enregistrements par réponse, le collector suit les liens de pagination `next` jusqu'à obtenir les 48 enregistrements ou atteindre la fin du jeu de données.
 
-Les requêtes initiales `timeline/1h` et `timeline/1day` sont envoyées sans paramètre `start`. Pour avancer dans la timeline, le collector utilise exclusivement les URLs `next` entièrement préparées par OpenWeather. `patch_0007-1` corrige ainsi le HTTP 404 observé sur `timeline/1h` lorsque `start` était ajouté manuellement à la première requête.
+Les requêtes initiales `timeline/1h` et `timeline/1day` sont envoyées sans paramètre `start`. Pour avancer dans la timeline, le collector utilise exclusivement les URLs `next` préparées par OpenWeather. La documentation fournisseur les montre en HTTPS ; un retour live sur `bluebox` a toutefois observé des liens `next` en HTTP. À partir de `patch_0007-2`, PulseDeck n'accepte ces liens que pour l'hôte exact `api.openweathermap.org` et le chemin One Call 4.0, puis force HTTPS avant toute requête afin que la clé API ne soit jamais transmise en clair.
 
 Le daily récupère jusqu'à 10 jours, ce qui tient dans la limite de 10 enregistrements d'une réponse `1day`.
 

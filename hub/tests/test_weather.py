@@ -109,6 +109,52 @@ def test_pagination_collects_multiple_hourly_pages(monkeypatch):
     assert result.data[-1]["dt"] == 1000 + 47 * 3600
 
 
+
+def test_http_pagination_url_is_upgraded_to_https(monkeypatch):
+    cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path("/unused"))
+    client = OpenWeatherClient(cfg)
+    seen = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return (
+                b'{"lat":49.3615,"lon":6.1919,"timezone":"Europe/Paris",'
+                b'"timezone_offset":7200,"data":[]}'
+            )
+
+    def fake_urlopen(request, timeout):
+        seen.append((request.full_url, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("pulsedeck_hub.collectors.weather.urlopen", fake_urlopen)
+    live_next = (
+        "http://api.openweathermap.org/data/4.0/onecall/timeline/1h"
+        "?cnt=20&lat=49.3615&lon=6.1919&start=1790607600"
+        "&appid=secret&units=metric&lang=fr"
+    )
+
+    client._request(live_next)
+
+    assert len(seen) == 1
+    assert seen[0][0].startswith(
+        "https://api.openweathermap.org/data/4.0/onecall/timeline/1h?"
+    )
+    assert "appid=secret" in seen[0][0]
+    assert not seen[0][0].startswith("http://")
+
+
+def test_pagination_url_outside_onecall_path_is_rejected():
+    cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path("/unused"))
+    client = OpenWeatherClient(cfg)
+    with pytest.raises(WeatherError, match="unsafe pagination URL"):
+        client._request("http://api.openweathermap.org/geo/1.0/direct?appid=secret")
+
 def test_unsafe_pagination_host_is_rejected():
     cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path("/unused"))
     client = OpenWeatherClient(cfg)

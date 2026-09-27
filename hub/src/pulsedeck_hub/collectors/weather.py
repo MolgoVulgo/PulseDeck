@@ -254,11 +254,19 @@ class OpenWeatherClient:
         return key
 
     def _request(self, path_or_url: str, *, start: int | None = None) -> WeatherResponse:
-        if path_or_url.startswith("https://"):
-            parsed = urlparse(path_or_url)
-            if parsed.scheme != "https" or parsed.hostname != ALLOWED_API_HOST:
+        parsed = urlparse(path_or_url)
+        if parsed.scheme:
+            if (
+                parsed.scheme not in {"http", "https"}
+                or parsed.hostname != ALLOWED_API_HOST
+                or not parsed.path.startswith("/data/4.0/onecall/")
+            ):
                 raise WeatherError("provider returned an unsafe pagination URL")
-            url = path_or_url
+            # OpenWeather has been observed returning pagination links with an
+            # http scheme even though the documented examples use https. Never
+            # send the API key in clear text: pin the known host and upgrade the
+            # pagination request to HTTPS before following it.
+            url = parsed._replace(scheme="https", netloc=ALLOWED_API_HOST, fragment="").geturl()
         else:
             params: dict[str, object] = {
                 "lat": self.config.latitude,
@@ -271,7 +279,7 @@ class OpenWeatherClient:
                 params["start"] = start
             url = f"{API_ROOT}/{path_or_url}?{urlencode(params)}"
 
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.2.1"})
+        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.2.2"})
         try:
             with urlopen(request, timeout=self.config.request_timeout) as response:  # noqa: S310
                 body = response.read()
