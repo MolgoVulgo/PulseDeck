@@ -1,165 +1,92 @@
-# Installation Raspberry Pi
+# Raspberry Pi Installation
 
-## Principe
+> English is authoritative. French translation: [`fr/INSTALL.md`](fr/INSTALL.md).
 
-Le Raspberry Pi est une cible de déploiement : le dépôt PulseDeck n'a pas besoin d'y être cloné.
+## Principle
 
-L'installation par scripts suit trois règles :
+The Raspberry Pi is a deployment target. The PulseDeck Git repository does not need to be cloned on it.
 
-1. tout ce qui peut être détecté ou configuré automatiquement l'est sans intervention ;
-2. une question n'est posée que lorsqu'une information ne peut pas être déterminée proprement ou lorsqu'un choix manuel est nécessaire ;
-3. chaque script reste relançable et fournit un mode `--check` sans modification.
+Deployment scripts follow three rules:
 
-## `setup_pi.sh` — installation complète
+1. anything that can be detected or configured deterministically is automated;
+2. service-specific functional configuration is handled by PulseDeck Admin, not by installer prompts;
+3. every script is rerunnable and provides a read-only `--check` mode.
 
-C'est le point d'entrée recommandé.
+## Recommended entry point
 
-Il enchaîne :
-
-```text
-préflight
-  ↓
-bootstrap_pi.sh
-  ├── contrôles système
-  ├── installation/configuration Mosquitto
-  └── tests MQTT
-  ↓
-deploy_hub.sh
-  ├── utilisateur/runtime PulseDeck
-  ├── venv Python
-  ├── installation pulsedeck-hub
-  ├── configuration système
-  ├── Web Admin + identifiants initiaux
-  ├── systemd
-  └── validation MQTT/Web
-  ↓
-résumé final
-```
-
-Téléchargement direct depuis GitHub :
+`setup_pi.sh` is the normal installer for both a fresh target and an existing installation.
 
 ```bash
 curl -fsSL \
   https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
   -o setup_pi.sh
 chmod +x setup_pi.sh
-```
 
-Diagnostic complet :
-
-```bash
 ./setup_pi.sh --check
-```
-
-Installation complète :
-
-```bash
 sudo ./setup_pi.sh
 ```
 
-Si `setup_pi.sh` est utilisé hors dépôt, il récupère automatiquement `bootstrap_pi.sh` et `deploy_hub.sh` depuis GitHub. Si ces fichiers sont disponibles localement, les copies locales sont utilisées.
+The standalone script downloads `bootstrap_pi.sh` and `deploy_hub.sh` from GitHub when they are not present locally. A repository checkout is optional.
 
-Options principales :
+Main options:
 
 ```text
---check              aucune modification
---verbose            diagnostics supplémentaires
---bootstrap-only     socle MQTT uniquement
---hub-only           hub uniquement
---non-interactive    ne poser aucune question
---source-dir DIR     utiliser les scripts spécialisés depuis DIR
---ref REF            branche/tag GitHub à utiliser
+--check              validate without changing the target
+--verbose            print additional diagnostics
+--bootstrap-only     install/check MQTT foundation only
+--hub-only           install/check pulsedeck-hub only
+--non-interactive    never request manual input
+--source-dir DIR     use local specialized scripts from DIR
+--ref REF            Git branch/tag/commit used for downloads
 ```
 
-En mode application, si le script n'est pas lancé comme root et que `sudo` est disponible, il se relance automatiquement via `sudo`.
+## `bootstrap_pi.sh`
 
-## `bootstrap_pi.sh` — socle système/MQTT
+The bootstrap script checks the host, detects the LAN IPv4 address, installs Mosquitto if needed, configures the IPv4-only listener, enables persistence and validates QoS 1 / retained behavior. It never runs `pacman -Sy` or `pacman -Syu`.
 
-Ce script est autonome. Il sert lorsque seul le socle MQTT doit être installé, contrôlé ou réparé.
+## `deploy_hub.sh`
 
-```bash
-./bootstrap_pi.sh --check
-sudo ./bootstrap_pi.sh
-```
+The hub deployer:
 
-Il :
+- creates/reuses the `pulsedeck` system account;
+- installs application sources under `/opt/pulsedeck/hub`;
+- creates/reuses `/opt/pulsedeck/venv`;
+- installs Python dependencies inside that venv;
+- creates or preserves `/etc/pulsedeck/pulsedeck.toml`;
+- prepares `/etc/pulsedeck/secrets/`;
+- enables PulseDeck Admin on the detected LAN IPv4, port `8080`;
+- installs and restarts `pulsedeck-hub.service`;
+- validates runtime availability.
 
-- contrôle OS, architecture, Python, RAM, disque et réseau ;
-- détecte l'IPv4 LAN ;
-- installe Mosquitto s'il manque ;
-- n'exécute jamais `pacman -Sy` ni `pacman -Syu` ;
-- configure le listener MQTT LAN IPv4 ;
-- active persistence, anonymous V1, sans ACL/TLS ;
-- active/démarre Mosquitto ;
-- teste QoS 1, retained et restauration après redémarrage ;
-- produit un résumé final.
+Functional collector configuration is not requested by the deployer. Configure Weather, News and future services through PulseDeck Admin.
 
-## `deploy_hub.sh` — service applicatif
-
-Ce script est également autonome. Il suppose que le socle MQTT est déjà opérationnel.
-
-```bash
-./deploy_hub.sh --check
-sudo ./deploy_hub.sh
-```
-
-Il :
-
-- contrôle Python et Mosquitto ;
-- crée l'utilisateur système `pulsedeck` si nécessaire ;
-- installe les sources sous `/opt/pulsedeck/hub` ;
-- crée/réutilise `/opt/pulsedeck/venv` ;
-- installe les dépendances Python dans ce venv ;
-- crée la configuration initiale `/etc/pulsedeck/pulsedeck.toml` si elle n'existe pas ;
-- conserve une configuration runtime existante ;
-- active PulseDeck Admin sur l’IPv4 LAN détectée, port `8080` ;
-- génère un mot de passe administrateur initial s’il n’existe pas encore ;
-- installe et active `pulsedeck-hub.service` ;
-- vérifie `pulsedeck/v1/system/availability` et `/api/health`.
-
-Layout runtime :
+Runtime layout:
 
 ```text
 /opt/pulsedeck/hub
 /opt/pulsedeck/venv
 /etc/pulsedeck/pulsedeck.toml
+/etc/pulsedeck/secrets/
 /var/lib/pulsedeck
 /etc/systemd/system/pulsedeck-hub.service
 ```
 
-## Questions interactives
+## Web Admin after installation
 
-L'installation ne demande pas de confirmation pour les opérations attendues après un lancement volontaire de `sudo ./setup_pi.sh`.
-
-Une question est réservée à une situation réellement indéterminée. Par exemple, si un script spécialisé manque et ne peut pas être téléchargé automatiquement, `setup_pi.sh` peut demander son chemin local. Avec `--non-interactive`, aucune question n'est posée et l'étape échoue explicitement à la place.
-
-Les fichiers existants non reconnus comme gérés par PulseDeck ne doivent pas être écrasés silencieusement.
-
-## Dépôt présent sur le Pi
-
-Le même point d'entrée fonctionne depuis un clone :
-
-```bash
-cd /chemin/vers/PulseDeck
-sudo ./scripts/setup_pi.sh
-```
-
-Dans ce cas, les scripts spécialisés du dépôt sont utilisés directement.
-
-## Configuration fonctionnelle après installation
-
-À partir de `patch_0008`, les scripts installent le socle et ne demandent plus la clé OpenWeather ni le lieu. La configuration des collectors passe par PulseDeck Admin.
-
-Après la première installation, `deploy_hub.sh` affiche une fois l’adresse et le mot de passe administrateur initial :
+Open:
 
 ```text
-http://<IPv4-LAN-du-Pi>:8080
-utilisateur: admin
-mot de passe: généré à l’installation
+http://<Pi-LAN-IPv4>:8080
 ```
 
-Une configuration Weather déjà présente est conservée. Sur une nouvelle installation, Weather reste désactivé jusqu’à sa configuration dans l’interface Web.
+On the first Web-enabled deployment, the installer creates the local `admin` credentials and prints the initial password once. Existing credentials are preserved on later upgrades.
 
-La clé OpenWeather reste séparée du TOML dans `/etc/pulsedeck/secrets/openweather_api_key`. L’API Web ne la renvoie jamais en clair.
+## Targeted updates
 
-Voir `docs/pi/ADMIN.md` et `docs/pi/WEATHER.md`.
+```bash
+sudo ./setup_pi.sh --hub-only
+sudo ./setup_pi.sh --bootstrap-only
+./setup_pi.sh --check --verbose
+```
+
+A normal hub update preserves runtime collector settings and secrets.

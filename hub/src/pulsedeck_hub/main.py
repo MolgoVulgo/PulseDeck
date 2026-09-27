@@ -9,6 +9,7 @@ import signal
 import threading
 
 from .admin.app import AdminServer
+from .collectors.news import NewsCollector
 from .collectors.weather import WeatherCollector
 from .config import DEFAULT_CONFIG_PATH, HubConfig, load_config
 from .health.state import HealthState
@@ -36,8 +37,10 @@ class HubRuntime:
         self.config = config
         self.health = HealthState()
         self.health.configure_weather(config.weather.enabled)
+        self.health.configure_news(config.news.enabled)
         self.mqtt_client = HubMQTTClient(config.mqtt)
         self.weather_collector: WeatherCollector | None = None
+        self.news_collector: NewsCollector | None = None
         self.admin_server: AdminServer | None = None
         self._config_lock = threading.RLock()
 
@@ -49,30 +52,58 @@ class HubRuntime:
         else:
             self.weather_collector = None
 
+    def _start_news(self) -> None:
+        self.health.configure_news(self.config.news.enabled)
+        if self.config.news.enabled:
+            self.news_collector = NewsCollector(self.config.news, self.mqtt_client, self.health)
+            self.news_collector.start()
+        else:
+            self.news_collector = None
+
     def start(self) -> None:
         self.mqtt_client.start()
         self._start_weather()
+        self._start_news()
         if self.config.admin.enabled:
             self.admin_server = AdminServer(self)
             self.admin_server.start()
 
-    def reload_weather(self) -> None:
-        """Reload only mutable collector configuration without restarting the hub."""
+    def _reload_collectors(self, *, weather: bool = False, news: bool = False) -> None:
         with self._config_lock:
             new_config = load_config(self.config_path)
             if new_config.mqtt != self.config.mqtt:
                 raise ValueError("MQTT changes require a service restart")
             if new_config.admin != self.config.admin:
                 raise ValueError("Admin listener changes require a service restart")
-            old = self.weather_collector
-            if old is not None:
-                old.stop()
+            if not weather and new_config.weather != self.config.weather:
+                raise ValueError("Weather changes require reload_weather")
+            if not news and new_config.news != self.config.news:
+                raise ValueError("News changes require reload_news")
+
+            if weather and self.weather_collector is not None:
+                self.weather_collector.stop()
+            if news and self.news_collector is not None:
+                self.news_collector.stop()
+
             self.config = new_config
-            self._start_weather()
+            if weather:
+                self._start_weather()
+            if news:
+                self._start_news()
+
+    def reload_weather(self) -> None:
+        """Reload Weather configuration without restarting the hub."""
+        self._reload_collectors(weather=True)
+
+    def reload_news(self) -> None:
+        """Reload News configuration without restarting the hub."""
+        self._reload_collectors(news=True)
 
     def stop(self) -> None:
         if self.admin_server is not None:
             self.admin_server.stop()
+        if self.news_collector is not None:
+            self.news_collector.stop()
         if self.weather_collector is not None:
             self.weather_collector.stop()
         self.mqtt_client.stop()

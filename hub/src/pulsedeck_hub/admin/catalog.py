@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_service_catalog(weather_state: dict[str, Any], weather_enabled: bool) -> list[dict[str, Any]]:
-    """Return stable Admin metadata for implemented and planned collectors.
-
-    The catalog deliberately contains only contracts already confirmed for a service.
-    Unknown PC/Printer/Mini-server provider details remain unspecified until their
-    implementation patches define them.
-    """
+def build_service_catalog(
+    weather_state: dict[str, Any],
+    weather_enabled: bool,
+    news_state: dict[str, Any],
+    news_enabled: bool,
+) -> list[dict[str, Any]]:
+    """Return stable Admin metadata for implemented and planned collectors."""
 
     return [
         {
@@ -28,13 +28,13 @@ def build_service_catalog(weather_state: dict[str, Any], weather_enabled: bool) 
         {
             "id": "news",
             "label": "News",
-            "available": False,
-            "state": "planned",
-            "enabled": False,
+            "available": True,
+            "state": news_state.get("state", "disabled"),
+            "enabled": news_enabled,
             "provider": "GNews",
             "transport": "HTTPS",
             "auth": "X-Api-Key",
-            "view": None,
+            "view": "news",
         },
         {
             "id": "pc_gamer",
@@ -60,7 +60,7 @@ def build_service_catalog(weather_state: dict[str, Any], weather_enabled: bool) 
         },
         {
             "id": "mini_server",
-            "label": "Mini serveur",
+            "label": "Mini server",
             "available": False,
             "state": "planned",
             "enabled": False,

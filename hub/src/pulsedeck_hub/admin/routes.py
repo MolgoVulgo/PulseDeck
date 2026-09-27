@@ -12,8 +12,16 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
+from ..collectors.news import GNewsClient, NewsError, normalize_news
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
-from ..config import DEFAULT_OPENWEATHER_KEY_PATH, WeatherConfig, weather_config_from_mapping
+from ..config import (
+    DEFAULT_GNEWS_KEY_PATH,
+    DEFAULT_OPENWEATHER_KEY_PATH,
+    NewsConfig,
+    WeatherConfig,
+    news_config_from_mapping,
+    weather_config_from_mapping,
+)
 from .catalog import build_service_catalog
 from .security import (
     COOKIE_NAME,
@@ -26,7 +34,7 @@ from .security import (
     verify_password,
     verify_session,
 )
-from .storage import update_secret, update_weather_config
+from .storage import update_news_config, update_secret, update_weather_config
 from .ui import ADMIN_HTML
 
 
@@ -57,9 +65,9 @@ def _require_mutation_guard(request: Request, session_key: bytes) -> None:
         raise _json_error(403, "Cross-origin request rejected")
 
 
-def _configured_key(config: WeatherConfig) -> str | None:
+def _configured_secret(path: Path) -> str | None:
     try:
-        value = config.api_key_file.read_text(encoding="utf-8").strip()
+        value = path.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     return value or None
@@ -89,7 +97,7 @@ def _candidate_weather(runtime: Any, body: dict[str, Any]) -> tuple[WeatherConfi
     provided = body.get("api_key")
     if provided is not None and not isinstance(provided, str):
         raise _json_error(400, "api_key must be a string or null")
-    key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_key(current)
+    key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(current.api_key_file)
     if candidate.enabled and not key:
         raise _json_error(400, "OpenWeather API key is required when Weather is enabled")
     return candidate, key
@@ -106,6 +114,48 @@ def _test_weather(candidate: WeatherConfig, key: str) -> dict[str, Any]:
         "temperature_c": current.data[0].get("temp"),
         "timezone": current.timezone,
         "hourly_records": len(hourly.data),
+    }
+
+
+def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str | None]:
+    current = runtime.config.news
+    raw = {
+        "enabled": body.get("enabled", current.enabled),
+        "provider": "gnews",
+        "mode": body.get("mode", current.mode),
+        "category": body.get("category", current.category),
+        "query": body.get("query", current.query),
+        "lang": body.get("lang", current.lang),
+        "country": body.get("country", current.country),
+        "max_articles": body.get("max_articles", current.max_articles),
+        "interval": body.get("interval", current.interval),
+        "request_timeout": body.get("request_timeout", current.request_timeout),
+        "api_key_file": str(current.api_key_file or DEFAULT_GNEWS_KEY_PATH),
+    }
+    try:
+        candidate = news_config_from_mapping(raw)
+    except ValueError as exc:
+        raise _json_error(400, str(exc)) from exc
+    provided = body.get("api_key")
+    if provided is not None and not isinstance(provided, str):
+        raise _json_error(400, "api_key must be a string or null")
+    key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(current.api_key_file)
+    if candidate.enabled and not key:
+        raise _json_error(400, "GNews API key is required when News is enabled")
+    return candidate, key
+
+
+def _test_news(candidate: NewsConfig, key: str) -> dict[str, Any]:
+    raw = GNewsClient(candidate, api_key=key).fetch()
+    payload = normalize_news(raw, candidate)
+    articles = payload.get("articles")
+    count = len(articles) if isinstance(articles, list) else 0
+    first_title = articles[0].get("title") if count and isinstance(articles[0], dict) else None
+    return {
+        "ok": True,
+        "article_count": count,
+        "total_articles": payload.get("total_articles"),
+        "first_title": first_title,
     }
 
 
@@ -155,7 +205,6 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         body = await request.json()
         password = body.get("password") if isinstance(body, dict) else None
         if not isinstance(password, str) or not verify_password(password, _read_password_hash()):
-            # Keep timing less useful for trivial LAN brute-force attempts.
             time.sleep(0.15)
             raise _json_error(401, "Invalid credentials")
         response = JSONResponse({"ok": True})
@@ -213,6 +262,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "namespace": runtime.config.mqtt.namespace,
             },
             "weather": state["weather"],
+            "news": state["news"],
             "admin": {"listen": runtime.config.admin.listen, "port": runtime.config.admin.port},
             "system": _system_metrics(),
         }
@@ -222,7 +272,12 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         _require_auth(request, session_key)
         state = runtime.health.snapshot()
         return {
-            "services": build_service_catalog(state["weather"], runtime.config.weather.enabled),
+            "services": build_service_catalog(
+                state["weather"],
+                runtime.config.weather.enabled,
+                state["news"],
+                runtime.config.news.enabled,
+            ),
         }
 
     @app.get("/api/weather/config")
@@ -242,7 +297,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             "hourly_hours": w.hourly_hours,
             "daily_days": w.daily_days,
             "request_timeout": w.request_timeout,
-            "api_key_configured": bool(_configured_key(w)),
+            "api_key_configured": bool(_configured_secret(w.api_key_file)),
         }
 
     @app.post("/api/weather/geocode")
@@ -252,7 +307,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         if not isinstance(body, dict) or not isinstance(body.get("query"), str) or not body["query"].strip():
             raise _json_error(400, "Location query is required")
         provided = body.get("api_key")
-        key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_key(runtime.config.weather)
+        key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(runtime.config.weather.api_key_file)
         if not key:
             raise _json_error(400, "OpenWeather API key is required")
         try:
@@ -289,14 +344,14 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 raise _json_error(502, str(exc)) from exc
 
         old_config = runtime.config_path.read_text(encoding="utf-8")
-        old_key = _configured_key(runtime.config.weather)
+        old_key = _configured_secret(runtime.config.weather.api_key_file)
         key_path = candidate.api_key_file
         try:
             if isinstance(body.get("api_key"), str) and body["api_key"].strip():
                 update_secret(key_path, body["api_key"])
             update_weather_config(runtime.config_path, candidate)
             runtime.reload_weather()
-        except Exception as exc:  # rollback is deliberate: config changes are transactional
+        except Exception as exc:
             try:
                 runtime.config_path.write_text(old_config, encoding="utf-8")
                 os.chmod(runtime.config_path, 0o660)
@@ -305,6 +360,76 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 elif key_path.exists():
                     key_path.unlink()
                 runtime.reload_weather()
+            except Exception:
+                pass
+            raise _json_error(500, f"Configuration not applied: {type(exc).__name__}") from exc
+        return {"ok": True}
+
+    @app.get("/api/news/config")
+    def news_config(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        n = runtime.config.news
+        return {
+            "enabled": n.enabled,
+            "provider": n.provider,
+            "mode": n.mode,
+            "category": n.category,
+            "query": n.query,
+            "lang": n.lang,
+            "country": n.country,
+            "max_articles": n.max_articles,
+            "interval": n.interval,
+            "request_timeout": n.request_timeout,
+            "api_key_configured": bool(_configured_secret(n.api_key_file)),
+            "auth": "X-Api-Key",
+            "transport": "HTTPS",
+        }
+
+    @app.post("/api/news/test")
+    async def news_test(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise _json_error(400, "Invalid body")
+        candidate, key = _candidate_news(runtime, body)
+        if not key:
+            raise _json_error(400, "GNews API key is required for a provider test")
+        try:
+            return _test_news(candidate, key)
+        except NewsError as exc:
+            raise _json_error(502, str(exc)) from exc
+
+    @app.post("/api/news/config")
+    async def news_save(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise _json_error(400, "Invalid body")
+        candidate, key = _candidate_news(runtime, body)
+        provided_key = isinstance(body.get("api_key"), str) and bool(body["api_key"].strip())
+        if candidate.enabled or provided_key:
+            try:
+                _test_news(candidate, key or "")
+            except NewsError as exc:
+                raise _json_error(502, str(exc)) from exc
+
+        old_config = runtime.config_path.read_text(encoding="utf-8")
+        old_key = _configured_secret(runtime.config.news.api_key_file)
+        key_path = candidate.api_key_file
+        try:
+            if isinstance(body.get("api_key"), str) and body["api_key"].strip():
+                update_secret(key_path, body["api_key"])
+            update_news_config(runtime.config_path, candidate)
+            runtime.reload_news()
+        except Exception as exc:
+            try:
+                runtime.config_path.write_text(old_config, encoding="utf-8")
+                os.chmod(runtime.config_path, 0o660)
+                if old_key is not None:
+                    update_secret(key_path, old_key)
+                elif key_path.exists():
+                    key_path.unlink()
+                runtime.reload_news()
             except Exception:
                 pass
             raise _json_error(500, f"Configuration not applied: {type(exc).__name__}") from exc

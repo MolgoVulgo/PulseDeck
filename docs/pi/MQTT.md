@@ -1,31 +1,20 @@
-# MQTT — Contrat V1 Raspberry Pi
+# MQTT Contract
+
+> English is authoritative. French translation: [`fr/MQTT.md`](fr/MQTT.md).
 
 ## Broker
 
-- Mosquitto natif
-- TCP 1883
-- LAN IPv4 uniquement
-- jamais exposé directement à Internet
-- authentification : aucune en V1
-- ACL : aucune en V1
-- TLS : aucun en V1
-- persistence broker : activée
+PulseDeck V1 uses native Mosquitto as a LAN-only data bus.
 
-Le choix sans authentification/ACL/TLS est limité au réseau domestique actuel. Un changement de périmètre réseau ou l'ajout de commandes sensibles impose de réévaluer ce modèle.
+- TCP port `1883`;
+- listener bound to the detected LAN IPv4 address;
+- never exposed directly to the Internet;
+- no MQTT authentication, ACL or TLS in the current trusted home-LAN scope;
+- persistence enabled;
+- retained state/snapshot messages;
+- MQTT 3.1.1 clients initially.
 
-## Installation
-
-La configuration MQTT peut être installée sans dépôt PulseDeck au moyen du script autonome :
-
-```text
-scripts/bootstrap_pi.sh
-```
-
-Le script embarque le fragment de configuration Mosquitto ; il ne dépend d'aucun template externe au runtime.
-
-## Bind réseau
-
-Le broker écoute explicitement sur l'adresse IPv4 LAN du Pi, détectée via l'interface portant la route par défaut. L'adresse observée au lancement est `192.168.0.250/24` sur `enu1u1u1`, mais elle n'est pas codée en dur.
+If the network trust boundary changes or MQTT carries sensitive commands, this security model must be revisited.
 
 ## Namespace
 
@@ -33,7 +22,13 @@ Le broker écoute explicitement sur l'adresse IPv4 LAN du Pi, détectée via l'i
 pulsedeck/v1/...
 ```
 
-Topics initiaux :
+## QoS policy
+
+- QoS 1: state and snapshots;
+- QoS 0: optional fast/realtime streams;
+- QoS 2: unused in V1.
+
+## Topics
 
 ```text
 pulsedeck/v1/system/availability
@@ -58,73 +53,12 @@ pulsedeck/v1/printer/job
 pulsedeck/v1/printer/thumbnail
 ```
 
-## QoS
+## Availability
 
-- QoS 1 : états, disponibilités et snapshots applicatifs ;
-- QoS 0 : flux rapides/éphémères éventuels ;
-- QoS 2 : non utilisé.
+`system/availability` is retained and managed by the hub with an MQTT Last Will. Collector availability topics describe the remote source/connectivity state, not the ESP32 display freshness.
 
-## Retained et reprise
+The ESP32 derives `fresh`, `stale` and `offline` locally from payload timestamps and connection state.
 
-Les états courants et les topics `availability` sont retained afin qu'un ESP32 qui démarre ou se reconnecte récupère immédiatement le dernier état valide. Les flux rapides éventuels ne sont pas retained.
+## Snapshot behavior
 
-Le hub utilisera un Last Will retained sur `pulsedeck/v1/system/availability`. Les disponibilités des sources seront publiées séparément.
-
-## Payloads
-
-Les payloads restent versionnés, normalisés, simples à parser, adaptés à l'affichage et timestampés. `system/availability` et les quatre topics Weather ont désormais un schéma 1 défini ; les autres payloads applicatifs restent à définir.
-
-## Validation live du broker
-
-Validation effectuée sur `bluebox` le 27 septembre 2026 :
-
-```text
-Mosquitto        2.1.2-2
-IPv4 LAN         192.168.0.250
-Interface        enu1u1u1
-Listener         192.168.0.250:1883 uniquement
-IPv6 globale     non requise par PulseDeck V1 ; état hôte à contrôler séparément
-Auth / ACL / TLS aucun
-QoS 1 retained   validé
-Persistence      retained restauré après restart
-systemd          service actif et activé au boot
-```
-
-Cette validation couvre le broker local. Un test depuis une autre machine du LAN reste une validation séparée du chemin réseau client -> broker.
-
-## Availability du hub — schéma 1
-
-`patch_0003` implémente le premier payload applicatif concret sur :
-
-```text
-pulsedeck/v1/system/availability
-```
-
-Payload online retained/QoS 1 :
-
-```json
-{"schema":1,"state":"online","ts":1790500000,"ts_kind":"event","session_started":1790500000}
-```
-
-À l'arrêt propre, le hub publie `state=offline` avec `reason=graceful_shutdown`. Le Last Will utilise également `state=offline`, `reason=connection_lost` et `ts_kind=will_created`. Un Last Will est préparé avant la perte de connexion et ne peut donc pas porter l'heure exacte de la future coupure ; `ts_kind` rend cette limite explicite.
-
-Le client hub utilise MQTT 3.1.1, QoS 1 retained pour l'availability et une reconnexion automatique avec délai exponentiel borné.
-
-## Weather V1 — schéma 1
-
-`patch_0007` fixe les premiers payloads applicatifs Weather à partir d'OpenWeather One Call 4.0.
-
-Les quatre topics sont retained en QoS 1 :
-
-```text
-pulsedeck/v1/weather/availability
-pulsedeck/v1/weather/current
-pulsedeck/v1/weather/hourly
-pulsedeck/v1/weather/daily
-```
-
-`weather/availability` décrit la disponibilité du fournisseur indépendamment de `system/availability`. Une panne OpenWeather ne supprime pas les derniers snapshots météo retenus par le broker.
-
-Tous les payloads Weather utilisent `schema=1`, `source="openweather-onecall-4"` et des unités normalisées explicites (`*_c`, `*_hpa`, `*_pct`, `*_mps`, `*_mm`). `current` contient `source_ts`, `hourly` contient `hours` et `daily` contient `days`.
-
-Le détail complet du contrat se trouve dans `docs/pi/WEATHER.md`.
+Weather and News snapshot topics are retained with QoS 1. A provider failure does not erase the last good retained payload; only the source availability changes to `offline` until recovery.

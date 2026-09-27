@@ -1,21 +1,20 @@
 # PulseDeck
 
-PulseDeck est une plateforme d'affichage domestique modulaire construite autour d'un **Raspberry Pi**, de **MQTT** et d'un écran **ESP32-S3 480 × 480**.
+**English documentation is authoritative.** French version: [`README.fr.md`](README.fr.md).
 
-L'objectif est de centraliser la collecte et la normalisation des données sur le Raspberry Pi, puis de distribuer des données simples et prêtes à afficher à l'ESP32 via MQTT. L'ESP32 peut ainsi se concentrer sur l'interface graphique, la navigation, le cache local et les animations LVGL.
+PulseDeck is a modular home information display built around a **Raspberry Pi**, **MQTT** and an **ESP32-S3 480 × 480** display.
 
-> **Statut :** projet personnel en cours de développement. Le socle Raspberry Pi / Mosquitto / `pulsedeck-hub` est opérationnel ; le premier collector Weather est implémenté avec OpenWeather One Call 4.0 et doit maintenant être validé sur la cible.
+The Raspberry Pi centralizes remote API access, data collection and normalization. It publishes simple, versioned, display-ready snapshots over MQTT. The ESP32 stays focused on Wi-Fi/MQTT/NTP, local cache, freshness state, navigation, LVGL 9 rendering and animation.
 
 ## Architecture
 
 ```text
                          Raspberry Pi
                 ┌──────────────────────────┐
-Internet ──────►│ Weather collector        │
-                │ News collector           │
-PC ────────────►│ PC metrics collector     │
-Server ────────►│ Mini-server collector    │
-Printer ───────►│ Printer collector        │
+Internet ──────►│ Weather / News           │
+PC ────────────►│ PC metrics               │
+Server ────────►│ Mini-server metrics      │
+Printer ───────►│ Printer state            │
                 │                          │
                 │    pulsedeck-hub         │
                 │          │               │
@@ -25,118 +24,111 @@ Printer ───────►│ Printer collector        │
                            ▼
                 ┌──────────────────────────┐
                 │ ESP32-4848S040C_I        │
-                │                          │
                 │ Wi-Fi / MQTT / NTP       │
-                │ cache local              │
+                │ local cache              │
                 │ fresh / stale / offline  │
                 │ LVGL 9                   │
-                │ apps / widgets / graphs  │
                 └──────────────────────────┘
 ```
 
-Le principe central est volontairement simple :
-
 ```text
-Raspberry Pi = collecte / normalisation / agrégation
-MQTT         = bus de données local
-ESP32-S3     = interface graphique
+Raspberry Pi = collection / normalization / aggregation
+MQTT         = local data bus
+ESP32-S3     = user interface
 ```
 
-## Objectifs
+## Current Raspberry Pi stack
 
-PulseDeck doit permettre d'afficher plusieurs sources de données dans une interface unique :
-
-- météo et prévisions ;
-- actualités ;
-- métriques du PC principal ;
-- métriques d'un mini-serveur ;
-- état et progression d'une imprimante ;
-- état du réseau et de différents services LAN ;
-- écran Home synthétique regroupant les informations importantes.
-
-Les appels HTTP/HTTPS, clés API, protocoles spécifiques et traitements lourds restent côté Raspberry Pi. L'ESP32 reçoit des données déjà normalisées et adaptées à l'affichage.
-
-## Matériel et stack cible
-
-### Raspberry Pi
-
-Plateforme actuellement utilisée :
-
-- Raspberry Pi 3 Model B Plus Rev 1.3 ;
-- Arch Linux ARM ;
-- Python 3.14 ;
-- Mosquitto ;
-- systemd / journald.
-
-### Écran
-
-- ESP32-S3 ;
-- carte `ESP32-4848S040C_I` ;
-- écran 4 pouces 480 × 480 ;
-- LVGL 9 ;
-- tactile ;
-- Wi-Fi ;
-- MQTT ;
-- NTP local.
+- Raspberry Pi 3 Model B Plus reference target;
+- Arch Linux ARM / `armv7l`;
+- Python 3.14;
+- native Mosquitto;
+- one Python `pulsedeck-hub` process;
+- FastAPI/Uvicorn Web Admin inside the hub;
+- systemd / journald;
+- no container or database required for V1.
 
 ## MQTT
 
-MQTT est utilisé uniquement comme bus de données sur le LAN.
+PulseDeck V1 uses Mosquitto as a trusted-LAN data bus:
 
-Configuration V1 :
+- TCP `1883`;
+- LAN IPv4 listener only;
+- no direct Internet exposure;
+- QoS 1 for states/snapshots;
+- QoS 0 for optional fast streams;
+- retained last-known snapshots;
+- Last Will and automatic reconnect.
 
-- Mosquitto ;
-- TCP `1883` ;
-- IPv4 LAN uniquement ;
-- aucune exposition directe à Internet ;
-- pas d'authentification, d'ACL ou de TLS pour le réseau domestique actuel ;
-- QoS 1 pour les états et snapshots ;
-- QoS 0 pour les éventuels flux rapides ;
-- retained messages pour les derniers états ;
-- Last Will et reconnexion automatique.
-
-Namespace principal :
+Main namespace:
 
 ```text
 pulsedeck/v1/...
 ```
 
-Exemples de topics :
-
-```text
-pulsedeck/v1/system/availability
-
-pulsedeck/v1/weather/current
-pulsedeck/v1/weather/hourly
-pulsedeck/v1/weather/daily
-
-pulsedeck/v1/news/latest
-
-pulsedeck/v1/pc/gamer/dashboard
-pulsedeck/v1/server/mini/dashboard
-
-pulsedeck/v1/printer/status
-pulsedeck/v1/printer/job
-```
-
-## Weather — OpenWeather One Call 4.0
-
-Le premier collector applicatif utilise OpenWeather One Call 4.0. Le Pi interroge les endpoints `current`, `timeline/1h` et `timeline/1day`, normalise les réponses puis publie des snapshots retained QoS 1.
+Implemented application topics include:
 
 ```text
 pulsedeck/v1/weather/availability
 pulsedeck/v1/weather/current
 pulsedeck/v1/weather/hourly
 pulsedeck/v1/weather/daily
+
+pulsedeck/v1/news/availability
+pulsedeck/v1/news/latest
 ```
 
-Cadences par défaut : 10 minutes pour le temps actuel, 30 minutes pour les 48 heures horaires et 3 heures pour les 10 jours quotidiens. La clé API reste hors du TOML, dans `/etc/pulsedeck/secrets/openweather_api_key`.
+## Weather
 
-Lors du premier déploiement Weather, `deploy_hub.sh` propose de demander la clé et le lieu. Un nom de ville peut être résolu automatiquement via le Geocoding API OpenWeather. Voir [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md).
+Weather V1 uses OpenWeather One Call 4.0. The hub retrieves `current`, `timeline/1h` and `timeline/1day`, normalizes the provider response and publishes retained QoS 1 snapshots.
 
-## Installation du Raspberry Pi
+Default cadence:
 
-L'installation recommandée passe par `setup_pi.sh`. Il s'agit de l'orchestrateur complet : il prépare le socle MQTT puis installe ou met à jour `pulsedeck-hub`. Le dépôt Git n'a pas besoin d'être cloné sur le Raspberry Pi.
+```text
+current  10 min
+hourly   30 min, 48-hour horizon
+daily     3 h,   10-day horizon
+```
+
+The OpenWeather key is stored separately from TOML in `/etc/pulsedeck/secrets/openweather_api_key` and is managed from PulseDeck Admin.
+
+See [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md).
+
+## News
+
+News V1 uses **GNews API v4** with HTTPS and provider authentication in the HTTP header:
+
+```text
+X-Api-Key: <secret>
+```
+
+The key is never added to the query string. PulseDeck supports both GNews `top-headlines` and `search` modes, normalizes article metadata, deliberately excludes full provider `content`, then publishes a compact retained snapshot on `pulsedeck/v1/news/latest`.
+
+The GNews secret is stored at `/etc/pulsedeck/secrets/gnews_api_key` and is configured from PulseDeck Admin.
+
+See [`docs/pi/NEWS.md`](docs/pi/NEWS.md).
+
+## PulseDeck Admin
+
+After installation, normal service configuration is done from the Web UI:
+
+```text
+http://<Pi-LAN-IPv4>:8080
+```
+
+Admin currently provides:
+
+- Hub / MQTT / system health;
+- Weather configuration, API test and hot reload;
+- News configuration, GNews API test and hot reload;
+- common Services catalog for upcoming collectors;
+- local administrator password management.
+
+Secrets are masked after storage. Weather and News changes are tested before activation and applied transactionally.
+
+## Raspberry Pi installation
+
+A Git clone is not required on the target.
 
 ```bash
 curl -fsSL \
@@ -148,89 +140,70 @@ chmod +x setup_pi.sh
 sudo ./setup_pi.sh
 ```
 
-Lorsqu'il est lancé seul, `setup_pi.sh` récupère automatiquement depuis GitHub les scripts spécialisés dont il a besoin. Si le dépôt est déjà présent, il utilise les copies locales. Les questions interactives sont réservées aux situations où une information ou un fichier requis ne peut pas être déterminé automatiquement.
-
-### Scripts de déploiement
-
-| Script | Rôle | Dépôt requis | Usage principal |
-| --- | --- | --- | --- |
-| `setup_pi.sh` | Orchestration complète MQTT + hub | Non | Installation recommandée |
-| `bootstrap_pi.sh` | Préparation de l'hôte et installation/configuration Mosquitto | Non | Réparer ou contrôler uniquement le socle MQTT |
-| `deploy_hub.sh` | Installation/mise à jour du service Python `pulsedeck-hub` | Non | Redéployer uniquement l'application |
-
-Le mode `--check` est disponible sur les trois scripts et ne doit effectuer aucune modification.
-
-Exemples ciblés :
+Targeted hub update:
 
 ```bash
-# Socle MQTT uniquement
-sudo ./setup_pi.sh --bootstrap-only
-
-# Hub uniquement
 sudo ./setup_pi.sh --hub-only
-
-# Diagnostic complet
-./setup_pi.sh --check --verbose
 ```
 
-`bootstrap_pi.sh` configure Mosquitto sur l'IPv4 LAN détectée, active la persistence et vérifie notamment QoS 1 et retained. `deploy_hub.sh` installe le hub sous `/opt/pulsedeck`, sa configuration sous `/etc/pulsedeck` et son service systemd. Si Weather n'est pas configuré, il propose également la configuration OpenWeather One Call 4.0.
+The installer handles the technical foundation. Collector-specific keys, filters and service settings belong in PulseDeck Admin.
 
-Les scripts n'exécutent pas de mise à jour globale du système (`pacman -Sy` / `pacman -Syu`).
+The deployment scripts never perform a global Arch Linux update (`pacman -Sy` / `pacman -Syu`).
 
-## Organisation du dépôt
+## Repository layout
 
 ```text
 PulseDeck/
-├── config/                 configuration et exemples
-├── docs/pi/                documentation Raspberry Pi
-├── hub/                    service Python pulsedeck-hub
+├── config/
+├── docs/pi/                English operational docs
+│   └── fr/                 French mirrors
+├── hub/
 │   └── src/pulsedeck_hub/
 │       ├── admin/
 │       ├── collectors/
 │       ├── health/
 │       └── mqtt/
 ├── scripts/
-│   ├── setup_pi.sh         installation complète / orchestrateur
-│   ├── bootstrap_pi.sh     bootstrap système et Mosquitto
-│   └── deploy_hub.sh       déploiement autonome du hub
-├── systemd/                unités/templates systemd
-├── PROJECT_DESCRIPTION.md  description détaillée du projet
-└── PROJECT_SCHEMA.md       contrats et décisions d'architecture
+├── systemd/
+├── README.fr.md
+├── PROJECT_DESCRIPTION.md
+└── PROJECT_SCHEMA.md
 ```
 
-## Principes d'architecture
+## Architecture principles
 
-- Le Raspberry Pi centralise les accès distants et la normalisation des données.
-- MQTT reste un bus local simple entre le backend et les écrans.
-- L'ESP32 conserve son propre NTP et un cache des dernières données valides.
-- Une perte du Pi ou de MQTT ne doit pas rendre l'interface inutilisable.
-- Les données peuvent être classées localement `fresh`, `stale` ou `offline`.
-- Les contrats MQTT sont versionnés.
-- Une nouvelle application doit pouvoir être ajoutée sans réimplémenter toute la pile réseau sur l'ESP32.
-- La V1 évite volontairement les composants lourds : Kubernetes, cluster MQTT, base de données complexe ou architecture microservices.
+- Remote APIs, HTTPS, credentials and provider-specific protocols stay on the Raspberry Pi.
+- MQTT remains a simple local bus between the backend and the display.
+- The ESP32 keeps autonomous NTP, UI and last-valid-data cache.
+- A Pi/MQTT outage must not make the local interface unusable.
+- MQTT payloads are versioned, normalized and timestamped.
+- V1 intentionally avoids Kubernetes, MQTT clustering, a heavy database and a microservice fleet.
 
 ## Roadmap
 
-Le développement est prévu par étapes :
+Completed foundation:
 
-1. infrastructure Raspberry Pi et Mosquitto ;
-2. service `pulsedeck-hub` minimal ;
-3. firmware ESP32 avec Wi-Fi, NTP et MQTT ;
-4. première application Weather ;
-5. intégration Printer ;
-6. intégration PC et mini-serveur ;
-7. interface Home, widgets, graphes et animations ;
-8. applications supplémentaires après stabilisation du socle.
+1. Raspberry Pi / Mosquitto infrastructure;
+2. minimal `pulsedeck-hub` runtime;
+3. Weather collector;
+4. Web Admin;
+5. News / GNews collector.
+
+Next planned integrations:
+
+- PC gamer;
+- Printer;
+- mini server;
+- ESP32 application screens, home dashboard, graphs and animations.
 
 ## Documentation
 
-Pour davantage de détails :
+English primary documentation:
 
-- [`PROJECT_DESCRIPTION.md`](PROJECT_DESCRIPTION.md) — architecture et objectifs détaillés ;
-- [`PROJECT_SCHEMA.md`](PROJECT_SCHEMA.md) — contrats techniques et décisions confirmées ;
-- [`docs/pi/`](docs/pi/) — installation, MQTT et exploitation du Raspberry Pi ;
-- [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md) — fournisseur, configuration et contrat Weather V1.
+- [`docs/pi/`](docs/pi/);
+- [`docs/pi/ADMIN.md`](docs/pi/ADMIN.md);
+- [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md);
+- [`docs/pi/NEWS.md`](docs/pi/NEWS.md);
+- [`docs/pi/MQTT.md`](docs/pi/MQTT.md).
 
-## État du projet
-
-PulseDeck est encore en phase de construction. Le socle Pi/MQTT/hub est en place et Weather sert maintenant de collector de référence pour valider le modèle avant Printer, PC, mini-serveur et News.
+French mirrors are available under [`docs/pi/fr/`](docs/pi/fr/).

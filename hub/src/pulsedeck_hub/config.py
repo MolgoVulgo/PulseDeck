@@ -9,6 +9,19 @@ import tomllib
 
 DEFAULT_CONFIG_PATH = Path("/etc/pulsedeck/pulsedeck.toml")
 DEFAULT_OPENWEATHER_KEY_PATH = Path("/etc/pulsedeck/secrets/openweather_api_key")
+DEFAULT_GNEWS_KEY_PATH = Path("/etc/pulsedeck/secrets/gnews_api_key")
+NEWS_CATEGORIES = {
+    "general",
+    "world",
+    "nation",
+    "business",
+    "technology",
+    "entertainment",
+    "sports",
+    "science",
+    "health",
+}
+NEWS_MODES = {"top-headlines", "search"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,10 +64,26 @@ class WeatherConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class NewsConfig:
+    enabled: bool = False
+    provider: str = "gnews"
+    mode: str = "top-headlines"
+    category: str = "general"
+    query: str = ""
+    lang: str = "fr"
+    country: str = "fr"
+    max_articles: int = 10
+    interval: int = 1800
+    request_timeout: int = 15
+    api_key_file: Path = DEFAULT_GNEWS_KEY_PATH
+
+
+@dataclass(frozen=True, slots=True)
 class HubConfig:
     mqtt: MQTTConfig
     admin: AdminConfig
     weather: WeatherConfig
+    news: NewsConfig
 
 
 def _positive_int(value: object, name: str, *, minimum: int = 1, maximum: int | None = None) -> int:
@@ -77,6 +106,15 @@ def _coordinate(value: object, name: str, minimum: float, maximum: float) -> flo
     result = float(value)
     if not minimum <= result <= maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return result
+
+
+def _optional_two_letter_code(value: object, name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    result = value.strip().lower()
+    if result and (len(result) != 2 or not result.isalpha()):
+        raise ValueError(f"{name} must be empty or a 2-letter code")
     return result
 
 
@@ -123,6 +161,51 @@ def weather_config_from_mapping(raw: object) -> WeatherConfig:
         hourly_hours=_positive_int(raw.get("hourly_hours", 48), "collectors.weather.hourly_hours", maximum=48),
         daily_days=_positive_int(raw.get("daily_days", 10), "collectors.weather.daily_days", maximum=10),
         request_timeout=_positive_int(raw.get("request_timeout", 15), "collectors.weather.request_timeout", maximum=60),
+    )
+
+
+def news_config_from_mapping(raw: object) -> NewsConfig:
+    if raw is None:
+        return NewsConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("[collectors.news] must be a table")
+
+    enabled = _bool(raw.get("enabled", False), "collectors.news.enabled")
+    provider = raw.get("provider", "gnews")
+    if not isinstance(provider, str) or provider != "gnews":
+        raise ValueError("collectors.news.provider must be 'gnews'")
+
+    mode = raw.get("mode", "top-headlines")
+    if not isinstance(mode, str) or mode not in NEWS_MODES:
+        raise ValueError("collectors.news.mode must be 'top-headlines' or 'search'")
+    category = raw.get("category", "general")
+    if not isinstance(category, str) or category not in NEWS_CATEGORIES:
+        raise ValueError("collectors.news.category is unsupported")
+    query = raw.get("query", "")
+    if not isinstance(query, str):
+        raise ValueError("collectors.news.query must be a string")
+    query = query.strip()
+    if len(query) > 200:
+        raise ValueError("collectors.news.query must be <= 200 characters")
+    if mode == "search" and not query:
+        raise ValueError("collectors.news.query is required in search mode")
+
+    api_key_file = raw.get("api_key_file", str(DEFAULT_GNEWS_KEY_PATH))
+    if not isinstance(api_key_file, str) or not api_key_file.strip():
+        raise ValueError("collectors.news.api_key_file must be a non-empty string")
+
+    return NewsConfig(
+        enabled=enabled,
+        provider=provider,
+        mode=mode,
+        category=category,
+        query=query,
+        lang=_optional_two_letter_code(raw.get("lang", "fr"), "collectors.news.lang"),
+        country=_optional_two_letter_code(raw.get("country", "fr"), "collectors.news.country"),
+        max_articles=_positive_int(raw.get("max_articles", 10), "collectors.news.max_articles", maximum=100),
+        interval=_positive_int(raw.get("interval", 1800), "collectors.news.interval", minimum=300, maximum=86400),
+        request_timeout=_positive_int(raw.get("request_timeout", 15), "collectors.news.request_timeout", maximum=60),
+        api_key_file=Path(api_key_file.strip()),
     )
 
 
@@ -181,4 +264,5 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
         mqtt=mqtt,
         admin=_admin_config(raw.get("admin")),
         weather=weather_config_from_mapping(collectors_raw.get("weather")),
+        news=news_config_from_mapping(collectors_raw.get("news")),
     )

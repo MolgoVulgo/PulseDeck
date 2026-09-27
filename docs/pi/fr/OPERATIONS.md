@@ -1,8 +1,8 @@
-# Raspberry Pi Operations
+# Exploitation Raspberry Pi
 
-> English is authoritative. French translation: [`fr/OPERATIONS.md`](fr/OPERATIONS.md).
+> L’anglais fait référence : [`../OPERATIONS.md`](../OPERATIONS.md).
 
-## Global checks
+## Contrôles globaux
 
 ```bash
 ./setup_pi.sh --check
@@ -16,7 +16,7 @@ systemctl status mosquitto --no-pager
 systemctl status pulsedeck-hub --no-pager
 ```
 
-Logs:
+Logs :
 
 ```bash
 sudo journalctl -u mosquitto -n 100 --no-pager
@@ -24,16 +24,16 @@ sudo journalctl -u pulsedeck-hub -n 100 --no-pager -o cat
 sudo journalctl -u pulsedeck-hub -f
 ```
 
-## MQTT checks
+## Contrôles MQTT
 
-Hub availability:
+Availability du hub :
 
 ```bash
 mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 \
   -t pulsedeck/v1/system/availability -C 1
 ```
 
-Weather:
+Weather :
 
 ```bash
 mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 -t pulsedeck/v1/weather/availability -C 1
@@ -42,24 +42,24 @@ mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 -t pulsedeck/v1/weather/hourly -C 1
 mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 -t pulsedeck/v1/weather/daily -C 1
 ```
 
-News:
+News :
 
 ```bash
 mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 -t pulsedeck/v1/news/availability -C 1
 mosquitto_sub -h <PI_IPV4> -p 1883 -q 1 -t pulsedeck/v1/news/latest -C 1
 ```
 
-## Admin health endpoint
+## Endpoint de santé Admin
 
-The unauthenticated health endpoint is intentionally small:
+L’endpoint non authentifié reste volontairement minimal :
 
 ```bash
 curl -fsS http://<PI_IPV4>:8080/api/health
 ```
 
-Collector configuration and detailed status require an authenticated Admin session.
+La configuration des collectors et le statut détaillé nécessitent une session Admin authentifiée.
 
-## Runtime configuration
+## Configuration runtime
 
 ```text
 /etc/pulsedeck/pulsedeck.toml
@@ -67,8 +67,8 @@ Collector configuration and detailed status require an authenticated Admin sessi
 /etc/pulsedeck/secrets/gnews_api_key
 ```
 
-Use PulseDeck Admin for normal collector changes instead of editing these files manually.
+Pour les changements normaux, utiliser PulseDeck Admin plutôt qu’une édition manuelle.
 
-## Failure behavior
+## Comportement en erreur
 
-Last good retained Weather and News snapshots are kept when a remote provider fails. The corresponding `*/availability` topic reports the current source state and a sanitized reason. Provider keys are never logged.
+Les derniers snapshots retained valides Weather et News sont conservés si le fournisseur distant échoue. Le topic `*/availability` correspondant porte l’état courant de la source et une raison non sensible. Les clés fournisseur ne sont jamais journalisées.

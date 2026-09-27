@@ -33,6 +33,16 @@ request_timeout = 15
 
 [collectors.news]
 enabled = false
+provider = "gnews"
+mode = "top-headlines"
+category = "general"
+query = ""
+lang = "fr"
+country = "fr"
+max_articles = 10
+interval = 1800
+request_timeout = 15
+api_key_file = "/etc/pulsedeck/secrets/gnews_api_key"
 
 [collectors.pc_gamer]
 enabled = false

@@ -53,3 +53,26 @@ def test_admin_configuration_loads(tmp_path: Path) -> None:
     assert cfg.admin.enabled is True
     assert cfg.admin.listen == "192.168.0.250"
     assert cfg.admin.port == 8080
+
+
+def test_news_configuration_loads(tmp_path: Path) -> None:
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """[collectors.weather]\nenabled = false\n\n[collectors.news]\nenabled = true\nprovider = \"gnews\"\nmode = \"top-headlines\"\ncategory = \"technology\"\nlang = \"fr\"\ncountry = \"fr\"\nmax_articles = 10\ninterval = 1800\n""",
+        )
+    )
+    assert cfg.news.enabled is True
+    assert cfg.news.provider == "gnews"
+    assert cfg.news.mode == "top-headlines"
+    assert cfg.news.category == "technology"
+    assert cfg.news.interval == 1800
+
+
+def test_news_interval_below_minimum_is_rejected(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """[collectors.weather]\nenabled = false\n\n[collectors.news]\nenabled = false\ninterval = 60\n""",
+    )
+    with pytest.raises(ValueError, match="collectors.news.interval"):
+        load_config(path)

@@ -3,8 +3,8 @@ from pathlib import Path
 from pulsedeck_hub.admin.catalog import build_service_catalog
 from pulsedeck_hub.admin.ui import ADMIN_HTML
 from pulsedeck_hub.admin.security import hash_password, make_session, verify_password, verify_session
-from pulsedeck_hub.admin.storage import render_weather_section, update_secret, update_weather_config
-from pulsedeck_hub.config import WeatherConfig, load_config
+from pulsedeck_hub.admin.storage import render_news_section, render_weather_section, update_news_config, update_secret, update_weather_config
+from pulsedeck_hub.config import NewsConfig, WeatherConfig, load_config
 
 
 def base_config(path: Path) -> None:
@@ -58,10 +58,12 @@ def test_render_disabled_weather_omits_missing_coordinates() -> None:
 
 
 def test_service_catalog_preserves_confirmed_future_contracts() -> None:
-    catalog = build_service_catalog({"state": "online"}, True)
+    catalog = build_service_catalog({"state": "online"}, True, {"state": "disabled"}, False)
     by_id = {item["id"]: item for item in catalog}
     assert by_id["weather"]["available"] is True
     assert by_id["weather"]["state"] == "online"
+    assert by_id["news"]["available"] is True
+    assert by_id["news"]["view"] == "news"
     assert by_id["news"]["provider"] == "GNews"
     assert by_id["news"]["transport"] == "HTTPS"
     assert by_id["news"]["auth"] == "X-Api-Key"
@@ -72,7 +74,35 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
 def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
+    assert 'data-view="news"' in ADMIN_HTML
     assert 'data-view="services"' in ADMIN_HTML
     assert 'data-view="security"' in ADMIN_HTML
     assert 'Current <span class="hint">minutes</span>' in ADMIN_HTML
     assert 'Daily <span class="hint">minutes</span>' in ADMIN_HTML
+
+
+def test_news_section_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "pulsedeck.toml"
+    base_config(path)
+    config = NewsConfig(
+        enabled=True,
+        mode="search",
+        query="OpenAI",
+        lang="en",
+        country="us",
+        api_key_file=tmp_path / "gnews_api_key",
+    )
+    update_news_config(path, config)
+    loaded = load_config(path)
+    assert loaded.news.enabled is True
+    assert loaded.news.mode == "search"
+    assert loaded.news.query == "OpenAI"
+    assert loaded.news.api_key_file == tmp_path / "gnews_api_key"
+    assert "[collectors.weather]" in path.read_text(encoding="utf-8")
+
+
+def test_render_news_documents_header_auth_contract() -> None:
+    text = render_news_section(NewsConfig())
+    assert 'provider = "gnews"' in text
+    assert 'api_key_file = "/etc/pulsedeck/secrets/gnews_api_key"' in text
+    assert "api_key =" not in text

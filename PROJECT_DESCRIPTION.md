@@ -1,49 +1,51 @@
-# Nouveau projet — Hub Raspberry Pi + MQTT + ESP32-4848S040C_I
+# New project — Raspberry Pi Hub + MQTT + ESP32-4848S040C_I
 
-## 1. Clôture PulseMon
+**English is the authoritative project documentation language.** French mirror: [`PROJECT_DESCRIPTION.fr.md`](PROJECT_DESCRIPTION.fr.md).
 
-PulseMon reste sur son architecture actuelle et n'est pas refondu en plateforme multi-applications.
+## 1. PulseMon closure
 
-État de clôture :
-- firmware ESP32-S3 fonctionnel ;
-- NTP autonome ;
-- séquence réseau validée ;
-- Météo, News, Printer puis backend PC initialisés dans cet ordre ;
-- gestion backend PC `UNKNOWN / ONLINE / SUSPECT / OFFLINE` ;
-- délai avant OFFLINE pour absorber les ralentissements ponctuels ;
-- Main/GPU verrouillés lorsque le backend PC est indisponible ;
-- retour automatique lorsque le backend redevient disponible ;
-- scénarios matériels complémentaires réalisés : coupure courte, navigation offline et boot avec PC éteint.
+PulseMon remains on its current architecture and is not being refactored into a multi-application platform.
 
-PulseMon devient donc la base stable existante. Les expérimentations d'architecture, LVGL 9 et applications enrichies seront réalisées dans un nouveau projet distinct.
+Closure state:
+- working ESP32-S3 firmware;
+- autonomous NTP;
+- validated network sequence;
+- Weather, News, Printer, then PC backend initialized in that order;
+- PC backend state machine `UNKNOWN / ONLINE / SUSPECT / OFFLINE`;
+- delay before OFFLINE to absorb short slowdowns;
+- Main/GPU locked while the PC backend is unavailable;
+- automatic recovery when the backend becomes available again;
+- additional hardware scenarios completed: short outage, offline navigation and boot with the PC powered off.
+
+PulseMon therefore remains the existing stable base. Architecture experiments, LVGL 9 work and richer applications are developed in this separate project.
 
 ---
 
-## 2. Objectif du nouveau projet
+## 2. Project objective
 
-Créer une nouvelle plateforme d'affichage domestique extensible autour de trois briques :
+Build an extensible home information display around three components:
 
 ```text
-Raspberry Pi = collecte / normalisation / agrégation
-MQTT         = bus de données
-ESP32-S3     = interface graphique
+Raspberry Pi = collection / normalization / aggregation
+MQTT         = data bus
+ESP32-S3     = graphical interface
 ```
 
-Matériel écran ciblé : `ESP32-4848S040C_I`, écran 4 pouces 480 × 480, avec une UI conçue dès l'origine pour LVGL 9.
+Target display hardware: `ESP32-4848S040C_I`, 4-inch 480 × 480 screen, with an interface designed for LVGL 9 from the start.
 
-Objectifs principaux :
-- plusieurs applications ;
-- données provenant de plusieurs sources ;
-- UI riche ;
-- animations ;
-- graphes ;
-- navigation fluide ;
-- faible complexité réseau côté ESP32 ;
-- ajout d'une nouvelle application sans réimplémenter HTTP/TLS/API sur l'ESP32.
+Main goals:
+- multiple applications;
+- multiple data sources;
+- rich UI;
+- animations;
+- graphs;
+- fluid navigation;
+- low network complexity on the ESP32;
+- add applications without reimplementing HTTP/TLS/API logic on the ESP32.
 
 ---
 
-## 3. Architecture cible
+## 3. Target architecture
 
 ```text
                         Raspberry Pi
@@ -54,7 +56,7 @@ PC ────────────►│ PC metrics collector     │
 Printer ───────►│ Printer collector/bridge │
 LAN ───────────►│ Network collectors       │
                 │                          │
-                │      service hub         │
+                │      hub service         │
                 │          │               │
                 │      Mosquitto           │
                 └──────────┬───────────────┘
@@ -66,8 +68,8 @@ LAN ───────────►│ Network collectors       │
                 │                          │
                 │ Wi-Fi                    │
                 │ MQTT                     │
-                │ NTP local                │
-                │ cache local              │
+                │ local NTP                │
+                │ local cache              │
                 │ fresh/stale/offline      │
                 │ LVGL 9                   │
                 │ apps / widgets / graphs  │
@@ -75,53 +77,55 @@ LAN ───────────►│ Network collectors       │
                 └──────────────────────────┘
 ```
 
-Principe fondamental : le Pi collecte et normalise les données ; l'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur.
+Core principle: the Pi collects and normalizes data; the ESP32 renders, animates, caches and manages user interaction.
 
 ---
 
 ## 4. Raspberry Pi
 
-Le Pi devient le backend global du nouveau système.
+The Pi is the global backend for the system.
 
-Plateforme de référence observée au lancement :
-- Raspberry Pi 3 Model B Plus Rev 1.3 ;
-- Arch Linux ARM rolling ;
-- architecture `armv7l` ;
-- kernel observé `6.18.33-4-rpi` ;
-- Python observé `3.14.5` ;
-- environ 1 Gio de RAM ;
-- stockage principal sur microSD ;
-- IPv6 désactivé sur `bluebox`.
+Reference platform observed at project start:
+- Raspberry Pi 3 Model B Plus Rev 1.3;
+- Arch Linux ARM rolling;
+- `armv7l` architecture;
+- observed kernel `6.18.33-4-rpi`;
+- observed Python `3.14.5`;
+- about 1 GiB RAM;
+- microSD as primary storage;
+- IPv6 disabled on `bluebox` by user choice.
 
-Socle retenu pour la V1 :
+V1 foundation:
 
 ```text
-Mosquitto natif
+native Mosquitto
 +
-un seul service applicatif Python "pulsedeck-hub"
+one Python application service "pulsedeck-hub"
 +
 systemd / journald
 ```
 
-L'interface d'administration du hub est prévue dans le même service applicatif, avec FastAPI et une interface HTML légère. La configuration applicative est prévue en TOML. Les secrets éventuels des services distants restent séparés de la configuration versionnée.
+The hub administration interface is implemented inside the same application service with FastAPI/Uvicorn and lightweight HTML. Application configuration uses TOML. Remote-service secrets remain separate from versioned configuration. Normal collector configuration is performed through PulseDeck Admin.
 
-Runtime hub retenu à partir de `patch_0003` :
-- utilisateur système `pulsedeck` ;
-- application sous `/opt/pulsedeck` ;
-- configuration sous `/etc/pulsedeck/pulsedeck.toml` ;
-- état runtime sous `/var/lib/pulsedeck` ;
-- environnement Python dédié sous `/opt/pulsedeck/venv` ;
-- déploiement possible par un script autonome sans clone du dépôt.
+Runtime layout established from `patch_0003`:
+- system user `pulsedeck`;
+- application under `/opt/pulsedeck`;
+- configuration at `/etc/pulsedeck/pulsedeck.toml`;
+- runtime state under `/var/lib/pulsedeck`;
+- dedicated Python environment at `/opt/pulsedeck/venv`;
+- standalone deployment without a repository clone on the Pi.
 
-Le premier service actif du hub maintient `pulsedeck/v1/system/availability`, avec retained QoS 1, Last Will et reconnexion automatique MQTT. Ce runtime a été déployé et validé sur `bluebox` le 27 septembre 2026 : service systemd actif et payload retained `schema=1/state=online` observé.
+The first hub service maintains `pulsedeck/v1/system/availability` with retained QoS 1, MQTT Last Will and automatic reconnect. This runtime was deployed and validated on `bluebox` on 2026-09-27: systemd service active and a retained `schema=1/state=online` payload observed.
 
-Le déploiement Raspberry Pi est piloté par trois scripts : `setup_pi.sh` est l'orchestrateur complet recommandé, `bootstrap_pi.sh` gère le socle système/Mosquitto et `deploy_hub.sh` gère le service applicatif. `setup_pi.sh` fonctionne depuis un clone ou téléchargé seul ; lorsque les scripts spécialisés ne sont pas présents localement, il les récupère depuis GitHub. Les étapes déterministes sont automatiques et une question n'est posée que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire.
+Raspberry Pi deployment is driven by three scripts: `setup_pi.sh` is the recommended complete orchestrator, `bootstrap_pi.sh` manages the system/Mosquitto foundation, and `deploy_hub.sh` manages the application service. `setup_pi.sh` works from a repository checkout or as a standalone downloaded file; when specialized scripts are not available locally it retrieves them from GitHub. Deterministic steps are automatic. The scripts install and repair the technical foundation; API keys, filters and collector-specific settings are configured in PulseDeck Admin.
 
-À partir de `patch_0007`, le premier collector actif est Weather avec OpenWeather One Call API 4.0. Le hub utilise les endpoints `current`, `timeline/1h` et `timeline/1day`, en unités métriques et en français. Les cadences V1 sont 10 minutes pour `current`, 30 minutes pour les prévisions horaires et 3 heures pour les prévisions quotidiennes. La clé OpenWeather est stockée séparément dans `/etc/pulsedeck/secrets/openweather_api_key` et n'est jamais placée dans la configuration versionnée. `deploy_hub.sh` peut demander la clé et le lieu lors du premier déploiement, résoudre une ville via le Geocoding API OpenWeather puis valider One Call 4.0 avant redémarrage du hub.
+From `patch_0007`, Weather is the first active collector and uses OpenWeather One Call API 4.0. The hub uses `current`, `timeline/1h` and `timeline/1day`, metric units and French provider localization. V1 cadences are 10 minutes for current, 30 minutes for hourly forecasts and 3 hours for daily forecasts. The OpenWeather key is stored separately in `/etc/pulsedeck/secrets/openweather_api_key` and is never placed in versioned configuration. Since `patch_0008`, Weather is configured and tested in PulseDeck Admin, which reloads the collector without a manual service restart.
 
-Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
+From `patch_0010`, News uses GNews API v4. Provider calls are HTTPS-only and the key is sent only in the `X-Api-Key` header, never in the query string. The hub supports `top-headlines` and `search`, publishes retained QoS 1 snapshots on `news/availability` and `news/latest`, and preserves the last valid News snapshot when the provider fails. The GNews key is stored at `/etc/pulsedeck/secrets/gnews_api_key`. Configuration, provider testing and enable/disable are handled through PulseDeck Admin.
 
-Structure initiale :
+Avoid microservices, containers and infrastructure dependencies that are not needed initially.
+
+Initial structure:
 
 ```text
 hub/
@@ -141,59 +145,59 @@ scripts/
 systemd/
 ```
 
-Responsabilités :
-- appels aux API Internet ;
-- HTTPS/TLS vers les services distants ;
-- gestion des clés API ;
-- connexions persistantes ;
-- protocoles propriétaires ;
-- collecte Weather, News, Printer, PC gamer et mini serveur ;
-- normalisation des données ;
-- cache ;
-- publication MQTT ;
-- disponibilité des sources ;
-- API et interface Web d'administration légère.
+Pi responsibilities:
+- Internet API calls;
+- HTTPS/TLS to remote services;
+- API-key management;
+- persistent connections;
+- proprietary protocols;
+- Weather, News, Printer, gaming PC and mini-server collection;
+- data normalization;
+- cache;
+- MQTT publication;
+- source availability;
+- lightweight administration API and Web UI.
 
 ---
 
 ## 5. ESP32-4848S040C_I
 
-Le firmware ESP32 est centré sur l'interface et non sur la collecte Internet.
+The ESP32 firmware is interface-centric rather than Internet-collection-centric.
 
-Responsabilités :
+Responsibilities:
 
 ```text
 Wi-Fi
 MQTT
 NTP
-cache local
-état des données
+local cache
+data state
 navigation
 LVGL 9
 widgets
-graphes
+graphs
 animations
-interaction tactile
+touch interaction
 ```
 
-L'ESP32 doit rester autonome pour :
-- l'heure ;
-- l'interface ;
-- la navigation ;
-- le rendu ;
-- l'affichage des dernières données valides.
+The ESP32 remains autonomous for:
+- time;
+- interface;
+- navigation;
+- rendering;
+- display of the last valid data.
 
-Une perte du Pi ou de MQTT ne doit pas rendre l'interface inutilisable.
+Loss of the Pi or MQTT must not make the interface unusable.
 
 ---
 
-## 6. Contrat MQTT
+## 6. MQTT contract
 
-Le broker V1 est Mosquitto, accessible uniquement sur le LAN IPv4, port TCP `1883`. Il n'est pas exposé à Internet. Pour ce périmètre domestique, la V1 n'active ni authentification MQTT, ni ACL, ni TLS. Ces choix devront être réévalués si le périmètre réseau change ou si MQTT porte ultérieurement des commandes sensibles.
+The V1 broker is Mosquitto, available only on the IPv4 LAN over TCP `1883`. It is never exposed directly to the Internet. For the current trusted home-LAN scope, V1 uses no MQTT authentication, ACLs or TLS. This model must be revisited if the network scope changes or MQTT later carries sensitive commands.
 
-Le namespace versionné retenu est `pulsedeck/v1/...`.
+The versioned namespace is `pulsedeck/v1/...`.
 
-Topics initiaux :
+Initial topics:
 
 ```text
 pulsedeck/v1/system/availability
@@ -218,22 +222,22 @@ pulsedeck/v1/server/mini/availability
 pulsedeck/v1/server/mini/dashboard
 ```
 
-Politique QoS V1 :
-- QoS 1 pour les états, disponibilités et snapshots applicatifs ;
-- QoS 0 pour d'éventuels flux rapides et éphémères ;
-- QoS 2 non utilisé.
+V1 QoS policy:
+- QoS 1 for state, availability and application snapshots;
+- QoS 0 for optional fast ephemeral streams;
+- QoS 2 unused.
 
-Les payloads doivent être :
-- stables ;
-- versionnés ;
-- simples à parser ;
-- déjà normalisés ;
-- adaptés à l'affichage ;
-- accompagnés d'un timestamp.
+Payloads must be:
+- stable;
+- versioned;
+- simple to parse;
+- already normalized;
+- display-oriented;
+- timestamped.
 
-Le schéma JSON exact reste à définir application par application avant implémentation, à l'exception de Weather dont le schéma 1 est fixé à partir de `patch_0007` pour `availability`, `current`, `hourly` et `daily`.
+Exact JSON schemas are defined application by application before implementation, except Weather (`patch_0007`) and News (`patch_0010`) whose schema 1 contracts are fixed in the hub.
 
-Exemple :
+Example:
 
 ```json
 {
@@ -249,15 +253,15 @@ Exemple :
 
 ---
 
-## 7. Retained messages et disponibilité
+## 7. Retained messages and availability
 
-Utiliser les fonctions MQTT pour accélérer les reprises :
-- retained messages pour les derniers états ;
-- Last Will pour les disponibilités ;
-- reconnexion automatique ;
-- resynchronisation immédiate après reboot.
+Use MQTT features to speed recovery:
+- retained messages for last known states;
+- Last Will for availability;
+- automatic reconnect;
+- immediate resynchronization after reboot.
 
-Topics de disponibilité retained :
+Retained availability topics:
 
 ```text
 pulsedeck/v1/system/availability
@@ -268,7 +272,7 @@ pulsedeck/v1/server/mini/availability
 pulsedeck/v1/printer/availability
 ```
 
-L'ESP32 conserve en plus une logique locale basée sur l'âge des données :
+The ESP32 also derives a local data-age state:
 
 ```text
 fresh
@@ -278,9 +282,9 @@ offline
 
 ---
 
-## 8. Architecture firmware ESP32
+## 8. ESP32 firmware architecture
 
-Organisation envisagée :
+Planned organization:
 
 ```text
 src/
@@ -308,275 +312,290 @@ src/
 └── main/
 ```
 
-Chaque application doit surtout contenir :
-- son modèle de données ;
-- ses abonnements MQTT ;
-- sa logique d'affichage ;
-- ses widgets LVGL.
+Each application should mainly contain:
+- its data model;
+- MQTT subscriptions;
+- display logic;
+- LVGL widgets.
 
-Elle ne doit pas réimplémenter HTTP, TLS, authentification distante ou protocoles propriétaires.
-
----
-
-## 9. UI et animations
-
-Le nouveau projet peut utiliser davantage les ressources du ESP32-S3 pour le rendu.
-
-Objectifs :
-- transitions fluides ;
-- widgets animés ;
-- graphes ;
-- jauges ;
-- icônes météo animées ;
-- progression Printer animée ;
-- états online/offline visuels ;
-- plusieurs pages par application.
-
-Règles initiales :
-- animations courtes ;
-- redessiner uniquement les zones utiles ;
-- cible raisonnable de 15 à 30 FPS ;
-- mesurer rendu et flush ;
-- surveiller PSRAM, heap interne, DMA et stacks.
+It must not reimplement HTTP, TLS, remote authentication or proprietary protocols.
 
 ---
 
-## 10. Applications envisagées
+## 9. UI and animations
+
+The new project may use more ESP32-S3 resources for rendering.
+
+Goals:
+- smooth transitions;
+- animated widgets;
+- graphs;
+- gauges;
+- animated weather icons;
+- animated Printer progress;
+- visual online/offline states;
+- multiple pages per application.
+
+Initial rules:
+- short animations;
+- redraw only useful areas;
+- reasonable target of 15 to 30 FPS;
+- measure rendering and flush times;
+- monitor PSRAM, internal heap, DMA and task stacks.
+
+---
+
+## 10. Planned applications
 
 ### Home
 
-Vue synthétique :
-- heure ;
-- météo ;
-- PC ;
-- Printer ;
-- réseau ;
-- notifications importantes.
+Summary view:
+- time;
+- weather;
+- PC;
+- Printer;
+- network;
+- important notifications.
 
 ### Weather
 
-Fournisseur V1 : OpenWeather One Call API 4.0. Le Raspberry Pi publie des snapshots normalisés sur `weather/current`, `weather/hourly` et `weather/daily` ainsi qu'un état séparé sur `weather/availability`. Les erreurs fournisseur ne suppriment pas les derniers retained valides.
+V1 provider: OpenWeather One Call API 4.0. The Raspberry Pi publishes normalized snapshots on `weather/current`, `weather/hourly` and `weather/daily`, plus separate `weather/availability`. Provider errors do not delete the last valid retained snapshots.
 
-Plusieurs pages possibles :
-- météo actuelle ;
-- prévisions horaires ;
-- prévisions quotidiennes ;
-- pluie ;
-- vent ;
-- humidité ;
-- pression ;
-- lever/coucher du soleil ;
-- graphes.
+Possible pages:
+- current weather;
+- hourly forecast;
+- daily forecast;
+- rain;
+- wind;
+- humidity;
+- pressure;
+- sunrise/sunset;
+- graphs.
+
+### News
+
+V1 provider: GNews API v4. The Raspberry Pi calls `top-headlines` or `search` over HTTPS with `X-Api-Key` authentication, normalizes display-relevant metadata, and publishes retained `news/latest` plus `news/availability`. Long provider `content` is deliberately not republished so the ESP32 payload stays compact.
 
 ### Printer
 
-Le Pi maintient les informations à jour pendant une impression :
-- état ;
-- progression ;
-- couche ;
-- durée écoulée ;
-- durée restante ;
-- heure estimée de fin ;
-- miniature ;
-- températures si disponibles ;
-- historique court du job.
+The Pi keeps print information current during a job:
+- state;
+- progress;
+- layer;
+- elapsed time;
+- remaining time;
+- estimated finish time;
+- thumbnail;
+- temperatures when available;
+- short job history.
 
-Quand l'utilisateur revient sur l'écran Printer, l'ESP32 dispose déjà de données récentes.
+When the user returns to the Printer screen, recent data is already available to the ESP32.
 
 ### PC
 
-Dashboard :
-- CPU ;
-- GPU ;
-- RAM ;
-- températures ;
-- fréquences ;
-- puissance ;
-- réseau ;
-- historique court.
+Dashboard:
+- CPU;
+- GPU;
+- RAM;
+- temperatures;
+- clocks;
+- power;
+- network;
+- short history.
 
 ### Network
 
-Possibilités :
-- Internet ;
-- Raspberry Pi ;
-- broker MQTT ;
-- latence ;
-- Wi-Fi/RSSI ;
-- IP/gateway ;
-- services LAN ;
-- NAS ;
-- Home Assistant ;
-- autres équipements.
+Possible data:
+- Internet;
+- Raspberry Pi;
+- MQTT broker;
+- latency;
+- Wi-Fi/RSSI;
+- IP/gateway;
+- LAN services;
+- NAS;
+- Home Assistant;
+- other equipment.
 
 ---
 
-## 11. Principes à conserver
+## 11. Principles to preserve
 
-1. L'ESP32 est un terminal graphique intelligent, pas un agrégateur d'API Internet.
-2. Le Pi centralise protocoles, secrets et collectors.
-3. MQTT est le bus de données principal.
-4. Les données sont normalisées avant publication.
-5. Les contrats sont versionnés.
-6. L'ESP32 garde son NTP autonome.
-7. Les dernières données restent visibles en cas de perte du Pi.
-8. Les données anciennes sont explicitement `stale`.
-9. Une application ne recrée pas sa propre pile réseau.
-10. Les gros traitements restent côté Pi lorsqu'ils y sont plus adaptés.
-11. L'UI est indépendante de la fréquence réelle de collecte.
-12. Une nouvelle app doit pouvoir être ajoutée sans modifier les autres.
-
----
-
-## 12. Plan de développement
-
-### Phase 0 — Bring-up matériel
-
-Valider :
-- ESP32-4848S040C_I ;
-- écran ST7701 ;
-- tactile ;
-- PSRAM ;
-- Wi-Fi ;
-- LVGL 9 ;
-- timings RGB ;
-- rendu 480 × 480 ;
-- stabilité framebuffer.
-
-### Phase 1 — Infrastructure Pi
-
-Installer :
-- Mosquitto ;
-- service hub minimal ;
-- configuration ;
-- logs ;
-- publication d'un topic de test.
-
-### Phase 2 — Firmware MQTT minimal
-
-ESP32 :
-- Wi-Fi ;
-- NTP ;
-- MQTT ;
-- reconnexion ;
-- retained messages ;
-- écran de diagnostic MQTT.
-
-### Phase 3 — Première application
-
-Weather sert d'application de référence. `patch_0007` implémente le collector Pi et le contrat MQTT Weather V1 avec OpenWeather One Call 4.0. Restent à réaliser côté ESP32 :
-- cache ESP ;
-- premier écran LVGL 9 ;
-- première animation ;
-- validation du modèle d'application de bout en bout.
-
-### Phase 4 — Printer
-
-Déplacer progressivement vers le Pi :
-- connexion persistante ;
-- suivi de job ;
-- thumbnail ;
-- statut MQTT normalisé.
-
-### Phase 5 — PC
-
-Intégrer les métriques PC :
-- publication MQTT directe ou collecte par le Pi ;
-- dashboard ;
-- disponibilité online/offline.
-
-### Phase 6 — UI avancée
-
-Ajouter :
-- animations ;
-- widgets partagés ;
-- graphes ;
-- thèmes ;
-- transitions ;
-- écran Home.
-
-### Phase 7 — Applications supplémentaires
-
-Ajouter de nouvelles apps seulement après stabilisation du socle MQTT/UI.
+1. The ESP32 is an intelligent graphical terminal, not an Internet API aggregator.
+2. The Pi centralizes protocols, secrets and collectors.
+3. MQTT is the primary data bus.
+4. Data is normalized before publication.
+5. Contracts are versioned.
+6. The ESP32 keeps autonomous NTP.
+7. Last valid data remains visible when the Pi is lost.
+8. Old data is explicitly `stale`.
+9. Applications do not recreate their own network stacks.
+10. Heavy processing stays on the Pi when appropriate.
+11. The UI is independent of actual collection frequency.
+12. New apps should be addable without modifying existing apps.
+13. User and operational documentation is maintained in English and French; English is authoritative.
 
 ---
 
-## 13. Décisions à prendre au lancement
+## 12. Development plan
 
-À définir avant le développement complet :
-- schéma exact des payloads applicatifs hors Weather ;
-- politique de cache ;
-- cadence des collectors hors Weather ;
-- version ESP-IDF ;
-- version LVGL 9 ;
-- driver ST7701 ;
-- driver tactile ;
-- utilisation ou non de EEZ Studio ;
-- OTA ;
-- gestion des assets/images.
+### Phase 0 — Hardware bring-up
+
+Validate:
+- ESP32-4848S040C_I;
+- ST7701 display;
+- touch;
+- PSRAM;
+- Wi-Fi;
+- LVGL 9;
+- RGB timings;
+- 480 × 480 rendering;
+- framebuffer stability.
+
+### Phase 1 — Pi infrastructure
+
+Install:
+- Mosquitto;
+- minimal hub service;
+- configuration;
+- logs;
+- test-topic publication.
+
+### Phase 2 — Minimal MQTT firmware
+
+ESP32:
+- Wi-Fi;
+- NTP;
+- MQTT;
+- reconnect;
+- retained messages;
+- MQTT diagnostics screen.
+
+### Phase 3 — First application
+
+Weather is the reference application. `patch_0007` implements the Pi collector and Weather MQTT V1 contract with OpenWeather One Call 4.0. Remaining ESP32 work:
+- ESP cache;
+- first LVGL 9 screen;
+- first animation;
+- end-to-end validation of the application model.
+
+### Phase 4 — News
+
+Integrate the reference News feed:
+- GNews API v4;
+- HTTPS;
+- `X-Api-Key` authentication;
+- `top-headlines` / `search`;
+- normalized retained MQTT snapshot;
+- PulseDeck Admin configuration.
+
+### Phase 5 — Printer
+
+Move progressively to the Pi:
+- persistent connection;
+- job tracking;
+- thumbnail;
+- normalized MQTT status.
+
+### Phase 6 — PC
+
+Integrate PC metrics:
+- direct MQTT publication or Pi collection;
+- dashboard;
+- online/offline availability.
+
+### Phase 7 — Advanced UI
+
+Add:
+- animations;
+- shared widgets;
+- graphs;
+- themes;
+- transitions;
+- Home screen.
+
+### Phase 8 — Additional applications
+
+Add new apps only after the MQTT/UI foundation is stable.
 
 ---
 
-## 14. Hors périmètre V1
+## 13. Decisions still required
 
-Ne pas complexifier la V1 avec :
-- cluster MQTT ;
-- Kubernetes ;
-- base de données lourde ;
-- nombreux microservices ;
-- cloud obligatoire ;
-- historique long terme ;
-- système de plugins dynamique sur ESP32.
-
-Ces éléments seront ajoutés uniquement si un besoin concret apparaît.
+Define before full implementation:
+- exact payload schemas outside Weather and News;
+- cache policy;
+- collector cadences outside Weather and News;
+- ESP-IDF version;
+- exact LVGL 9 version;
+- ST7701 driver;
+- touch driver;
+- whether EEZ Studio is used;
+- OTA;
+- asset/image management.
 
 ---
 
-## 15. Objectif de la V1
+## 14. Out of scope for V1
 
-Prouver la chaîne complète :
+Do not complicate V1 with:
+- MQTT clustering;
+- Kubernetes;
+- a heavy database;
+- many microservices;
+- mandatory cloud services;
+- long-term history;
+- dynamic plugin systems on the ESP32.
+
+Add these only when a concrete need appears.
+
+---
+
+## 15. V1 objective
+
+Prove the complete chain:
 
 ```text
-source de données
-        ↓
-collector Raspberry Pi
-        ↓
+data source
+    ↓
+Raspberry Pi collector
+    ↓
 MQTT
-        ↓
+    ↓
 ESP32
-        ↓
-cache local
-        ↓
+    ↓
+local cache
+    ↓
 LVGL 9
-        ↓
-écran 480 × 480
+    ↓
+480 × 480 display
 ```
 
-Une V1 réussie doit démontrer :
-- liaison Pi ↔ ESP32 stable ;
-- reprise après coupure MQTT ;
-- retained messages ;
-- cache local ;
-- états `fresh/stale/offline` ;
-- une application complète ;
-- navigation fluide ;
-- une première animation ;
-- stabilité mémoire sur plusieurs heures.
+A successful V1 demonstrates:
+- stable Pi ↔ ESP32 link;
+- recovery after MQTT outage;
+- retained messages;
+- local cache;
+- `fresh/stale/offline` states;
+- one complete application;
+- smooth navigation;
+- a first animation;
+- memory stability over several hours.
 
 ---
 
-## 16. Positionnement final
+## 16. Final positioning
 
-PulseMon reste le projet existant, stable et fonctionnel.
+PulseMon remains the existing stable and functional project.
 
-Le nouveau projet est une plateforme distincte construite autour de :
+PulseDeck is a separate platform built around:
 
 ```text
-Raspberry Pi = données
+Raspberry Pi = data
 MQTT         = bus
 ESP32-S3     = interface
-LVGL 9       = rendu
-480 × 480    = nouvelle UX
+LVGL 9       = rendering
+480 × 480    = new UX
 ```
 
-Cette séparation permet de conserver PulseMon sans régression tout en ouvrant un projet beaucoup plus extensible pour les futures applications.
+This separation preserves PulseMon without regression while opening a much more extensible platform for future applications.

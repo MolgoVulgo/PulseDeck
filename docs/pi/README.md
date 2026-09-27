@@ -1,44 +1,38 @@
-# PulseDeck — Raspberry Pi Hub
+# PulseDeck Raspberry Pi Hub
 
-Ce dossier documente l'implémentation Raspberry Pi uniquement. `PROJECT_DESCRIPTION.md` reste la description canonique de l'architecture globale et `PROJECT_SCHEMA.md` le contrat descriptif partagé.
+> **Documentation language policy:** English is the primary documentation language. French mirrors live under [`fr/`](fr/). If the two versions differ, the English document is authoritative.
 
-## Rôle
+This directory documents the Raspberry Pi implementation. `PROJECT_DESCRIPTION.md` remains the canonical project description and `PROJECT_SCHEMA.md` records shared technical contracts.
 
-Le Raspberry Pi centralise les accès distants, la collecte, la normalisation, l'état des sources et la publication MQTT. L'ESP32 consomme des données déjà adaptées à l'affichage.
+## Role
 
-## Plateforme de référence observée
+The Raspberry Pi centralizes remote API access, collection, normalization, source health and MQTT publication. The ESP32 receives display-ready data and stays focused on UI, local cache, NTP, navigation and LVGL rendering.
 
-- Raspberry Pi 3 Model B Plus Rev 1.3
-- Arch Linux ARM rolling
-- `armv7l`
-- kernel observé `6.18.33-4-rpi`
-- Python observé `3.14.5`
-- 917 MiB de RAM
-- environ 18 GiB libres sur `/` au relevé initial
-- IPv6 désactivé sur `bluebox`
+## Reference platform
 
-Ces valeurs décrivent la machine de référence au lancement ; elles ne constituent pas toutes des exigences de compatibilité futures.
+The validated reference host is a Raspberry Pi 3 Model B Plus running Arch Linux ARM on `armv7l`, Python 3.14, native Mosquitto, systemd and journald. PulseDeck does not require containers.
 
-## Socle V1
+## V1 foundation
 
-- Mosquitto natif
-- un seul service applicatif Python `pulsedeck-hub`
-- systemd pour la supervision
-- journald pour les logs
-- FastAPI prévu pour l'administration Web légère
-- configuration applicative TOML
-- pas de conteneur requis en V1
+- native Mosquitto on the LAN;
+- one Python service: `pulsedeck-hub`;
+- FastAPI/Uvicorn Admin UI in the same process;
+- TOML runtime configuration;
+- service secrets stored separately under `/etc/pulsedeck/secrets/`;
+- systemd supervision and journald logs.
 
-## Collectors prévus
+## Implemented collectors
 
-- Weather
-- News
-- PC gamer
-- Mini serveur
-- Printer
+- Weather — OpenWeather One Call 4.0;
+- News — GNews API v4 over HTTPS with `X-Api-Key` authentication.
 
-Les modules existent dans le squelette, mais leurs contrats fonctionnels ne sont pas définis par `patch_0001`.
+Planned collectors: PC gamer, mini server and printer.
 
-## Weather
+## Documents
 
-Le collector Weather V1 utilise OpenWeather One Call 4.0. Sa configuration fonctionnelle est gérée depuis PulseDeck Admin après installation du socle. Voir [`WEATHER.md`](WEATHER.md) pour les cadences et les payloads MQTT, et [`ADMIN.md`](ADMIN.md) pour l’interface Web.
+- [`INSTALL.md`](INSTALL.md) — installation and deployment;
+- [`OPERATIONS.md`](OPERATIONS.md) — runtime checks and troubleshooting;
+- [`MQTT.md`](MQTT.md) — broker and topic contract;
+- [`ADMIN.md`](ADMIN.md) — local Web Admin;
+- [`WEATHER.md`](WEATHER.md) — Weather V1;
+- [`NEWS.md`](NEWS.md) — News V1 / GNews.
