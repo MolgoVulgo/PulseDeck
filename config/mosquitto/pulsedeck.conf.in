@@ -1,0 +1,14 @@
+# Managed by PulseDeck setup_pi.sh
+# Do not store credentials here. MQTT V1 is LAN-only and anonymous by design.
+
+listener 1883 @LAN_IPV4@
+listener_allow_anonymous true
+
+persistence true
+persistence_location /var/lib/mosquitto/
+autosave_interval 1800
+
+log_dest stderr
+log_type error
+log_type warning
+log_type notice
