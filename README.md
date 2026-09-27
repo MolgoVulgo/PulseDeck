@@ -119,33 +119,48 @@ pulsedeck/v1/printer/status
 pulsedeck/v1/printer/job
 ```
 
-## Bootstrap rapide du Raspberry Pi
+## Installation du Raspberry Pi
 
-Le Raspberry Pi n'a pas besoin de cloner tout le dépôt pour installer le socle MQTT. Le bootstrap peut être téléchargé directement depuis GitHub :
+L'installation recommandée passe par `setup_pi.sh`. Il s'agit de l'orchestrateur complet : il prépare le socle MQTT puis installe ou met à jour `pulsedeck-hub`. Le dépôt Git n'a pas besoin d'être cloné sur le Raspberry Pi.
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/bootstrap_pi.sh \
-  -o bootstrap_pi.sh
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
+  -o setup_pi.sh
 
-chmod +x bootstrap_pi.sh
+chmod +x setup_pi.sh
+./setup_pi.sh --check
+sudo ./setup_pi.sh
 ```
 
-Contrôle sans modification du système :
+Lorsqu'il est lancé seul, `setup_pi.sh` récupère automatiquement depuis GitHub les scripts spécialisés dont il a besoin. Si le dépôt est déjà présent, il utilise les copies locales. Les questions interactives sont réservées aux situations où une information ou un fichier requis ne peut pas être déterminé automatiquement.
+
+### Scripts de déploiement
+
+| Script | Rôle | Dépôt requis | Usage principal |
+| --- | --- | --- | --- |
+| `setup_pi.sh` | Orchestration complète MQTT + hub | Non | Installation recommandée |
+| `bootstrap_pi.sh` | Préparation de l'hôte et installation/configuration Mosquitto | Non | Réparer ou contrôler uniquement le socle MQTT |
+| `deploy_hub.sh` | Installation/mise à jour du service Python `pulsedeck-hub` | Non | Redéployer uniquement l'application |
+
+Le mode `--check` est disponible sur les trois scripts et ne doit effectuer aucune modification.
+
+Exemples ciblés :
 
 ```bash
-./bootstrap_pi.sh --check
+# Socle MQTT uniquement
+sudo ./setup_pi.sh --bootstrap-only
+
+# Hub uniquement
+sudo ./setup_pi.sh --hub-only
+
+# Diagnostic complet
+./setup_pi.sh --check --verbose
 ```
 
-Installation/configuration :
+`bootstrap_pi.sh` configure Mosquitto sur l'IPv4 LAN détectée, active la persistence et vérifie notamment QoS 1 et retained. `deploy_hub.sh` installe le hub sous `/opt/pulsedeck`, sa configuration sous `/etc/pulsedeck` et son service systemd.
 
-```bash
-sudo ./bootstrap_pi.sh
-```
-
-Le bootstrap détecte notamment la plateforme, les ressources disponibles, l'interface IPv4 LAN et l'état de Mosquitto. Il configure ensuite le broker pour écouter uniquement sur l'adresse LAN détectée et effectue des tests MQTT de base.
-
-Le script n'exécute pas de mise à jour globale du système (`pacman -Sy` / `pacman -Syu`).
+Les scripts n'exécutent pas de mise à jour globale du système (`pacman -Sy` / `pacman -Syu`).
 
 ## Organisation du dépôt
 
@@ -160,8 +175,9 @@ PulseDeck/
 │       ├── health/
 │       └── mqtt/
 ├── scripts/
-│   ├── bootstrap_pi.sh     bootstrap autonome du Raspberry Pi
-│   └── setup_pi.sh         point d'entrée lorsque le dépôt est présent
+│   ├── setup_pi.sh         installation complète / orchestrateur
+│   ├── bootstrap_pi.sh     bootstrap système et Mosquitto
+│   └── deploy_hub.sh       déploiement autonome du hub
 ├── systemd/                unités/templates systemd
 ├── PROJECT_DESCRIPTION.md  description détaillée du projet
 └── PROJECT_SCHEMA.md       contrats et décisions d'architecture

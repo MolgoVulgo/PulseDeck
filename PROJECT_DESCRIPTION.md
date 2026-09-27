@@ -115,6 +115,8 @@ Runtime hub retenu à partir de `patch_0003` :
 
 Le premier service actif du hub maintient `pulsedeck/v1/system/availability`, avec retained QoS 1, Last Will et reconnexion automatique MQTT.
 
+Le déploiement Raspberry Pi est piloté par trois scripts : `setup_pi.sh` est l'orchestrateur complet recommandé, `bootstrap_pi.sh` gère le socle système/Mosquitto et `deploy_hub.sh` gère le service applicatif. `setup_pi.sh` fonctionne depuis un clone ou téléchargé seul ; lorsque les scripts spécialisés ne sont pas présents localement, il les récupère depuis GitHub. Les étapes déterministes sont automatiques et une question n'est posée que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire.
+
 Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
 
 Structure initiale :

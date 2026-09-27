@@ -1,74 +1,83 @@
 # Exploitation Raspberry Pi
 
-## Préflight sans dépôt
+## Contrôle global
 
-Une copie seule de `bootstrap_pi.sh` suffit :
+```bash
+./setup_pi.sh --check
+./setup_pi.sh --check --verbose
+```
+
+Le contrôle global exécute les vérifications du socle MQTT puis celles du hub.
+
+## Installation / mise à jour globale
+
+```bash
+sudo ./setup_pi.sh
+```
+
+Cette commande est le point d'entrée normal pour une cible PulseDeck neuve ou déjà installée.
+
+## Opérations ciblées
+
+Socle MQTT uniquement :
 
 ```bash
 ./bootstrap_pi.sh --check
-./bootstrap_pi.sh --check --verbose
-```
-
-## Installation MQTT
-
-```bash
 sudo ./bootstrap_pi.sh
 ```
 
-Le même script est relançable : les opérations sont conçues pour être idempotentes lorsqu'il reconnaît les fichiers PulseDeck qu'il gère.
-
-## Depuis un dépôt PulseDeck présent
-
-```bash
-sudo ./scripts/setup_pi.sh
-```
-
-`setup_pi.sh` délègue au bootstrap autonome.
-
-## Services
-
-```bash
-systemctl status mosquitto
-journalctl -u mosquitto
-```
-
-## Contrôles MQTT
-
-```bash
-ss -lntp | grep ':1883'
-```
-
-Le listener attendu est l'IPv4 LAN portée par la route par défaut, port `1883`. Le bootstrap teste également QoS 1, retained et restauration du retained après redémarrage du broker.
-
-## Limites
-
-Le bootstrap n'installe pas encore le service applicatif `pulsedeck-hub`. Cette étape aura son propre mécanisme de déploiement et ne devra pas imposer un clone Git de développement sur le Pi.
-
-## État validé
-
-Le broker est opérationnel sur `bluebox` et écoute uniquement sur `192.168.0.250:1883`. Le test QoS 1 retained et sa restauration après redémarrage ont été exécutés avec succès le 27 septembre 2026.
-
-## Hub applicatif
-
-Déploiement sans dépôt :
+Hub uniquement :
 
 ```bash
 ./deploy_hub.sh --check
 sudo ./deploy_hub.sh
 ```
 
-Exploitation :
+Via l'orchestrateur :
 
 ```bash
-systemctl status pulsedeck-hub
+sudo ./setup_pi.sh --bootstrap-only
+sudo ./setup_pi.sh --hub-only
+```
+
+## Services
+
+```bash
+systemctl status mosquitto --no-pager
+systemctl status pulsedeck-hub --no-pager
+```
+
+Logs :
+
+```bash
+journalctl -u mosquitto
 journalctl -u pulsedeck-hub
 journalctl -u pulsedeck-hub -f
 ```
 
-Contrôle du retained :
+## Contrôles MQTT
+
+Listener :
 
 ```bash
-mosquitto_sub -h 192.168.0.250 -p 1883 -q 1 -t pulsedeck/v1/system/availability -C 1
+ss -lntp | grep ':1883'
 ```
 
-La valeur d'hôte ci-dessus correspond à la cible observée ; utiliser l'IPv4 LAN actuelle du Pi si elle change.
+Availability du hub :
+
+```bash
+mosquitto_sub \
+  -h 192.168.0.250 \
+  -p 1883 \
+  -q 1 \
+  -t pulsedeck/v1/system/availability \
+  -C 1
+```
+
+L'adresse ci-dessus correspond à la cible `bluebox` validée. Utiliser l'IPv4 LAN actuelle du Pi si elle change.
+
+## Comportement en erreur
+
+Les warnings n'interrompent pas les contrôles indépendants. Une erreur sur le bootstrap empêche en revanche le déploiement automatique du hub dans le mode complet, afin de ne pas masquer un socle MQTT incomplet.
+
+Lorsqu'une décision sûre n'est pas possible, le script doit soit demander l'information nécessaire en mode interactif, soit échouer clairement en mode `--non-interactive`.

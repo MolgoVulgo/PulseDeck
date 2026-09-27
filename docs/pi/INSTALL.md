@@ -1,114 +1,144 @@
 # Installation Raspberry Pi
 
-## Deux modes supportés
+## Principe
 
-Le Raspberry Pi de production n'est pas supposé contenir le dépôt de développement PulseDeck.
+Le Raspberry Pi est une cible de déploiement : le dépôt PulseDeck n'a pas besoin d'y être cloné.
 
-### Mode A — dépôt présent
+L'installation par scripts suit trois règles :
 
-Si le dépôt a volontairement été cloné/copied sur le Pi :
+1. tout ce qui peut être détecté ou configuré automatiquement l'est sans intervention ;
+2. une question n'est posée que lorsqu'une information ne peut pas être déterminée proprement ou lorsqu'un choix manuel est nécessaire ;
+3. chaque script reste relançable et fournit un mode `--check` sans modification.
+
+## `setup_pi.sh` — installation complète
+
+C'est le point d'entrée recommandé.
+
+Il enchaîne :
+
+```text
+préflight
+  ↓
+bootstrap_pi.sh
+  ├── contrôles système
+  ├── installation/configuration Mosquitto
+  └── tests MQTT
+  ↓
+deploy_hub.sh
+  ├── utilisateur/runtime PulseDeck
+  ├── venv Python
+  ├── installation pulsedeck-hub
+  ├── configuration
+  ├── systemd
+  └── validation MQTT availability
+  ↓
+résumé final
+```
+
+Téléchargement direct depuis GitHub :
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
+  -o setup_pi.sh
+chmod +x setup_pi.sh
+```
+
+Diagnostic complet :
+
+```bash
+./setup_pi.sh --check
+```
+
+Installation complète :
+
+```bash
+sudo ./setup_pi.sh
+```
+
+Si `setup_pi.sh` est utilisé hors dépôt, il récupère automatiquement `bootstrap_pi.sh` et `deploy_hub.sh` depuis GitHub. Si ces fichiers sont disponibles localement, les copies locales sont utilisées.
+
+Options principales :
+
+```text
+--check              aucune modification
+--verbose            diagnostics supplémentaires
+--bootstrap-only     socle MQTT uniquement
+--hub-only           hub uniquement
+--non-interactive    ne poser aucune question
+--source-dir DIR     utiliser les scripts spécialisés depuis DIR
+--ref REF            branche/tag GitHub à utiliser
+```
+
+En mode application, si le script n'est pas lancé comme root et que `sudo` est disponible, il se relance automatiquement via `sudo`.
+
+## `bootstrap_pi.sh` — socle système/MQTT
+
+Ce script est autonome. Il sert lorsque seul le socle MQTT doit être installé, contrôlé ou réparé.
+
+```bash
+./bootstrap_pi.sh --check
+sudo ./bootstrap_pi.sh
+```
+
+Il :
+
+- contrôle OS, architecture, Python, RAM, disque et réseau ;
+- détecte l'IPv4 LAN ;
+- installe Mosquitto s'il manque ;
+- n'exécute jamais `pacman -Sy` ni `pacman -Syu` ;
+- configure le listener MQTT LAN IPv4 ;
+- active persistence, anonymous V1, sans ACL/TLS ;
+- active/démarre Mosquitto ;
+- teste QoS 1, retained et restauration après redémarrage ;
+- produit un résumé final.
+
+## `deploy_hub.sh` — service applicatif
+
+Ce script est également autonome. Il suppose que le socle MQTT est déjà opérationnel.
+
+```bash
+./deploy_hub.sh --check
+sudo ./deploy_hub.sh
+```
+
+Il :
+
+- contrôle Python et Mosquitto ;
+- crée l'utilisateur système `pulsedeck` si nécessaire ;
+- installe les sources sous `/opt/pulsedeck/hub` ;
+- crée/réutilise `/opt/pulsedeck/venv` ;
+- installe les dépendances Python dans ce venv ;
+- crée la configuration initiale `/etc/pulsedeck/pulsedeck.toml` si elle n'existe pas ;
+- conserve une configuration runtime existante ;
+- installe et active `pulsedeck-hub.service` ;
+- vérifie `pulsedeck/v1/system/availability`.
+
+Layout runtime :
+
+```text
+/opt/pulsedeck/hub
+/opt/pulsedeck/venv
+/etc/pulsedeck/pulsedeck.toml
+/var/lib/pulsedeck
+/etc/systemd/system/pulsedeck-hub.service
+```
+
+## Questions interactives
+
+L'installation ne demande pas de confirmation pour les opérations attendues après un lancement volontaire de `sudo ./setup_pi.sh`.
+
+Une question est réservée à une situation réellement indéterminée. Par exemple, si un script spécialisé manque et ne peut pas être téléchargé automatiquement, `setup_pi.sh` peut demander son chemin local. Avec `--non-interactive`, aucune question n'est posée et l'étape échoue explicitement à la place.
+
+Les fichiers existants non reconnus comme gérés par PulseDeck ne doivent pas être écrasés silencieusement.
+
+## Dépôt présent sur le Pi
+
+Le même point d'entrée fonctionne depuis un clone :
 
 ```bash
 cd /chemin/vers/PulseDeck
 sudo ./scripts/setup_pi.sh
 ```
 
-`setup_pi.sh` délègue le bootstrap système à `scripts/bootstrap_pi.sh`.
-
-### Mode B — bootstrap autonome
-
-Le fichier suivant est autonome :
-
-```text
-scripts/bootstrap_pi.sh
-```
-
-Il peut être copié seul sur le Pi, sans `git clone`, sans `PROJECT_SCHEMA.md`, sans configuration PulseDeck locale et sans autre fichier du dépôt.
-
-Exemple :
-
-```bash
-chmod +x bootstrap_pi.sh
-./bootstrap_pi.sh --check
-sudo ./bootstrap_pi.sh
-```
-
-Le script embarque directement la configuration Mosquitto V1 qu'il doit rendre. Il ne dépend pas de `config/mosquitto/pulsedeck.conf.in`.
-
-## Comportement
-
-Le bootstrap :
-
-- détecte OS, architecture, ressources et IPv4 LAN ;
-- vérifie le port TCP 1883 ;
-- installe `mosquitto` uniquement s'il manque ;
-- n'exécute jamais `pacman -Sy` ni `pacman -Syu` ;
-- configure un listener sur l'IPv4 LAN détectée ;
-- active anonymous, sans ACL ni TLS pour la V1 LAN ;
-- active la persistence Mosquitto ;
-- valide la configuration ;
-- active/démarre le service ;
-- teste QoS 1, retained et restauration après redémarrage ;
-- continue autant que possible en présence de warnings et produit un résumé final.
-
-## Mode contrôle
-
-```bash
-./bootstrap_pi.sh --check
-```
-
-Ce mode n'installe rien, ne modifie aucun fichier et ne redémarre aucun service.
-
-## Principe de déploiement
-
-Le bootstrap prépare l'hôte. Le déploiement futur du service applicatif `pulsedeck-hub` sera traité séparément ; il ne faut pas considérer le dépôt de développement comme un prérequis permanent du Raspberry Pi.
-
-## Validation réelle sur `bluebox`
-
-Le 27 septembre 2026, le bootstrap a été exécuté sur la cible réelle `bluebox` :
-
-- Raspberry Pi 3 Model B Plus Rev 1.3 / Arch Linux ARM `armv7l` ;
-- kernel `6.18.33-4-rpi` ;
-- Python `3.14.5` ;
-- IPv4 LAN `192.168.0.250/24` sur `enu1u1u1` ;
-- IPv6 globale absente ;
-- Mosquitto `2.1.2-2` installé ;
-- listener unique observé sur `192.168.0.250:1883` ;
-- QoS 1 retained validé ;
-- retained restauré après redémarrage du broker ;
-- service systemd activé et démarré ;
-- zéro échec ; seul avertissement restant : absence de swap, acceptée pour la V1.
-
-Le bootstrap est non interactif pour l'installation des paquets : il utilise explicitement `pacman --noconfirm -S --needed` et n'exécute jamais `pacman -Sy`/`-Syu`.
-
-## Déploiement autonome du hub — patch 0003
-
-Le service applicatif n'impose pas non plus de clone Git sur le Pi. Copier uniquement :
-
-```text
-deploy_hub.sh
-```
-
-Puis :
-
-```bash
-chmod +x deploy_hub.sh
-./deploy_hub.sh --check
-sudo ./deploy_hub.sh
-```
-
-Le déployeur embarque le paquet Python du hub, la configuration initiale et l'unité systemd. Il crée un venv dédié et installe uniquement les dépendances Python du hub dans ce venv.
-
-Layout runtime retenu :
-
-```text
-/opt/pulsedeck/hub            sources applicatives gérées
-/opt/pulsedeck/venv           environnement Python
-/etc/pulsedeck/pulsedeck.toml configuration runtime
-/var/lib/pulsedeck            état runtime
-/etc/systemd/system/pulsedeck-hub.service
-```
-
-Utilisateur de service : `pulsedeck`.
-
-La configuration runtime existante n'est pas écrasée lors d'un redéploiement. Le premier déploiement y inscrit l'IPv4 LAN détectée comme broker MQTT.
+Dans ce cas, les scripts spécialisés du dépôt sont utilisés directement.

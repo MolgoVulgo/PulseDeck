@@ -91,6 +91,10 @@ knowledge:
     - "Déploiement hub supporté par scripts/deploy_hub.sh autonome, sans clone du dépôt sur le Pi."
     - "Payload pulsedeck/v1/system/availability schema 1 défini et implémenté dans patch_0003."
     - "Socle MQTT live validé sur bluebox le 2026-09-27 : service Mosquitto actif/activé au boot, listener LAN IPv4 unique, persistence retained opérationnelle."
+    - "scripts/setup_pi.sh est l'orchestrateur d'installation complet : bootstrap MQTT puis déploiement du hub."
+    - "setup_pi.sh peut fonctionner sans clone du dépôt : il récupère les scripts spécialisés depuis GitHub lorsqu'ils ne sont pas disponibles localement."
+    - "Les scripts de déploiement automatisent les opérations déterministes et ne demandent une saisie que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire."
+    - "Le mode --non-interactive interdit toute question et transforme une décision manuelle indispensable en échec explicite."
   unresolved:
     - "Schéma exact des payloads applicatifs."
     - "Politique exacte de cache."
@@ -139,13 +143,13 @@ contracts:
 validation:
   commands:
     - command: "./scripts/setup_pi.sh --check"
-      scope: "préflight Raspberry Pi, réseau et prérequis PulseDeck"
+      scope: "préflight complet Raspberry Pi : socle MQTT puis runtime hub"
       mode: "external_or_live"
     - command: "./scripts/deploy_hub.sh --check"
       scope: "préflight déploiement/runtime du hub PulseDeck"
       mode: "external_or_live"
   forbidden_automatic:
-    - "installation ou mise à jour automatique de dépendances"
+    - "installation ou mise à jour automatique de dépendances hors exécution volontaire des scripts de déploiement PulseDeck"
     - "synchronisation globale Drive -> dépôt local"
     - "git commit/push/reset/clean/restore/stash sans instruction explicite"
   failure_policy: "stop_and_report"
