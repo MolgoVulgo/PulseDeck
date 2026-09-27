@@ -1,67 +1,64 @@
 # Installation Raspberry Pi
 
-## Objectif
+## Deux modes supportés
 
-L'installation du socle Pi est pilotée par `scripts/setup_pi.sh`. Le script est idempotent, poursuit les contrôles indépendants après un avertissement ou un échec local et produit un résumé final.
+Le Raspberry Pi de production n'est pas supposé contenir le dépôt de développement PulseDeck.
 
-## Préflight sans modification
+### Mode A — dépôt présent
 
-```bash
-./scripts/setup_pi.sh --check
-```
-
-Le contrôle couvre notamment :
-- OS, architecture, kernel et Python ;
-- RAM, swap et espace disque ;
-- systemd ;
-- interface portant la route IPv4 par défaut ;
-- adresse IPv4 LAN ;
-- état IPv6 à titre informatif ;
-- disponibilité/occupation du port TCP 1883 ;
-- présence de Mosquitto ;
-- configuration et état du broker lorsqu'il est déjà installé.
-
-Les avertissements ne rendent pas le préflight bloquant. Une erreur réelle incrémente le compteur `Failures` et donne un code retour non nul, mais les contrôles indépendants suivants continuent autant que possible.
-
-## Installation / configuration MQTT
-
-Le mode application nécessite root :
+Si le dépôt a volontairement été cloné/copied sur le Pi :
 
 ```bash
+cd /chemin/vers/PulseDeck
 sudo ./scripts/setup_pi.sh
 ```
 
-Le script :
-1. détecte l'IPv4 de l'interface portant la route par défaut ;
-2. installe `mosquitto` avec `pacman -S --needed --noconfirm` si nécessaire ;
-3. n'exécute jamais `pacman -Sy` ni `pacman -Syu` ;
-4. conserve le fichier principal Mosquitto et y ajoute uniquement un `include_dir` PulseDeck s'il n'en existe aucun ;
-5. crée un drop-in `pulsedeck.conf` lié à l'IPv4 LAN détectée ;
-6. active la persistence Mosquitto ;
-7. valide la configuration avec `mosquitto --test-config` lorsque cette option est disponible ;
-8. active/redémarre `mosquitto.service` ;
-9. vérifie le bind du port 1883 ;
-10. exécute un smoke test QoS 1 + retained + persistence après redémarrage ;
-11. supprime le topic de test retained en fin de validation.
+`setup_pi.sh` délègue le bootstrap système à `scripts/bootstrap_pi.sh`.
 
-## Fichiers système gérés
+### Mode B — bootstrap autonome
 
-Le template versionné est :
+Le fichier suivant est autonome :
 
 ```text
-config/mosquitto/pulsedeck.conf.in
+scripts/bootstrap_pi.sh
 ```
 
-L'installation rend ce template dans un fichier `pulsedeck.conf` sous l'`include_dir` Mosquitto actif. Si aucun `include_dir` n'est déclaré, le script utilise `/etc/mosquitto/conf.d` et ajoute cette inclusion au fichier principal.
+Il peut être copié seul sur le Pi, sans `git clone`, sans `PROJECT_SCHEMA.md`, sans configuration PulseDeck locale et sans autre fichier du dépôt.
 
-Avant cette modification du fichier principal, une sauvegarde unique est créée :
+Exemple :
 
-```text
-/etc/mosquitto/mosquitto.conf.pulsedeck-before-include
+```bash
+chmod +x bootstrap_pi.sh
+./bootstrap_pi.sh --check
+sudo ./bootstrap_pi.sh
 ```
 
-Un `pulsedeck.conf` préexistant qui ne contient pas le marqueur PulseDeck n'est pas écrasé.
+Le script embarque directement la configuration Mosquitto V1 qu'il doit rendre. Il ne dépend pas de `config/mosquitto/pulsedeck.conf.in`.
 
-## Relance
+## Comportement
 
-Le script peut être relancé. Les fichiers déjà conformes ne sont pas réécrits inutilement et le paquet Mosquitto n'est pas réinstallé s'il est déjà présent.
+Le bootstrap :
+
+- détecte OS, architecture, ressources et IPv4 LAN ;
+- vérifie le port TCP 1883 ;
+- installe `mosquitto` uniquement s'il manque ;
+- n'exécute jamais `pacman -Sy` ni `pacman -Syu` ;
+- configure un listener sur l'IPv4 LAN détectée ;
+- active anonymous, sans ACL ni TLS pour la V1 LAN ;
+- active la persistence Mosquitto ;
+- valide la configuration ;
+- active/démarre le service ;
+- teste QoS 1, retained et restauration après redémarrage ;
+- continue autant que possible en présence de warnings et produit un résumé final.
+
+## Mode contrôle
+
+```bash
+./bootstrap_pi.sh --check
+```
+
+Ce mode n'installe rien, ne modifie aucun fichier et ne redémarre aucun service.
+
+## Principe de déploiement
+
+Le bootstrap prépare l'hôte. Le déploiement futur du service applicatif `pulsedeck-hub` sera traité séparément ; il ne faut pas considérer le dépôt de développement comme un prérequis permanent du Raspberry Pi.
