@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0005
+# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0006
 # Works from a repository checkout or as a standalone script downloaded from GitHub.
 
 set -u
@@ -181,16 +181,45 @@ resolve_script() {
 run_component() {
     local label="$1" script="$2"
     shift 2
-    local args=()
+    local args=() log status child_warnings child_failures
     (( CHECK_ONLY )) && args+=(--check)
     (( VERBOSE )) && args+=(--verbose)
 
+    [[ -n "$TEMP_DIR" ]] || TEMP_DIR="$(mktemp -d)" || { fail "mktemp impossible"; return 1; }
+    log="${TEMP_DIR}/component-$RANDOM-$$.log"
+
     printf '\n========== %s ==========\n' "$label"
-    if bash "$script" "${args[@]}" "$@"; then
+    if command_exists tee; then
+        bash "$script" "${args[@]}" "$@" 2>&1 | tee "$log"
+        status=${PIPESTATUS[0]}
+    else
+        bash "$script" "${args[@]}" "$@" >"$log" 2>&1
+        status=$?
+        cat "$log"
+    fi
+
+    child_warnings="$(awk '$1 == "Warnings" && $2 ~ /^[0-9]+$/ {value=$2} END {print value+0}' "$log" 2>/dev/null || printf '0')"
+    child_failures="$(awk '$1 == "Failures" && $2 ~ /^[0-9]+$/ {value=$2} END {print value+0}' "$log" 2>/dev/null || printf '0')"
+    [[ "$child_warnings" =~ ^[0-9]+$ ]] || child_warnings=0
+    [[ "$child_failures" =~ ^[0-9]+$ ]] || child_failures=0
+
+    WARN_COUNT=$((WARN_COUNT + child_warnings))
+    FAIL_COUNT=$((FAIL_COUNT + child_failures))
+
+    if (( child_warnings > 0 || child_failures > 0 )); then
+        info "$label : ${child_warnings} warning(s), ${child_failures} failure(s) remonté(s)"
+    fi
+
+    if (( status == 0 && child_failures == 0 )); then
         ok "$label terminé"
         return 0
     fi
-    fail "$label a signalé un échec"
+
+    if (( child_failures == 0 )); then
+        fail "$label a signalé un échec sans compteur de failure exploitable"
+    else
+        info "$label a retourné un code d'échec ; failures déjà agrégées dans le résumé global"
+    fi
     return 1
 }
 
