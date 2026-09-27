@@ -160,3 +160,9 @@ def test_unsafe_pagination_host_is_rejected():
     client = OpenWeatherClient(cfg)
     with pytest.raises(WeatherError, match="unsafe pagination URL"):
         client._request("https://example.com/data/4.0/onecall/timeline/1h")
+
+
+def test_api_key_override_avoids_runtime_secret_file() -> None:
+    cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path('/does/not/exist'))
+    client = OpenWeatherClient(cfg, api_key='temporary-key')
+    assert client._api_key() == 'temporary-key'

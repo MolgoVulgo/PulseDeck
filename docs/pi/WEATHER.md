@@ -55,19 +55,18 @@ La clé API ne doit pas être placée dans le TOML. Elle est stockée séparéme
 
 Le déployeur place ce fichier avec un accès limité à `root` et au groupe `pulsedeck`.
 
-## Configuration automatique
+## Configuration via PulseDeck Admin
 
-Lors d'un `sudo ./setup_pi.sh` ou `sudo ./deploy_hub.sh`, si Weather n'est pas encore configuré, le déployeur propose de le configurer.
+À partir de `patch_0008`, `setup_pi.sh` et `deploy_hub.sh` n’interrogent plus l’utilisateur sur la clé ou le lieu. Ils installent le socle, activent PulseDeck Admin et conservent une configuration Weather existante.
 
-Il demande :
+Une nouvelle installation configure Weather dans l’interface Web :
 
-1. la clé API OpenWeather avec saisie masquée ;
-2. un lieu sous forme `ville[,pays]` ou `latitude,longitude` ;
-3. un choix uniquement si le Geocoding API retourne plusieurs correspondances.
+1. saisir ou remplacer la clé OpenWeather ;
+2. rechercher le lieu via le Geocoding API ou utiliser des coordonnées ;
+3. tester l’accès One Call 4.0 ;
+4. enregistrer et activer le collector.
 
-Pour un nom de lieu, le script utilise le Geocoding API OpenWeather afin d'obtenir les coordonnées nécessaires à One Call 4.0.
-
-Avec `--non-interactive`, aucune question n'est posée et Weather reste désactivé si les paramètres ne sont pas déjà présents.
+Le test fournisseur est exécuté avant l’écriture. En cas d’échec d’application, la configuration précédente est restaurée. La clé API n’est jamais renvoyée en clair par l’API Web.
 
 ## Cadences V1
 

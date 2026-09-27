@@ -1,4 +1,4 @@
-"""PulseDeck hub entry point."""
+"""PulseDeck hub entry point and in-process runtime controller."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from pathlib import Path
 import signal
 import threading
 
-from .collectors.base import Collector
+from .admin.app import AdminServer
 from .collectors.weather import WeatherCollector
-from .config import DEFAULT_CONFIG_PATH, load_config
+from .config import DEFAULT_CONFIG_PATH, HubConfig, load_config
+from .health.state import HealthState
 from .logging_setup import configure_logging
 from .mqtt.client import HubMQTTClient
 
@@ -27,6 +28,54 @@ def _parser() -> argparse.ArgumentParser:
         help=f"TOML configuration path (default: {DEFAULT_CONFIG_PATH})",
     )
     return parser
+
+
+class HubRuntime:
+    def __init__(self, config_path: Path, config: HubConfig) -> None:
+        self.config_path = config_path
+        self.config = config
+        self.health = HealthState()
+        self.health.configure_weather(config.weather.enabled)
+        self.mqtt_client = HubMQTTClient(config.mqtt)
+        self.weather_collector: WeatherCollector | None = None
+        self.admin_server: AdminServer | None = None
+        self._config_lock = threading.RLock()
+
+    def _start_weather(self) -> None:
+        self.health.configure_weather(self.config.weather.enabled)
+        if self.config.weather.enabled:
+            self.weather_collector = WeatherCollector(self.config.weather, self.mqtt_client, self.health)
+            self.weather_collector.start()
+        else:
+            self.weather_collector = None
+
+    def start(self) -> None:
+        self.mqtt_client.start()
+        self._start_weather()
+        if self.config.admin.enabled:
+            self.admin_server = AdminServer(self)
+            self.admin_server.start()
+
+    def reload_weather(self) -> None:
+        """Reload only mutable collector configuration without restarting the hub."""
+        with self._config_lock:
+            new_config = load_config(self.config_path)
+            if new_config.mqtt != self.config.mqtt:
+                raise ValueError("MQTT changes require a service restart")
+            if new_config.admin != self.config.admin:
+                raise ValueError("Admin listener changes require a service restart")
+            old = self.weather_collector
+            if old is not None:
+                old.stop()
+            self.config = new_config
+            self._start_weather()
+
+    def stop(self) -> None:
+        if self.admin_server is not None:
+            self.admin_server.stop()
+        if self.weather_collector is not None:
+            self.weather_collector.stop()
+        self.mqtt_client.stop()
 
 
 def main() -> int:
@@ -47,20 +96,12 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
 
-    mqtt_client = HubMQTTClient(config.mqtt)
-    collectors: list[Collector] = []
-    if config.weather.enabled:
-        collectors.append(WeatherCollector(config.weather, mqtt_client))
-
-    mqtt_client.start()
-    for collector in collectors:
-        collector.start()
+    runtime = HubRuntime(args.config, config)
+    runtime.start()
     try:
         stop_event.wait()
     finally:
-        for collector in reversed(collectors):
-            collector.stop()
-        mqtt_client.stop()
+        runtime.stop()
     return 0
 
 

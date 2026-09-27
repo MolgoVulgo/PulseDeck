@@ -12,8 +12,8 @@ reconnect_min_delay = 1
 reconnect_max_delay = 30
 
 [admin]
-enabled = false
-listen = "0.0.0.0"
+enabled = true
+listen = "192.168.0.250" # example only; rendered from the target host at deployment
 port = 8080
 
 [collectors.weather]

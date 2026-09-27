@@ -41,4 +41,4 @@ Les modules existent dans le squelette, mais leurs contrats fonctionnels ne sont
 
 ## Weather
 
-Le collector Weather V1 utilise OpenWeather One Call 4.0. Voir [`WEATHER.md`](WEATHER.md) pour la configuration, les cadences et les payloads MQTT.
+Le collector Weather V1 utilise OpenWeather One Call 4.0. Sa configuration fonctionnelle est gérée depuis PulseDeck Admin après installation du socle. Voir [`WEATHER.md`](WEATHER.md) pour les cadences et les payloads MQTT, et [`ADMIN.md`](ADMIN.md) pour l’interface Web.

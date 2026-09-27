@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/pulsedeck
+ReadWritePaths=/var/lib/pulsedeck /etc/pulsedeck
 
 [Install]
 WantedBy=multi-user.target

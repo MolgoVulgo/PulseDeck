@@ -125,3 +125,19 @@ Logs du collector :
 ```bash
 journalctl -u pulsedeck-hub -f
 ```
+
+## Web Admin
+
+L’interface d’administration est exposée uniquement sur l’IPv4 LAN configurée :
+
+```text
+http://192.168.0.250:8080
+```
+
+Adapter l’adresse si l’IPv4 du Pi change. Le point de santé public minimal est `/api/health`; les autres API nécessitent une session administrateur.
+
+Les opérations Weather courantes (clé, lieu, test fournisseur, activation/désactivation et cadences) se font depuis cette interface et sont appliquées sans redémarrage manuel du service.
+
+Le mot de passe initial est généré lors de la première installation de `patch_0008`. Il peut ensuite être changé depuis PulseDeck Admin.
+
+PulseDeck Admin V1 utilise HTTP sur le LAN domestique et ne doit pas être exposé directement à Internet.

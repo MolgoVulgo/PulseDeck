@@ -16,6 +16,7 @@ from ..config import WeatherConfig
 from ..mqtt.payloads import encode_payload, source_availability_payload
 
 if TYPE_CHECKING:
+    from ..health.state import HealthState
     from ..mqtt.client import HubMQTTClient
 
 
@@ -23,6 +24,7 @@ LOG = logging.getLogger(__name__)
 SOURCE = "openweather-onecall-4"
 API_ROOT = "https://api.openweathermap.org/data/4.0/onecall"
 ALLOWED_API_HOST = "api.openweathermap.org"
+GEOCODE_ROOT = "https://api.openweathermap.org/geo/1.0/direct"
 
 
 class WeatherError(RuntimeError):
@@ -240,11 +242,50 @@ def normalize_daily(response: WeatherResponse, configured_name: str, days: int) 
     }
 
 
+def geocode_locations(query: str, api_key: str, *, timeout: int = 15, limit: int = 5) -> list[dict[str, object]]:
+    """Resolve a human location without exposing the API key to logs or callers."""
+    if not query.strip():
+        raise WeatherError("location query is empty")
+    params = {"q": query.strip(), "limit": max(1, min(limit, 5)), "appid": api_key.strip()}
+    request = Request(
+        f"{GEOCODE_ROOT}?{urlencode(params)}",
+        headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.3.0"},
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:  # noqa: S310
+            raw = json.loads(response.read())
+    except HTTPError as exc:
+        raise WeatherError(f"OpenWeather geocoding HTTP {exc.code}") from exc
+    except URLError as exc:
+        reason = getattr(exc, "reason", None)
+        raise WeatherError(f"OpenWeather geocoding network error: {type(reason).__name__ if reason else 'unknown'}") from exc
+    except (TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise WeatherError("OpenWeather geocoding failed") from exc
+    if not isinstance(raw, list):
+        raise WeatherError("OpenWeather geocoding returned an unexpected response")
+    results: list[dict[str, object]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        lat = item.get("lat")
+        lon = item.get("lon")
+        if isinstance(lat, bool) or not isinstance(lat, (int, float)):
+            continue
+        if isinstance(lon, bool) or not isinstance(lon, (int, float)):
+            continue
+        label = ", ".join(str(item.get(key, "")).strip() for key in ("name", "state", "country") if str(item.get(key, "")).strip())
+        results.append({"latitude": float(lat), "longitude": float(lon), "label": label or f"{lat},{lon}"})
+    return results
+
+
 class OpenWeatherClient:
-    def __init__(self, config: WeatherConfig) -> None:
+    def __init__(self, config: WeatherConfig, *, api_key: str | None = None) -> None:
         self.config = config
+        self._api_key_override = api_key.strip() if isinstance(api_key, str) and api_key.strip() else None
 
     def _api_key(self) -> str:
+        if self._api_key_override is not None:
+            return self._api_key_override
         try:
             key = self.config.api_key_file.read_text(encoding="utf-8").strip()
         except OSError as exc:
@@ -279,7 +320,7 @@ class OpenWeatherClient:
                 params["start"] = start
             url = f"{API_ROOT}/{path_or_url}?{urlencode(params)}"
 
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.2.2"})
+        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.3.0"})
         try:
             with urlopen(request, timeout=self.config.request_timeout) as response:  # noqa: S310
                 body = response.read()
@@ -352,9 +393,10 @@ class OpenWeatherClient:
 
 
 class WeatherCollector:
-    def __init__(self, config: WeatherConfig, mqtt_client: "HubMQTTClient") -> None:
+    def __init__(self, config: WeatherConfig, mqtt_client: "HubMQTTClient", health: "HealthState | None" = None) -> None:
         self.config = config
         self.mqtt = mqtt_client
+        self.health = health
         self.provider = OpenWeatherClient(config)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="weather-collector", daemon=True)
@@ -367,6 +409,8 @@ class WeatherCollector:
             self.config.latitude,
             self.config.longitude,
         )
+        if self.health is not None:
+            self.health.weather_started()
         self._thread.start()
 
     def stop(self) -> None:
@@ -374,6 +418,8 @@ class WeatherCollector:
         if self._thread.is_alive():
             self._thread.join(timeout=float(self.config.request_timeout) + 2.0)
         self._publish_availability("offline", reason="collector_stopped")
+        if self.health is not None:
+            self.health.weather_stopped()
 
     def _publish(self, suffix: str, payload: dict[str, object]) -> None:
         if not self.mqtt.publish_retained(suffix, encode_payload(payload)):
@@ -394,6 +440,8 @@ class WeatherCollector:
         self._publish("weather/current", normalize_current(response, self.config.location_name))
         self._last_success = int(time.time())
         self._publish_availability("online")
+        if self.health is not None:
+            self.health.weather_current_success()
         LOG.info("Weather current updated")
 
     def _fetch_hourly(self) -> None:
@@ -401,6 +449,8 @@ class WeatherCollector:
         if len(response.data) < self.config.hourly_hours:
             LOG.warning("Weather hourly returned %d/%d records", len(response.data), self.config.hourly_hours)
         self._publish("weather/hourly", normalize_hourly(response, self.config.location_name, self.config.hourly_hours))
+        if self.health is not None:
+            self.health.weather_hourly_success(len(response.data))
         LOG.info("Weather hourly updated: %d records", len(response.data))
 
     def _fetch_daily(self) -> None:
@@ -408,6 +458,8 @@ class WeatherCollector:
         if len(response.data) < self.config.daily_days:
             LOG.warning("Weather daily returned %d/%d records", len(response.data), self.config.daily_days)
         self._publish("weather/daily", normalize_daily(response, self.config.location_name, self.config.daily_days))
+        if self.health is not None:
+            self.health.weather_daily_success(len(response.data))
         LOG.info("Weather daily updated: %d records", len(response.data))
 
     def _run(self) -> None:
@@ -427,6 +479,8 @@ class WeatherCollector:
                     next_current = now + self.config.current_interval
                 except WeatherError as exc:
                     LOG.warning("Weather current failed: %s", exc)
+                    if self.health is not None:
+                        self.health.weather_error("current", str(exc))
                     self._publish_availability("offline", reason=str(exc))
                     next_current = now + retry_delay
                     current_failed = True
@@ -441,6 +495,8 @@ class WeatherCollector:
                         next_hourly = now + self.config.hourly_interval
                     except WeatherError as exc:
                         LOG.warning("Weather hourly failed: %s", exc)
+                        if self.health is not None:
+                            self.health.weather_error("hourly", str(exc))
                         next_hourly = now + retry_delay
 
                 if now >= next_daily:
@@ -449,6 +505,8 @@ class WeatherCollector:
                         next_daily = now + self.config.daily_interval
                     except WeatherError as exc:
                         LOG.warning("Weather daily failed: %s", exc)
+                        if self.health is not None:
+                            self.health.weather_error("daily", str(exc))
                         next_daily = now + retry_delay
 
             deadline = min(next_current, next_hourly, next_daily)

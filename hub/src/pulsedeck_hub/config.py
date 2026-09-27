@@ -27,6 +27,13 @@ class MQTTConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AdminConfig:
+    enabled: bool = False
+    listen: str = "127.0.0.1"
+    port: int = 8080
+
+
+@dataclass(frozen=True, slots=True)
 class WeatherConfig:
     enabled: bool = False
     provider: str = "openweather-onecall-4"
@@ -46,6 +53,7 @@ class WeatherConfig:
 @dataclass(frozen=True, slots=True)
 class HubConfig:
     mqtt: MQTTConfig
+    admin: AdminConfig
     weather: WeatherConfig
 
 
@@ -72,7 +80,7 @@ def _coordinate(value: object, name: str, minimum: float, maximum: float) -> flo
     return result
 
 
-def _weather_config(raw: object) -> WeatherConfig:
+def weather_config_from_mapping(raw: object) -> WeatherConfig:
     if raw is None:
         return WeatherConfig()
     if not isinstance(raw, dict):
@@ -118,6 +126,22 @@ def _weather_config(raw: object) -> WeatherConfig:
     )
 
 
+def _admin_config(raw: object) -> AdminConfig:
+    if raw is None:
+        return AdminConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("[admin] must be a table")
+    enabled = _bool(raw.get("enabled", False), "admin.enabled")
+    listen = raw.get("listen", "127.0.0.1")
+    if not isinstance(listen, str) or not listen.strip():
+        raise ValueError("admin.listen must be a non-empty string")
+    return AdminConfig(
+        enabled=enabled,
+        listen=listen.strip(),
+        port=_positive_int(raw.get("port", 8080), "admin.port", maximum=65535),
+    )
+
+
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
@@ -153,4 +177,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
     if not isinstance(collectors_raw, dict):
         raise ValueError("[collectors] must be a table")
 
-    return HubConfig(mqtt=mqtt, weather=_weather_config(collectors_raw.get("weather")))
+    return HubConfig(
+        mqtt=mqtt,
+        admin=_admin_config(raw.get("admin")),
+        weather=weather_config_from_mapping(collectors_raw.get("weather")),
+    )

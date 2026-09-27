@@ -28,9 +28,10 @@ deploy_hub.sh
   ├── utilisateur/runtime PulseDeck
   ├── venv Python
   ├── installation pulsedeck-hub
-  ├── configuration
+  ├── configuration système
+  ├── Web Admin + identifiants initiaux
   ├── systemd
-  └── validation MQTT availability
+  └── validation MQTT/Web
   ↓
 résumé final
 ```
@@ -111,8 +112,10 @@ Il :
 - installe les dépendances Python dans ce venv ;
 - crée la configuration initiale `/etc/pulsedeck/pulsedeck.toml` si elle n'existe pas ;
 - conserve une configuration runtime existante ;
+- active PulseDeck Admin sur l’IPv4 LAN détectée, port `8080` ;
+- génère un mot de passe administrateur initial s’il n’existe pas encore ;
 - installe et active `pulsedeck-hub.service` ;
-- vérifie `pulsedeck/v1/system/availability`.
+- vérifie `pulsedeck/v1/system/availability` et `/api/health`.
 
 Layout runtime :
 
@@ -143,24 +146,20 @@ sudo ./scripts/setup_pi.sh
 
 Dans ce cas, les scripts spécialisés du dépôt sont utilisés directement.
 
-## Configuration Weather — OpenWeather One Call 4.0
+## Configuration fonctionnelle après installation
 
-À partir de `patch_0007`, `deploy_hub.sh` propose de configurer le premier collector Weather lorsqu'il n'est pas encore activé.
+À partir de `patch_0008`, les scripts installent le socle et ne demandent plus la clé OpenWeather ni le lieu. La configuration des collectors passe par PulseDeck Admin.
 
-En mode interactif, le script demande la clé OpenWeather avec saisie masquée puis le lieu. Le lieu peut être saisi sous forme de coordonnées `latitude,longitude` ou sous forme de ville ; dans ce dernier cas le Geocoding API OpenWeather est utilisé et un choix est demandé seulement en cas d'ambiguïté.
-
-La clé est stockée hors TOML :
+Après la première installation, `deploy_hub.sh` affiche une fois l’adresse et le mot de passe administrateur initial :
 
 ```text
-/etc/pulsedeck/secrets/openweather_api_key
+http://<IPv4-LAN-du-Pi>:8080
+utilisateur: admin
+mot de passe: généré à l’installation
 ```
 
-La configuration du collector reste dans :
+Une configuration Weather déjà présente est conservée. Sur une nouvelle installation, Weather reste désactivé jusqu’à sa configuration dans l’interface Web.
 
-```text
-/etc/pulsedeck/pulsedeck.toml
-```
+La clé OpenWeather reste séparée du TOML dans `/etc/pulsedeck/secrets/openweather_api_key`. L’API Web ne la renvoie jamais en clair.
 
-Le déploiement valide ensuite l'accès à One Call 4.0 avant de redémarrer `pulsedeck-hub`. Avec `--non-interactive`, aucune question n'est posée ; Weather reste désactivé tant qu'une configuration complète n'existe pas déjà.
-
-Voir `docs/pi/WEATHER.md` pour le contrat détaillé.
+Voir `docs/pi/ADMIN.md` et `docs/pi/WEATHER.md`.

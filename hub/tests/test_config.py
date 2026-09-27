@@ -41,3 +41,15 @@ def test_weather_interval_below_provider_refresh_is_rejected(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="current_interval"):
         load_config(path)
+
+
+def test_admin_configuration_loads(tmp_path: Path) -> None:
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """[admin]\nenabled = true\nlisten = \"192.168.0.250\"\nport = 8080\n\n[collectors.weather]\nenabled = false\n""",
+        )
+    )
+    assert cfg.admin.enabled is True
+    assert cfg.admin.listen == "192.168.0.250"
+    assert cfg.admin.port == 8080
