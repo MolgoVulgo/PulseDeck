@@ -1,0 +1,51 @@
+# Baseline publiée local -> Drive
+# Les règles projet spécifiques sont ajoutées avant le + /** final.
+
+# VCS / outils locaux
+- /.git/**
+- /.agents/**
+- /.codex/**
+- /.vscode/**
+- /.idea/**
+
+# Secrets / configuration locale sensible
+- /.env
+- /.env.*
+- **/*.pem
+- **/*.key
+- **/*credentials*
+- **/*secret*
+- /rclone.conf
+
+# Dépendances / caches / builds génériques
+- **/__pycache__/**
+- **/.pytest_cache/**
+- **/.mypy_cache/**
+- **/.ruff_cache/**
+- **/.venv/**
+- **/node_modules/**
+- **/.next/**
+- **/dist/**
+- **/build/**
+- **/coverage/**
+- **/.cache/**
+
+# Web-only : hors baseline locale/index
+- /web/**
+
+# Transport : jamais baseline/index
+- /bootstrap/**
+- /patch/**
+- /diagnostics/**
+- /REPO_INDEX.json
+
+# Temporaires
+- **/*.tmp
+- **/*.swp
+- **/*~
+- /tmp/**
+
+# --- PROJET : exclusions confirmées uniquement ---
+# Aucune exclusion projet supplémentaire confirmée.
+
++ /**
