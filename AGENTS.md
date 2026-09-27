@@ -75,6 +75,8 @@ Protégés / publication spéciale :
 - jamais de sync globale Drive -> dépôt ;
 - récupération d'un patch ciblé uniquement vers un emplacement temporaire.
 
+Quand un patch est annoncé sans chemin local, lire `REMOTE` et `PATCH_DIR` depuis `sync-drive.conf`, considérer `${REMOTE}/${PATCH_DIR}/` comme emplacement distant des patchs, lister uniquement ce répertoire distant, puis récupérer uniquement le ZIP ciblé avec `rclone` vers un emplacement temporaire sous `/tmp`. Ne jamais chercher, créer ou exiger un dossier `patch/` local.
+
 ## Validations
 Aucune commande de build, test ou lint n'est documentée au moment de l'initialisation : ne pas en inventer.
 

@@ -15,12 +15,15 @@ project:
   drive_path: "PulseDeck"
 
 architecture:
-  entrypoints: []
+  entrypoints:
+    - "hub/src/pulsedeck_hub/main.py"
+    - "scripts/setup_pi.sh"
   modules:
     - "Raspberry Pi : collecte, normalisation, agrégation, cache et publication des données"
     - "MQTT : bus principal entre le backend et l'ESP32"
     - "ESP32-S3 : Wi-Fi, MQTT, NTP local, cache local, état des données et interface LVGL"
-  documentation_dirs: []
+  documentation_dirs:
+    - "docs/pi"
 
 zones:
   source:
@@ -31,6 +34,11 @@ zones:
     - "sync-drive.sh"
     - "sync-drive.conf"
     - "sync-drive.filter"
+    - "hub/"
+    - "config/"
+    - "docs/pi/"
+    - "scripts/"
+    - "systemd/"
   generated:
     - "REPO_INDEX.json"
   runtime: []
@@ -44,8 +52,10 @@ zones:
 
 knowledge:
   observed:
-    - "CREATE initialisé à partir de la description canonique fournie par l'utilisateur ; aucun code applicatif local n'a été inspecté."
+    - "CREATE initialisé à partir de la description canonique fournie par l'utilisateur ; aucun code applicatif local n'avait été inspecté lors de l'initialisation."
     - "Le dossier Drive cible était vide avant la création des zones de transport."
+    - "Plateforme Pi observée le 2026-09-27 : Raspberry Pi 3 Model B Plus Rev 1.3, Arch Linux ARM armv7l, kernel 6.18.33-4-rpi, Python 3.14.5, 917 MiB de RAM, environ 18 GiB libres sur la racine."
+    - "IPv6 a été désactivé sur bluebox par choix utilisateur."
   documented:
     - "Le Raspberry Pi collecte, normalise et agrège les données ; l'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur."
     - "MQTT est le bus de données principal."
@@ -63,17 +73,21 @@ knowledge:
     - "Destination Drive physique : dossier ID 1EgquPKEO5GjlMZ6ZQccmnFlgqY6THjbr."
     - "Remote rclone : gdrive."
     - "Chemin logique rclone : PulseDeck."
+    - "OS Raspberry Pi V1 : Arch Linux ARM rolling sur armv7l."
+    - "Langage du hub : Python 3 ; runtime observé Python 3.14.5."
+    - "Broker MQTT V1 : Mosquitto natif, TCP 1883, LAN IPv4 uniquement, jamais exposé directement à Internet."
+    - "MQTT V1 sans authentification, sans ACL et sans TLS dans le périmètre LAN domestique actuel."
+    - "Namespace MQTT V1 : pulsedeck/v1/."
+    - "QoS MQTT V1 : QoS 1 pour états/snapshots, QoS 0 pour flux rapides éventuels, QoS 2 non utilisé."
+    - "Les topics d'état et de disponibilité V1 sont retained ; les flux rapides éventuels ne le sont pas."
+    - "Configuration applicative prévue en TOML ; les secrets éventuels restent séparés des fichiers versionnés."
+    - "Supervision : systemd ; logs : journald."
+    - "Interface d'administration prévue dans le service hub avec FastAPI et une interface HTML légère."
   unresolved:
-    - "OS Raspberry Pi."
-    - "Langage du hub."
-    - "Authentification MQTT."
-    - "TLS MQTT ou LAN privé."
-    - "Schéma exact des payloads."
-    - "QoS MQTT."
-    - "Liste exacte des topics retained."
+    - "Schéma exact des payloads applicatifs."
     - "Politique exacte de cache."
     - "Cadence des collectors."
-    - "Format et organisation de la configuration."
+    - "Emplacement runtime final du hub et utilisateur systemd."
     - "Version ESP-IDF."
     - "Version exacte de LVGL 9."
     - "Driver ST7701."
@@ -99,7 +113,9 @@ contracts:
     - "L'UI est indépendante de la fréquence réelle de collecte."
   security:
     - "Les clés API, HTTPS/TLS vers les services Internet et protocoles propriétaires sont centralisés côté Pi."
-    - "L'authentification MQTT et le choix TLS MQTT ou LAN privé restent unresolved."
+    - "Le broker MQTT V1 reste limité au LAN IPv4 et ne doit jamais être exposé directement à Internet."
+    - "Dans le périmètre domestique LAN actuel, MQTT V1 fonctionne sans authentification, sans ACL et sans TLS."
+    - "Si le périmètre réseau change ou si MQTT porte des commandes sensibles, le modèle de sécurité MQTT doit être réévalué."
   compatibility:
     - "Matériel écran ciblé : ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 est la cible UI ; sa version exacte reste unresolved."
@@ -114,7 +130,10 @@ contracts:
     - "Ne pas complexifier la V1 avec cluster MQTT, Kubernetes, base de données lourde, nombreux microservices, cloud obligatoire, historique long terme ou système de plugins dynamique sur ESP32 sans besoin concret."
 
 validation:
-  commands: []
+  commands:
+    - command: "./scripts/setup_pi.sh --check"
+      scope: "préflight Raspberry Pi, réseau et prérequis PulseDeck"
+      mode: "external_or_live"
   forbidden_automatic:
     - "installation ou mise à jour automatique de dépendances"
     - "synchronisation globale Drive -> dépôt local"

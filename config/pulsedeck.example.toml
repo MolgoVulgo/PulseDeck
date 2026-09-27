@@ -1,0 +1,28 @@
+# PulseDeck example configuration.
+# Copying this file to a runtime location is intentionally not automated yet.
+# Never place API keys, passwords or tokens in this versioned example.
+
+[mqtt]
+host = "127.0.0.1"
+port = 1883
+namespace = "pulsedeck/v1"
+
+[admin]
+enabled = true
+listen = "0.0.0.0"
+port = 8080
+
+[collectors.weather]
+enabled = false
+
+[collectors.news]
+enabled = false
+
+[collectors.pc_gamer]
+enabled = false
+
+[collectors.mini_server]
+enabled = false
+
+[collectors.printer]
+enabled = false

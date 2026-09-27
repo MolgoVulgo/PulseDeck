@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pulsedeck-hub"
+version = "0.0.1"
+description = "PulseDeck Raspberry Pi data hub"
+requires-python = ">=3.14"
+dependencies = []
+
+[project.scripts]
+pulsedeck-hub = "pulsedeck_hub.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

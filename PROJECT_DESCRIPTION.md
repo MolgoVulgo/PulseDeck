@@ -83,46 +83,62 @@ Principe fondamental : le Pi collecte et normalise les données ; l'ESP32 affich
 
 Le Pi devient le backend global du nouveau système.
 
-Socle initial recommandé :
+Plateforme de référence observée au lancement :
+- Raspberry Pi 3 Model B Plus Rev 1.3 ;
+- Arch Linux ARM rolling ;
+- architecture `armv7l` ;
+- kernel observé `6.18.33-4-rpi` ;
+- Python observé `3.14.5` ;
+- environ 1 Gio de RAM ;
+- stockage principal sur microSD ;
+- IPv6 désactivé sur `bluebox`.
+
+Socle retenu pour la V1 :
 
 ```text
-Mosquitto
+Mosquitto natif
 +
-un seul service applicatif "hub"
+un seul service applicatif Python "pulsedeck-hub"
++
+systemd / journald
 ```
 
-Éviter les microservices au départ.
+L'interface d'administration du hub est prévue dans le même service applicatif, avec FastAPI et une interface HTML légère. La configuration applicative est prévue en TOML. Les secrets éventuels des services distants restent séparés de la configuration versionnée.
 
-Structure possible :
+Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
+
+Structure initiale :
 
 ```text
 hub/
-├── collectors/
-│   ├── weather.py
-│   ├── news.py
-│   ├── printer.py
-│   ├── pc.py
-│   └── network.py
-├── models/
-├── mqtt/
-├── cache/
-├── config/
-└── main.py
+├── pyproject.toml
+└── src/pulsedeck_hub/
+    ├── collectors/
+    ├── mqtt/
+    ├── health/
+    ├── admin/
+    ├── config.py
+    ├── logging_setup.py
+    └── main.py
+
+config/
+docs/pi/
+scripts/
+systemd/
 ```
 
 Responsabilités :
 - appels aux API Internet ;
-- HTTPS/TLS ;
+- HTTPS/TLS vers les services distants ;
 - gestion des clés API ;
 - connexions persistantes ;
 - protocoles propriétaires ;
-- collecte Printer ;
-- collecte PC ;
-- collecte réseau ;
+- collecte Weather, News, Printer, PC gamer et mini serveur ;
 - normalisation des données ;
 - cache ;
 - publication MQTT ;
-- disponibilité des sources.
+- disponibilité des sources ;
+- API et interface Web d'administration légère.
 
 ---
 
@@ -159,30 +175,39 @@ Une perte du Pi ou de MQTT ne doit pas rendre l'interface inutilisable.
 
 ## 6. Contrat MQTT
 
-Prévoir un namespace versionné dès l'origine.
+Le broker V1 est Mosquitto, accessible uniquement sur le LAN IPv4, port TCP `1883`. Il n'est pas exposé à Internet. Pour ce périmètre domestique, la V1 n'active ni authentification MQTT, ni ACL, ni TLS. Ces choix devront être réévalués si le périmètre réseau change ou si MQTT porte ultérieurement des commandes sensibles.
 
-Exemple :
+Le namespace versionné retenu est `pulsedeck/v1/...`.
+
+Topics initiaux :
 
 ```text
-hub/v1/system/availability
+pulsedeck/v1/system/availability
 
-hub/v1/weather/current
-hub/v1/weather/hourly
-hub/v1/weather/daily
+pulsedeck/v1/weather/availability
+pulsedeck/v1/weather/current
+pulsedeck/v1/weather/hourly
+pulsedeck/v1/weather/daily
 
-hub/v1/news/latest
+pulsedeck/v1/news/availability
+pulsedeck/v1/news/latest
 
-hub/v1/printer/availability
-hub/v1/printer/status
-hub/v1/printer/job
-hub/v1/printer/thumbnail
+pulsedeck/v1/printer/availability
+pulsedeck/v1/printer/status
+pulsedeck/v1/printer/job
+pulsedeck/v1/printer/thumbnail
 
-hub/v1/pc/main/availability
-hub/v1/pc/main/dashboard
+pulsedeck/v1/pc/gamer/availability
+pulsedeck/v1/pc/gamer/dashboard
 
-hub/v1/network/status
-hub/v1/network/services
+pulsedeck/v1/server/mini/availability
+pulsedeck/v1/server/mini/dashboard
 ```
+
+Politique QoS V1 :
+- QoS 1 pour les états, disponibilités et snapshots applicatifs ;
+- QoS 0 pour d'éventuels flux rapides et éphémères ;
+- QoS 2 non utilisé.
 
 Les payloads doivent être :
 - stables ;
@@ -191,6 +216,8 @@ Les payloads doivent être :
 - déjà normalisés ;
 - adaptés à l'affichage ;
 - accompagnés d'un timestamp.
+
+Le schéma JSON exact des payloads reste à définir application par application avant implémentation.
 
 Exemple :
 
@@ -216,12 +243,15 @@ Utiliser les fonctions MQTT pour accélérer les reprises :
 - reconnexion automatique ;
 - resynchronisation immédiate après reboot.
 
-Topics possibles :
+Topics de disponibilité retained :
 
 ```text
-hub/v1/system/availability
-hub/v1/pc/main/availability
-hub/v1/printer/availability
+pulsedeck/v1/system/availability
+pulsedeck/v1/weather/availability
+pulsedeck/v1/news/availability
+pulsedeck/v1/pc/gamer/availability
+pulsedeck/v1/server/mini/availability
+pulsedeck/v1/printer/availability
 ```
 
 L'ESP32 conserve en plus une logique locale basée sur l'âge des données :
@@ -460,17 +490,10 @@ Ajouter de nouvelles apps seulement après stabilisation du socle MQTT/UI.
 ## 13. Décisions à prendre au lancement
 
 À définir avant le développement complet :
-- nom du nouveau projet ;
-- OS Raspberry Pi ;
-- langage du hub ;
-- authentification MQTT ;
-- TLS MQTT ou LAN privé ;
-- schéma exact des payloads ;
-- QoS ;
-- topics retained ;
+- schéma exact des payloads applicatifs ;
 - politique de cache ;
 - cadence des collectors ;
-- configuration ;
+- emplacement runtime final du hub et utilisateur systemd ;
 - version ESP-IDF ;
 - version LVGL 9 ;
 - driver ST7701 ;

@@ -10,6 +10,8 @@ Priorité : utilisateur > `AGENTS.md`/règles locales > présent document > docu
 ## Base et transport
 Dépôt local = source de vérité locale/cible. ZIP ciblé = source du correctif. Drive = transport. Jamais de sync Drive -> dépôt. Récupérer seulement le patch demandé sous `/tmp`. Git reste indépendant.
 
+Si l'utilisateur annonce un patch disponible sans fournir de chemin local, lire `REMOTE` et `PATCH_DIR` depuis `sync-drive.conf`, utiliser `${REMOTE}/${PATCH_DIR}/` comme emplacement distant des patchs, lister uniquement ce répertoire distant pour identifier le patch demandé, puis récupérer uniquement le ZIP ciblé avec `rclone` vers un emplacement temporaire sous `/tmp`. Ne jamais chercher, créer ou exiger un dossier `patch/` local. Une fois le ZIP récupéré sous `/tmp`, poursuivre normalement le présent protocole.
+
 ## Préflight
 Identifier la racine ; inspecter l'archive ; lire `PATCH_MANIFEST.md`, `DELETE_FILES.txt`, `MOVE_FILES.txt` ; relever Git si disponible ; distinguer les changements préexistants. Refuser chemins absolus, `..`, sorties de racine, symlinks/liens dangereux, entrées spéciales, doublons conflictuels, ambiguïtés de casse, secrets et artefacts interdits.
 
