@@ -18,6 +18,7 @@ architecture:
   entrypoints:
     - "hub/src/pulsedeck_hub/main.py"
     - "scripts/setup_pi.sh"
+    - "scripts/deploy_hub.sh"
   modules:
     - "Raspberry Pi : collecte, normalisation, agrégation, cache et publication des données"
     - "MQTT : bus principal entre le backend et l'ESP32"
@@ -56,6 +57,7 @@ knowledge:
     - "Le dossier Drive cible était vide avant la création des zones de transport."
     - "Plateforme Pi observée le 2026-09-27 : Raspberry Pi 3 Model B Plus Rev 1.3, Arch Linux ARM armv7l, kernel 6.18.33-4-rpi, Python 3.14.5, 917 MiB de RAM, environ 18 GiB libres sur la racine."
     - "IPv6 a été désactivé sur bluebox par choix utilisateur."
+    - "Bootstrap MQTT exécuté sur bluebox le 2026-09-27 : Mosquitto 2.1.2-2 installé, listener unique 192.168.0.250:1883, QoS 1 retained et restauration après redémarrage validés, zéro échec ; absence de swap conservée comme warning accepté."
   documented:
     - "Le Raspberry Pi collecte, normalise et agrège les données ; l'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur."
     - "MQTT est le bus de données principal."
@@ -83,11 +85,16 @@ knowledge:
     - "Configuration applicative prévue en TOML ; les secrets éventuels restent séparés des fichiers versionnés."
     - "Supervision : systemd ; logs : journald."
     - "Interface d'administration prévue dans le service hub avec FastAPI et une interface HTML légère."
+    - "Runtime hub V1 : /opt/pulsedeck pour application/venv, /etc/pulsedeck/pulsedeck.toml pour configuration, /var/lib/pulsedeck pour état."
+    - "Utilisateur systemd du hub : pulsedeck."
+    - "Dépendance MQTT Python du hub : paho-mqtt >=2.1,<3, MQTT 3.1.1."
+    - "Déploiement hub supporté par scripts/deploy_hub.sh autonome, sans clone du dépôt sur le Pi."
+    - "Payload pulsedeck/v1/system/availability schema 1 défini et implémenté dans patch_0003."
+    - "Socle MQTT live validé sur bluebox le 2026-09-27 : service Mosquitto actif/activé au boot, listener LAN IPv4 unique, persistence retained opérationnelle."
   unresolved:
     - "Schéma exact des payloads applicatifs."
     - "Politique exacte de cache."
     - "Cadence des collectors."
-    - "Emplacement runtime final du hub et utilisateur systemd."
     - "Version ESP-IDF."
     - "Version exacte de LVGL 9."
     - "Driver ST7701."
@@ -133,6 +140,9 @@ validation:
   commands:
     - command: "./scripts/setup_pi.sh --check"
       scope: "préflight Raspberry Pi, réseau et prérequis PulseDeck"
+      mode: "external_or_live"
+    - command: "./scripts/deploy_hub.sh --check"
+      scope: "préflight déploiement/runtime du hub PulseDeck"
       mode: "external_or_live"
   forbidden_automatic:
     - "installation ou mise à jour automatique de dépendances"

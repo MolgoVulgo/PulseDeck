@@ -1,1 +1,1 @@
-"""MQTT integration package."""
+"""MQTT transport for PulseDeck."""

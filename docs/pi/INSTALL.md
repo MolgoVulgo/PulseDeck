@@ -62,3 +62,53 @@ Ce mode n'installe rien, ne modifie aucun fichier et ne redémarre aucun service
 ## Principe de déploiement
 
 Le bootstrap prépare l'hôte. Le déploiement futur du service applicatif `pulsedeck-hub` sera traité séparément ; il ne faut pas considérer le dépôt de développement comme un prérequis permanent du Raspberry Pi.
+
+## Validation réelle sur `bluebox`
+
+Le 27 septembre 2026, le bootstrap a été exécuté sur la cible réelle `bluebox` :
+
+- Raspberry Pi 3 Model B Plus Rev 1.3 / Arch Linux ARM `armv7l` ;
+- kernel `6.18.33-4-rpi` ;
+- Python `3.14.5` ;
+- IPv4 LAN `192.168.0.250/24` sur `enu1u1u1` ;
+- IPv6 globale absente ;
+- Mosquitto `2.1.2-2` installé ;
+- listener unique observé sur `192.168.0.250:1883` ;
+- QoS 1 retained validé ;
+- retained restauré après redémarrage du broker ;
+- service systemd activé et démarré ;
+- zéro échec ; seul avertissement restant : absence de swap, acceptée pour la V1.
+
+Le bootstrap est non interactif pour l'installation des paquets : il utilise explicitement `pacman --noconfirm -S --needed` et n'exécute jamais `pacman -Sy`/`-Syu`.
+
+## Déploiement autonome du hub — patch 0003
+
+Le service applicatif n'impose pas non plus de clone Git sur le Pi. Copier uniquement :
+
+```text
+deploy_hub.sh
+```
+
+Puis :
+
+```bash
+chmod +x deploy_hub.sh
+./deploy_hub.sh --check
+sudo ./deploy_hub.sh
+```
+
+Le déployeur embarque le paquet Python du hub, la configuration initiale et l'unité systemd. Il crée un venv dédié et installe uniquement les dépendances Python du hub dans ce venv.
+
+Layout runtime retenu :
+
+```text
+/opt/pulsedeck/hub            sources applicatives gérées
+/opt/pulsedeck/venv           environnement Python
+/etc/pulsedeck/pulsedeck.toml configuration runtime
+/var/lib/pulsedeck            état runtime
+/etc/systemd/system/pulsedeck-hub.service
+```
+
+Utilisateur de service : `pulsedeck`.
+
+La configuration runtime existante n'est pas écrasée lors d'un redéploiement. Le premier déploiement y inscrit l'IPv4 LAN détectée comme broker MQTT.

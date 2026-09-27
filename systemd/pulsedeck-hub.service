@@ -1,0 +1,24 @@
+# Managed by PulseDeck deploy_hub.sh
+[Unit]
+Description=PulseDeck Hub
+After=network-online.target mosquitto.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=pulsedeck
+Group=pulsedeck
+WorkingDirectory=/var/lib/pulsedeck
+ExecStart=/opt/pulsedeck/venv/bin/pulsedeck-hub --config /etc/pulsedeck/pulsedeck.toml
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pulsedeck
+
+[Install]
+WantedBy=multi-user.target

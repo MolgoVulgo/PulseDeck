@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck Raspberry Pi standalone bootstrap — patch_0002-1
+# PulseDeck Raspberry Pi standalone bootstrap — patch_0002-2
 # Self-contained: no PulseDeck repository checkout is required.
 
 set -u
@@ -194,8 +194,8 @@ install_mosquitto() {
         return 1
     fi
 
-    info "Installation de Mosquitto via pacman -S --needed (sans synchronisation ni upgrade global)"
-    if pacman -S --needed --noconfirm mosquitto; then
+    info "Installation de Mosquitto via pacman --noconfirm -S --needed (sans synchronisation ni upgrade global)"
+    if pacman --noconfirm -S --needed mosquitto; then
         ok "Mosquitto installé"
     else
         fail "Installation Mosquitto échouée; aucune tentative pacman -Sy/-Syu n'est effectuée"
@@ -486,7 +486,7 @@ print_summary() {
     printf '========================================\n'
 }
 
-info "PulseDeck standalone bootstrap patch_0002-1"
+info "PulseDeck standalone bootstrap patch_0002-2"
 (( CHECK_ONLY )) && info "Mode --check: aucune modification système"
 
 check_os

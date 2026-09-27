@@ -1,23 +1,29 @@
-"""PulseDeck MQTT topic constants fixed by the V1 namespace contract."""
+"""MQTT topic helpers for the PulseDeck V1 namespace."""
 
-ROOT = "pulsedeck/v1"
-SYSTEM_AVAILABILITY = f"{ROOT}/system/availability"
+from __future__ import annotations
 
-WEATHER_AVAILABILITY = f"{ROOT}/weather/availability"
-WEATHER_CURRENT = f"{ROOT}/weather/current"
-WEATHER_HOURLY = f"{ROOT}/weather/hourly"
-WEATHER_DAILY = f"{ROOT}/weather/daily"
 
-NEWS_AVAILABILITY = f"{ROOT}/news/availability"
-NEWS_LATEST = f"{ROOT}/news/latest"
+def topic(namespace: str, suffix: str) -> str:
+    return f"{namespace.strip('/')}/{suffix.lstrip('/')}"
 
-PC_GAMER_AVAILABILITY = f"{ROOT}/pc/gamer/availability"
-PC_GAMER_DASHBOARD = f"{ROOT}/pc/gamer/dashboard"
 
-MINI_SERVER_AVAILABILITY = f"{ROOT}/server/mini/availability"
-MINI_SERVER_DASHBOARD = f"{ROOT}/server/mini/dashboard"
+def system_availability(namespace: str = "pulsedeck/v1") -> str:
+    return topic(namespace, "system/availability")
 
-PRINTER_AVAILABILITY = f"{ROOT}/printer/availability"
-PRINTER_STATUS = f"{ROOT}/printer/status"
-PRINTER_JOB = f"{ROOT}/printer/job"
-PRINTER_THUMBNAIL = f"{ROOT}/printer/thumbnail"
+
+TOPIC_SUFFIXES = {
+    "weather_availability": "weather/availability",
+    "weather_current": "weather/current",
+    "weather_hourly": "weather/hourly",
+    "weather_daily": "weather/daily",
+    "news_availability": "news/availability",
+    "news_latest": "news/latest",
+    "pc_gamer_availability": "pc/gamer/availability",
+    "pc_gamer_dashboard": "pc/gamer/dashboard",
+    "server_mini_availability": "server/mini/availability",
+    "server_mini_dashboard": "server/mini/dashboard",
+    "printer_availability": "printer/availability",
+    "printer_status": "printer/status",
+    "printer_job": "printer/job",
+    "printer_thumbnail": "printer/thumbnail",
+}

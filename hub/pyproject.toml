@@ -4,10 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pulsedeck-hub"
-version = "0.0.1"
+version = "0.1.0"
 description = "PulseDeck Raspberry Pi data hub"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "paho-mqtt>=2.1,<3",
+]
 
 [project.scripts]
 pulsedeck-hub = "pulsedeck_hub.main:main"

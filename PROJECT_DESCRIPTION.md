@@ -105,6 +105,16 @@ systemd / journald
 
 L'interface d'administration du hub est prévue dans le même service applicatif, avec FastAPI et une interface HTML légère. La configuration applicative est prévue en TOML. Les secrets éventuels des services distants restent séparés de la configuration versionnée.
 
+Runtime hub retenu à partir de `patch_0003` :
+- utilisateur système `pulsedeck` ;
+- application sous `/opt/pulsedeck` ;
+- configuration sous `/etc/pulsedeck/pulsedeck.toml` ;
+- état runtime sous `/var/lib/pulsedeck` ;
+- environnement Python dédié sous `/opt/pulsedeck/venv` ;
+- déploiement possible par un script autonome sans clone du dépôt.
+
+Le premier service actif du hub maintient `pulsedeck/v1/system/availability`, avec retained QoS 1, Last Will et reconnexion automatique MQTT.
+
 Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
 
 Structure initiale :

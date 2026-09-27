@@ -1,14 +1,18 @@
 # PulseDeck example configuration.
-# Copying this file to a runtime location is intentionally not automated yet.
+# deploy_hub.sh writes the detected LAN IPv4 into the runtime copy.
 # Never place API keys, passwords or tokens in this versioned example.
 
 [mqtt]
-host = "127.0.0.1"
+host = "192.168.0.250" # example only; rendered from the target host at deployment
 port = 1883
 namespace = "pulsedeck/v1"
+client_id = "pulsedeck-hub"
+keepalive = 30
+reconnect_min_delay = 1
+reconnect_max_delay = 30
 
 [admin]
-enabled = true
+enabled = false
 listen = "0.0.0.0"
 port = 8080
 
