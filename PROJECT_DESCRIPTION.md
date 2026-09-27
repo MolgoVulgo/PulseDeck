@@ -113,9 +113,11 @@ Runtime hub retenu à partir de `patch_0003` :
 - environnement Python dédié sous `/opt/pulsedeck/venv` ;
 - déploiement possible par un script autonome sans clone du dépôt.
 
-Le premier service actif du hub maintient `pulsedeck/v1/system/availability`, avec retained QoS 1, Last Will et reconnexion automatique MQTT.
+Le premier service actif du hub maintient `pulsedeck/v1/system/availability`, avec retained QoS 1, Last Will et reconnexion automatique MQTT. Ce runtime a été déployé et validé sur `bluebox` le 27 septembre 2026 : service systemd actif et payload retained `schema=1/state=online` observé.
 
 Le déploiement Raspberry Pi est piloté par trois scripts : `setup_pi.sh` est l'orchestrateur complet recommandé, `bootstrap_pi.sh` gère le socle système/Mosquitto et `deploy_hub.sh` gère le service applicatif. `setup_pi.sh` fonctionne depuis un clone ou téléchargé seul ; lorsque les scripts spécialisés ne sont pas présents localement, il les récupère depuis GitHub. Les étapes déterministes sont automatiques et une question n'est posée que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire.
+
+À partir de `patch_0007`, le premier collector actif est Weather avec OpenWeather One Call API 4.0. Le hub utilise les endpoints `current`, `timeline/1h` et `timeline/1day`, en unités métriques et en français. Les cadences V1 sont 10 minutes pour `current`, 30 minutes pour les prévisions horaires et 3 heures pour les prévisions quotidiennes. La clé OpenWeather est stockée séparément dans `/etc/pulsedeck/secrets/openweather_api_key` et n'est jamais placée dans la configuration versionnée. `deploy_hub.sh` peut demander la clé et le lieu lors du premier déploiement, résoudre une ville via le Geocoding API OpenWeather puis valider One Call 4.0 avant redémarrage du hub.
 
 Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
 
@@ -229,7 +231,7 @@ Les payloads doivent être :
 - adaptés à l'affichage ;
 - accompagnés d'un timestamp.
 
-Le schéma JSON exact des payloads reste à définir application par application avant implémentation.
+Le schéma JSON exact reste à définir application par application avant implémentation, à l'exception de Weather dont le schéma 1 est fixé à partir de `patch_0007` pour `availability`, `current`, `hourly` et `daily`.
 
 Exemple :
 
@@ -353,6 +355,8 @@ Vue synthétique :
 
 ### Weather
 
+Fournisseur V1 : OpenWeather One Call API 4.0. Le Raspberry Pi publie des snapshots normalisés sur `weather/current`, `weather/hourly` et `weather/daily` ainsi qu'un état séparé sur `weather/availability`. Les erreurs fournisseur ne suppriment pas les derniers retained valides.
+
 Plusieurs pages possibles :
 - météo actuelle ;
 - prévisions horaires ;
@@ -460,13 +464,11 @@ ESP32 :
 
 ### Phase 3 — Première application
 
-Commencer idéalement par Weather :
-- collector Pi ;
-- contrat MQTT ;
+Weather sert d'application de référence. `patch_0007` implémente le collector Pi et le contrat MQTT Weather V1 avec OpenWeather One Call 4.0. Restent à réaliser côté ESP32 :
 - cache ESP ;
 - premier écran LVGL 9 ;
 - première animation ;
-- validation du modèle d'application.
+- validation du modèle d'application de bout en bout.
 
 ### Phase 4 — Printer
 
@@ -502,10 +504,9 @@ Ajouter de nouvelles apps seulement après stabilisation du socle MQTT/UI.
 ## 13. Décisions à prendre au lancement
 
 À définir avant le développement complet :
-- schéma exact des payloads applicatifs ;
+- schéma exact des payloads applicatifs hors Weather ;
 - politique de cache ;
-- cadence des collectors ;
-- emplacement runtime final du hub et utilisateur systemd ;
+- cadence des collectors hors Weather ;
 - version ESP-IDF ;
 - version LVGL 9 ;
 - driver ST7701 ;

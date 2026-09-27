@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0006
+# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0007
 # Works from a repository checkout or as a standalone script downloaded from GitHub.
 
 set -u
@@ -244,7 +244,9 @@ if (( BOOTSTRAP_ONLY == 0 )); then
     else
         if resolve_script deploy_hub.sh; then
             HUB_SCRIPT="$RESOLVED_SCRIPT"
-            run_component "Déploiement pulsedeck-hub" "$HUB_SCRIPT" || true
+            hub_args=()
+            (( NON_INTERACTIVE )) && hub_args+=(--non-interactive)
+            run_component "Déploiement pulsedeck-hub" "$HUB_SCRIPT" "${hub_args[@]}" || true
         fi
     fi
 fi

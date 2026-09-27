@@ -57,7 +57,9 @@ knowledge:
     - "Le dossier Drive cible était vide avant la création des zones de transport."
     - "Plateforme Pi observée le 2026-09-27 : Raspberry Pi 3 Model B Plus Rev 1.3, Arch Linux ARM armv7l, kernel 6.18.33-4-rpi, Python 3.14.5, 917 MiB de RAM, environ 18 GiB libres sur la racine."
     - "IPv6 a été désactivé sur bluebox par choix utilisateur."
+    - "Lors du déploiement complet ultérieur du 2026-09-27, le bootstrap a de nouveau observé une IPv6 globale sur bluebox ; le listener Mosquitto est resté limité à 192.168.0.250:1883 en IPv4."
     - "Bootstrap MQTT exécuté sur bluebox le 2026-09-27 : Mosquitto 2.1.2-2 installé, listener unique 192.168.0.250:1883, QoS 1 retained et restauration après redémarrage validés, zéro échec ; absence de swap conservée comme warning accepté."
+    - "Hub applicatif déployé sur bluebox le 2026-09-27 : venv créé, paho-mqtt 2.1.0 et pulsedeck-hub 0.1.0 installés, service systemd actif/activé, pulsedeck/v1/system/availability retained observé avec schema=1 et state=online."
   documented:
     - "Le Raspberry Pi collecte, normalise et agrège les données ; l'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur."
     - "MQTT est le bus de données principal."
@@ -95,10 +97,15 @@ knowledge:
     - "setup_pi.sh peut fonctionner sans clone du dépôt : il récupère les scripts spécialisés depuis GitHub lorsqu'ils ne sont pas disponibles localement."
     - "Les scripts de déploiement automatisent les opérations déterministes et ne demandent une saisie que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire."
     - "Le mode --non-interactive interdit toute question et transforme une décision manuelle indispensable en échec explicite."
+    - "Weather V1 utilise OpenWeather One Call API 4.0 avec les endpoints current, timeline/1h et timeline/1day."
+    - "Weather V1 publie retained/QoS 1 sur weather/availability, weather/current, weather/hourly et weather/daily avec schema 1."
+    - "Cadences Weather V1 : current 600 s, hourly 1800 s, daily 10800 s ; horizon hourly 48 h et daily 10 jours."
+    - "La clé OpenWeather runtime est séparée du TOML et stockée par défaut dans /etc/pulsedeck/secrets/openweather_api_key avec accès root:pulsedeck."
+    - "deploy_hub.sh configure Weather de façon interactive lorsqu'il manque la clé ou les coordonnées et peut résoudre un nom de lieu via le Geocoding API OpenWeather."
   unresolved:
-    - "Schéma exact des payloads applicatifs."
+    - "Schémas exacts des payloads applicatifs hors Weather."
     - "Politique exacte de cache."
-    - "Cadence des collectors."
+    - "Cadences des collectors hors Weather."
     - "Version ESP-IDF."
     - "Version exacte de LVGL 9."
     - "Driver ST7701."
@@ -113,6 +120,11 @@ contracts:
     - "MQTT est le bus principal entre le Pi et l'ESP32."
     - "Une nouvelle application ne recrée pas sa propre pile réseau distante et doit pouvoir être ajoutée sans modifier les autres applications."
     - "Les gros traitements restent côté Pi lorsqu'ils y sont plus adaptés."
+  weather:
+    - "Provider V1 : OpenWeather One Call API 4.0."
+    - "Le collector utilise current, timeline/1h et timeline/1day ; les timelines 1min et 15min restent hors patch_0007."
+    - "Les snapshots Weather restent retained lors d'une erreur fournisseur ; weather/availability porte l'état de la source."
+    - "Les unités MQTT sont normalisées explicitement en Celsius, hPa, pourcentage, m/s et millimètres selon les champs."
   persistence:
     - "L'ESP32 conserve localement les dernières données valides afin de rester utilisable lorsque le Pi ou MQTT est indisponible."
     - "La politique détaillée de cache reste unresolved."
@@ -127,6 +139,7 @@ contracts:
     - "Le broker MQTT V1 reste limité au LAN IPv4 et ne doit jamais être exposé directement à Internet."
     - "Dans le périmètre domestique LAN actuel, MQTT V1 fonctionne sans authentification, sans ACL et sans TLS."
     - "Si le périmètre réseau change ou si MQTT porte des commandes sensibles, le modèle de sécurité MQTT doit être réévalué."
+    - "La clé OpenWeather n'est jamais versionnée et reste lisible uniquement par root et le groupe de service pulsedeck dans le chemin runtime prévu."
   compatibility:
     - "Matériel écran ciblé : ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 est la cible UI ; sa version exacte reste unresolved."
@@ -173,7 +186,8 @@ diagnostics:
 
 security:
   secret_patterns: []
-  sensitive_runtime_files: []
+  sensitive_runtime_files:
+    - "/etc/pulsedeck/secrets/openweather_api_key"
 ```
 
 ## Statut

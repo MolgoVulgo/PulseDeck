@@ -96,6 +96,23 @@ class HubMQTTClient:
         )
         self.client.loop_start()
 
+
+    def publish_retained(self, suffix: str, payload: str, *, qos: int = 1) -> bool:
+        """Publish a retained application payload below the configured namespace."""
+        if not self.connected.is_set():
+            return False
+        topic_name = f"{self.config.namespace.rstrip('/')}/{suffix.lstrip('/')}"
+        info = self.client.publish(topic_name, payload=payload, qos=qos, retain=True)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            LOG.warning("MQTT publish failed for %s: rc=%s", topic_name, info.rc)
+            return False
+        try:
+            info.wait_for_publish(timeout=2.0)
+        except RuntimeError:
+            LOG.warning("MQTT publish confirmation timed out for %s", topic_name)
+            return False
+        return info.is_published()
+
     def stop(self) -> None:
         if self.connected.is_set():
             payload = availability_payload(

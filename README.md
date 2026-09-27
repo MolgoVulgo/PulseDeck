@@ -4,7 +4,7 @@ PulseDeck est une plateforme d'affichage domestique modulaire construite autour 
 
 L'objectif est de centraliser la collecte et la normalisation des données sur le Raspberry Pi, puis de distribuer des données simples et prêtes à afficher à l'ESP32 via MQTT. L'ESP32 peut ainsi se concentrer sur l'interface graphique, la navigation, le cache local et les animations LVGL.
 
-> **Statut :** projet personnel en cours de développement. Le socle Raspberry Pi / MQTT est en cours de mise en place avant le développement complet de l'interface ESP32.
+> **Statut :** projet personnel en cours de développement. Le socle Raspberry Pi / Mosquitto / `pulsedeck-hub` est opérationnel ; le premier collector Weather est implémenté avec OpenWeather One Call 4.0 et doit maintenant être validé sur la cible.
 
 ## Architecture
 
@@ -119,6 +119,21 @@ pulsedeck/v1/printer/status
 pulsedeck/v1/printer/job
 ```
 
+## Weather — OpenWeather One Call 4.0
+
+Le premier collector applicatif utilise OpenWeather One Call 4.0. Le Pi interroge les endpoints `current`, `timeline/1h` et `timeline/1day`, normalise les réponses puis publie des snapshots retained QoS 1.
+
+```text
+pulsedeck/v1/weather/availability
+pulsedeck/v1/weather/current
+pulsedeck/v1/weather/hourly
+pulsedeck/v1/weather/daily
+```
+
+Cadences par défaut : 10 minutes pour le temps actuel, 30 minutes pour les 48 heures horaires et 3 heures pour les 10 jours quotidiens. La clé API reste hors du TOML, dans `/etc/pulsedeck/secrets/openweather_api_key`.
+
+Lors du premier déploiement Weather, `deploy_hub.sh` propose de demander la clé et le lieu. Un nom de ville peut être résolu automatiquement via le Geocoding API OpenWeather. Voir [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md).
+
 ## Installation du Raspberry Pi
 
 L'installation recommandée passe par `setup_pi.sh`. Il s'agit de l'orchestrateur complet : il prépare le socle MQTT puis installe ou met à jour `pulsedeck-hub`. Le dépôt Git n'a pas besoin d'être cloné sur le Raspberry Pi.
@@ -158,7 +173,7 @@ sudo ./setup_pi.sh --hub-only
 ./setup_pi.sh --check --verbose
 ```
 
-`bootstrap_pi.sh` configure Mosquitto sur l'IPv4 LAN détectée, active la persistence et vérifie notamment QoS 1 et retained. `deploy_hub.sh` installe le hub sous `/opt/pulsedeck`, sa configuration sous `/etc/pulsedeck` et son service systemd.
+`bootstrap_pi.sh` configure Mosquitto sur l'IPv4 LAN détectée, active la persistence et vérifie notamment QoS 1 et retained. `deploy_hub.sh` installe le hub sous `/opt/pulsedeck`, sa configuration sous `/etc/pulsedeck` et son service systemd. Si Weather n'est pas configuré, il propose également la configuration OpenWeather One Call 4.0.
 
 Les scripts n'exécutent pas de mise à jour globale du système (`pacman -Sy` / `pacman -Syu`).
 
@@ -213,8 +228,9 @@ Pour davantage de détails :
 
 - [`PROJECT_DESCRIPTION.md`](PROJECT_DESCRIPTION.md) — architecture et objectifs détaillés ;
 - [`PROJECT_SCHEMA.md`](PROJECT_SCHEMA.md) — contrats techniques et décisions confirmées ;
-- [`docs/pi/`](docs/pi/) — installation, MQTT et exploitation du Raspberry Pi.
+- [`docs/pi/`](docs/pi/) — installation, MQTT et exploitation du Raspberry Pi ;
+- [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md) — fournisseur, configuration et contrat Weather V1.
 
 ## État du projet
 
-PulseDeck est encore en phase de construction. Les interfaces, payloads applicatifs, collectors et firmware ESP32 vont évoluer au fur et à mesure de la stabilisation du socle Raspberry Pi / MQTT.
+PulseDeck est encore en phase de construction. Le socle Pi/MQTT/hub est en place et Weather sert maintenant de collector de référence pour valider le modèle avant Printer, PC, mini-serveur et News.

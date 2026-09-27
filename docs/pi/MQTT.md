@@ -72,7 +72,7 @@ Le hub utilisera un Last Will retained sur `pulsedeck/v1/system/availability`. L
 
 ## Payloads
 
-Les payloads restent versionnés, normalisés, simples à parser, adaptés à l'affichage et timestampés. Leur schéma JSON exact reste volontairement non défini à ce stade.
+Les payloads restent versionnés, normalisés, simples à parser, adaptés à l'affichage et timestampés. `system/availability` et les quatre topics Weather ont désormais un schéma 1 défini ; les autres payloads applicatifs restent à définir.
 
 ## Validation live du broker
 
@@ -83,7 +83,7 @@ Mosquitto        2.1.2-2
 IPv4 LAN         192.168.0.250
 Interface        enu1u1u1
 Listener         192.168.0.250:1883 uniquement
-IPv6 globale     absente
+IPv6 globale     non requise par PulseDeck V1 ; état hôte à contrôler séparément
 Auth / ACL / TLS aucun
 QoS 1 retained   validé
 Persistence      retained restauré après restart
@@ -109,3 +109,22 @@ Payload online retained/QoS 1 :
 À l'arrêt propre, le hub publie `state=offline` avec `reason=graceful_shutdown`. Le Last Will utilise également `state=offline`, `reason=connection_lost` et `ts_kind=will_created`. Un Last Will est préparé avant la perte de connexion et ne peut donc pas porter l'heure exacte de la future coupure ; `ts_kind` rend cette limite explicite.
 
 Le client hub utilise MQTT 3.1.1, QoS 1 retained pour l'availability et une reconnexion automatique avec délai exponentiel borné.
+
+## Weather V1 — schéma 1
+
+`patch_0007` fixe les premiers payloads applicatifs Weather à partir d'OpenWeather One Call 4.0.
+
+Les quatre topics sont retained en QoS 1 :
+
+```text
+pulsedeck/v1/weather/availability
+pulsedeck/v1/weather/current
+pulsedeck/v1/weather/hourly
+pulsedeck/v1/weather/daily
+```
+
+`weather/availability` décrit la disponibilité du fournisseur indépendamment de `system/availability`. Une panne OpenWeather ne supprime pas les derniers snapshots météo retenus par le broker.
+
+Tous les payloads Weather utilisent `schema=1`, `source="openweather-onecall-4"` et des unités normalisées explicites (`*_c`, `*_hpa`, `*_pct`, `*_mps`, `*_mm`). `current` contient `source_ts`, `hourly` contient `hours` et `daily` contient `days`.
+
+Le détail complet du contrat se trouve dans `docs/pi/WEATHER.md`.

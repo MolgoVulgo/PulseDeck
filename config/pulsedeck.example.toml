@@ -18,6 +18,18 @@ port = 8080
 
 [collectors.weather]
 enabled = false
+provider = "openweather-onecall-4"
+# latitude = 49.0
+# longitude = 6.0
+location_name = ""
+api_key_file = "/etc/pulsedeck/secrets/openweather_api_key"
+lang = "fr"
+current_interval = 600
+hourly_interval = 1800
+daily_interval = 10800
+hourly_hours = 48
+daily_days = 10
+request_timeout = 15
 
 [collectors.news]
 enabled = false

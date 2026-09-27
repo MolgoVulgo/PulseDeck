@@ -1,5 +1,11 @@
-"""Collector contract placeholder.
+"""Shared collector lifecycle contract."""
 
-The concrete collector API is intentionally deferred until the first collector
-is implemented and validated.
-"""
+from __future__ import annotations
+
+from typing import Protocol
+
+
+class Collector(Protocol):
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...

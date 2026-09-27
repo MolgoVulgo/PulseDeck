@@ -8,6 +8,8 @@ from pathlib import Path
 import signal
 import threading
 
+from .collectors.base import Collector
+from .collectors.weather import WeatherCollector
 from .config import DEFAULT_CONFIG_PATH, load_config
 from .logging_setup import configure_logging
 from .mqtt.client import HubMQTTClient
@@ -46,10 +48,18 @@ def main() -> int:
     signal.signal(signal.SIGINT, request_stop)
 
     mqtt_client = HubMQTTClient(config.mqtt)
+    collectors: list[Collector] = []
+    if config.weather.enabled:
+        collectors.append(WeatherCollector(config.weather, mqtt_client))
+
     mqtt_client.start()
+    for collector in collectors:
+        collector.start()
     try:
         stop_event.wait()
     finally:
+        for collector in reversed(collectors):
+            collector.stop()
         mqtt_client.stop()
     return 0
 

@@ -38,3 +38,7 @@ Ces valeurs décrivent la machine de référence au lancement ; elles ne constit
 - Printer
 
 Les modules existent dans le squelette, mais leurs contrats fonctionnels ne sont pas définis par `patch_0001`.
+
+## Weather
+
+Le collector Weather V1 utilise OpenWeather One Call 4.0. Voir [`WEATHER.md`](WEATHER.md) pour la configuration, les cadences et les payloads MQTT.

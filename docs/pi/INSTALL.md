@@ -142,3 +142,25 @@ sudo ./scripts/setup_pi.sh
 ```
 
 Dans ce cas, les scripts spécialisés du dépôt sont utilisés directement.
+
+## Configuration Weather — OpenWeather One Call 4.0
+
+À partir de `patch_0007`, `deploy_hub.sh` propose de configurer le premier collector Weather lorsqu'il n'est pas encore activé.
+
+En mode interactif, le script demande la clé OpenWeather avec saisie masquée puis le lieu. Le lieu peut être saisi sous forme de coordonnées `latitude,longitude` ou sous forme de ville ; dans ce dernier cas le Geocoding API OpenWeather est utilisé et un choix est demandé seulement en cas d'ambiguïté.
+
+La clé est stockée hors TOML :
+
+```text
+/etc/pulsedeck/secrets/openweather_api_key
+```
+
+La configuration du collector reste dans :
+
+```text
+/etc/pulsedeck/pulsedeck.toml
+```
+
+Le déploiement valide ensuite l'accès à One Call 4.0 avant de redémarrer `pulsedeck-hub`. Avec `--non-interactive`, aucune question n'est posée ; Weather reste désactivé tant qu'une configuration complète n'existe pas déjà.
+
+Voir `docs/pi/WEATHER.md` pour le contrat détaillé.
