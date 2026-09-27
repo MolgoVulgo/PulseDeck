@@ -79,6 +79,8 @@ daily   : 10800 s / 3 h
 
 L'horaire récupère jusqu'à 48 heures. Comme One Call 4.0 limite la timeline `1h` à 20 enregistrements par réponse, le collector suit les liens de pagination `next` jusqu'à obtenir les 48 enregistrements ou atteindre la fin du jeu de données.
 
+Les requêtes initiales `timeline/1h` et `timeline/1day` sont envoyées sans paramètre `start`. Pour avancer dans la timeline, le collector utilise exclusivement les URLs `next` entièrement préparées par OpenWeather. `patch_0007-1` corrige ainsi le HTTP 404 observé sur `timeline/1h` lorsque `start` était ajouté manuellement à la première requête.
+
 Le daily récupère jusqu'à 10 jours, ce qui tient dans la limite de 10 enregistrements d'une réponse `1day`.
 
 ## MQTT

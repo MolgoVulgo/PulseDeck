@@ -271,7 +271,7 @@ class OpenWeatherClient:
                 params["start"] = start
             url = f"{API_ROOT}/{path_or_url}?{urlencode(params)}"
 
-        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.2"})
+        request = Request(url, headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.2.1"})
         try:
             with urlopen(request, timeout=self.config.request_timeout) as response:  # noqa: S310
                 body = response.read()
@@ -314,7 +314,9 @@ class OpenWeatherClient:
 
     def timeline(self, step: str, count: int) -> WeatherResponse:
         now = int(time.time())
-        first = self._request(f"timeline/{step}", start=now)
+        # The initial One Call 4.0 timeline request must not carry ``start``.
+        # OpenWeather returns fully prepared ``next`` URLs for pagination.
+        first = self._request(f"timeline/{step}")
         records = list(first.data)
         seen = {item.get("dt") for item in records}
         next_url = first.next_url

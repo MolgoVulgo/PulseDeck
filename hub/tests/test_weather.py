@@ -48,6 +48,30 @@ def test_daily_temperature_fields():
     assert day["pop_pct"] == 10
 
 
+def test_timeline_initial_request_omits_start(monkeypatch):
+    cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path("/unused"))
+    client = OpenWeatherClient(cfg)
+    calls = []
+
+    def fake_request(path_or_url, **kwargs):
+        calls.append((path_or_url, kwargs))
+        return WeatherResponse(
+            [{"dt": 1000}],
+            49.0,
+            6.0,
+            "Europe/Paris",
+            7200,
+            None,
+        )
+
+    monkeypatch.setattr("pulsedeck_hub.collectors.weather.time.time", lambda: 1000)
+    monkeypatch.setattr(client, "_request", fake_request)
+    result = client.timeline("1h", 1)
+
+    assert len(result.data) == 1
+    assert calls == [("timeline/1h", {})]
+
+
 def test_pagination_collects_multiple_hourly_pages(monkeypatch):
     cfg = WeatherConfig(enabled=True, latitude=49.0, longitude=6.0, api_key_file=Path("/unused"))
     client = OpenWeatherClient(cfg)
