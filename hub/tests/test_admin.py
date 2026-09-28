@@ -85,6 +85,11 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'id="newsExcludeDomains"' in ADMIN_HTML
     assert 'id="newsSortBy"' in ADMIN_HTML
     assert 'data-view="services"' in ADMIN_HTML
+    assert 'data-view="logs"' in ADMIN_HTML
+    assert 'data-view-panel="logs"' in ADMIN_HTML
+    assert 'id="logService"' in ADMIN_HTML
+    assert '<option value="all">Tout</option>' in ADMIN_HTML
+    assert '/api/logs?service=' in ADMIN_HTML
     assert 'data-view="security"' in ADMIN_HTML
     assert 'Current <span class="hint">minutes</span>' in ADMIN_HTML
     assert 'Daily <span class="hint">minutes</span>' in ADMIN_HTML

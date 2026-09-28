@@ -93,6 +93,7 @@ The hub deployer:
 - installs application sources under `/opt/pulsedeck/hub`;
 - creates/reuses `/opt/pulsedeck/venv`;
 - installs Python dependencies inside that venv;
+- keeps Python build/install output quiet in normal mode and reports only the step status; detailed pip/build output is shown only with `--verbose`;
 - creates or preserves `/etc/pulsedeck/pulsedeck.toml`;
 - prepares `/etc/pulsedeck/secrets/`;
 - enables PulseDeck Admin on the detected LAN IPv4, port `8080`;

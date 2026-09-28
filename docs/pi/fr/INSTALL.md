@@ -93,6 +93,7 @@ Le déployeur du hub :
 - installe l’application dans `/opt/pulsedeck/hub` ;
 - crée/réutilise `/opt/pulsedeck/venv` ;
 - installe les dépendances Python dans ce venv ;
+- masque les détails pip/build en mode normal et n’affiche que le statut de l’étape ; la sortie détaillée n’apparaît qu’avec `--verbose` ;
 - crée ou conserve `/etc/pulsedeck/pulsedeck.toml` ;
 - prépare `/etc/pulsedeck/secrets/` ;
 - active PulseDeck Admin sur l’IPv4 LAN détectée, port `8080` ;

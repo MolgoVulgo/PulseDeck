@@ -33,7 +33,12 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 - Weather — configuration OpenWeather, test fournisseur et hot reload ;
 - News — choix NewsAPI/GNews, configuration adaptée au fournisseur et à l’endpoint, test fournisseur et hot reload ;
 - Services — catalogue commun des collectors implémentés et prévus ;
+- Logs — journaux runtime en mémoire avec filtre par service ; `Tout` est sélectionné par défaut, puis Hub / MQTT / Weather / News / Admin ;
 - Sécurité — changement du mot de passe administrateur.
+
+## Logs runtime
+
+La vue Logs expose jusqu’à 500 entrées récentes du logging Python du processus `pulsedeck-hub`. Les entrées restent uniquement en RAM et disparaissent au redémarrage du hub ; cette fonction n’ajoute donc aucune écriture microSD. Le filtre par défaut est `Tout`, avec des filtres Hub, MQTT, Weather, News et Admin. La vue s’actualise automatiquement toutes les cinq secondes et peut aussi être rafraîchie manuellement. Elle n’exécute pas `journalctl` et n’accorde aucun accès privilégié au journal système depuis le Web.
 
 ## Changements transactionnels
 

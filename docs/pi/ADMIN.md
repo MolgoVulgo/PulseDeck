@@ -33,7 +33,12 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 - Weather — OpenWeather configuration, provider test and hot reload;
 - News — selectable NewsAPI/GNews provider, provider-specific endpoint/filter configuration, provider test and hot reload;
 - Services — common collector catalog for implemented and planned services;
+- Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Admin filters;
 - Security — local admin password change.
+
+## Runtime logs
+
+The Logs view exposes up to 500 recent Python runtime log entries from the current `pulsedeck-hub` process. Entries are held in RAM only and are lost when the hub restarts, so this feature does not add microSD writes. The default filter is `All`; service-specific filters cover Hub, MQTT, Weather, News and Admin. The view refreshes automatically every five seconds and can also be refreshed manually. It does not execute `journalctl` and does not grant the Web process privileged access to the system journal.
 
 ## Transactional collector changes
 

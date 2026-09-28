@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -23,6 +24,7 @@ from ..config import (
     news_config_from_mapping,
     weather_config_from_mapping,
 )
+from ..logging_setup import LOG_SERVICES, recent_logs
 from .catalog import build_service_catalog
 from .security import (
     COOKIE_NAME,
@@ -37,6 +39,9 @@ from .security import (
 )
 from .storage import update_news_config, update_secret, update_weather_config
 from .ui import ADMIN_HTML
+
+
+LOG = logging.getLogger(__name__)
 
 
 def _json_error(status: int, message: str) -> HTTPException:
@@ -304,6 +309,17 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             ),
         }
 
+    @app.get("/api/logs")
+    def logs(request: Request, service: str = "all", limit: int = 200) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        if service != "all" and service not in LOG_SERVICES:
+            raise _json_error(400, "Unknown log service")
+        return {
+            "service": service,
+            "services": ["all", *LOG_SERVICES],
+            "entries": recent_logs(service, limit=limit),
+        }
+
     @app.get("/api/weather/config")
     def weather_config(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
@@ -350,7 +366,9 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         if not candidate.enabled:
             return {"ok": True, "disabled": True, "temperature_c": None, "hourly_records": 0}
         try:
-            return _test_weather(candidate, key or "")
+            result = _test_weather(candidate, key or "")
+            LOG.info("Weather provider test succeeded")
+            return result
         except WeatherError as exc:
             raise _json_error(502, str(exc)) from exc
 
@@ -375,6 +393,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 update_secret(key_path, body["api_key"])
             update_weather_config(runtime.config_path, candidate)
             runtime.reload_weather()
+            LOG.info("Weather configuration applied")
         except Exception as exc:
             try:
                 runtime.config_path.write_text(old_config, encoding="utf-8")
@@ -431,7 +450,9 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         if not key:
             raise _json_error(400, f"{_provider_label(candidate.provider)} API key is required for a provider test")
         try:
-            return _test_news(candidate, key)
+            result = _test_news(candidate, key)
+            LOG.info("News provider test succeeded: %s, %s article(s)", result.get("provider_label"), result.get("article_count"))
+            return result
         except NewsError as exc:
             raise _json_error(502, str(exc)) from exc
 
@@ -457,6 +478,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 update_secret(key_path, body["api_key"])
             update_news_config(runtime.config_path, candidate)
             runtime.reload_news()
+            LOG.info("News configuration applied: %s", candidate.provider)
         except Exception as exc:
             try:
                 runtime.config_path.write_text(old_config, encoding="utf-8")
