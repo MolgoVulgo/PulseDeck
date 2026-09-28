@@ -61,6 +61,19 @@ curl -fsS http://<PI_IPV4>:8080/api/health
 
 Collector configuration and detailed status require an authenticated Admin session.
 
+## Dev Web update smoke test
+
+After deploying the privileged updater handoff, validate the development channel end to end with two consecutive immutable commits:
+
+1. start from dev commit **N** and confirm PulseDeck Admin reports the build as up to date;
+2. publish a later dev commit **N+1** without creating a stable GitHub Release;
+3. in PulseDeck Admin, run the update check and confirm **N+1** is reported as available;
+4. start the installation from PulseDeck Admin;
+5. confirm the installer progresses through `queued -> running -> succeeded`, allowing for the hub restart;
+6. after the hub returns, confirm the checker reports the dev build as up to date and the installed metadata points to commit **N+1**.
+
+This procedure is a dev-channel smoke test only; it does not define rollback or version-cache behavior.
+
 ## Runtime configuration
 
 ```text

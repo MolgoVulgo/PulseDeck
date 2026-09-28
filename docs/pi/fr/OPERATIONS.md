@@ -61,6 +61,19 @@ curl -fsS http://<PI_IPV4>:8080/api/health
 
 La configuration des collectors et le statut détaillé nécessitent une session Admin authentifiée.
 
+## Smoke test des mises à jour Web dev
+
+Après le déploiement du handoff privilégié de mise à jour, valider le canal de développement de bout en bout avec deux commits immuables consécutifs :
+
+1. partir du commit dev **N** et confirmer que PulseDeck Admin indique que la build est à jour ;
+2. publier un commit dev ultérieur **N+1** sans créer de GitHub Release stable ;
+3. dans PulseDeck Admin, lancer la vérification et confirmer que **N+1** est annoncé comme disponible ;
+4. démarrer l’installation depuis PulseDeck Admin ;
+5. confirmer la progression `queued -> running -> succeeded`, en tenant compte du redémarrage du hub ;
+6. après le retour du hub, confirmer que le checker indique de nouveau la build dev à jour et que les métadonnées installées pointent sur le commit **N+1**.
+
+Cette procédure est uniquement un smoke test du canal dev ; elle ne définit ni rollback ni cache de versions.
+
 ## Configuration runtime
 
 ```text
