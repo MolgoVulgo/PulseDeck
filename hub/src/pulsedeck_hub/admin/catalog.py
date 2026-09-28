@@ -10,6 +10,7 @@ def build_service_catalog(
     weather_enabled: bool,
     news_state: dict[str, Any],
     news_enabled: bool,
+    news_provider: str = "newsapi",
 ) -> list[dict[str, Any]]:
     """Return stable Admin metadata for implemented and planned collectors."""
 
@@ -31,7 +32,7 @@ def build_service_catalog(
             "available": True,
             "state": news_state.get("state", "disabled"),
             "enabled": news_enabled,
-            "provider": "NewsAPI",
+            "provider": "GNews" if news_provider == "gnews" else "NewsAPI",
             "transport": "HTTPS",
             "auth": "X-Api-Key",
             "view": "news",

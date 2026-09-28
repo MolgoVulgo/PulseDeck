@@ -31,13 +31,13 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 
 - Dashboard — hub, MQTT, system and collector status;
 - Weather — OpenWeather configuration, provider test and hot reload;
-- News — NewsAPI endpoint-aware configuration (`top-headlines` vs `everything`), documented provider filters, provider test and hot reload;
+- News — selectable NewsAPI/GNews provider, provider-specific endpoint/filter configuration, provider test and hot reload;
 - Services — common collector catalog for implemented and planned services;
 - Security — local admin password change.
 
 ## Transactional collector changes
 
-For Weather and News, Admin validates the submitted configuration and tests the remote provider before enabling a new working configuration. News separates provider request fields from PulseDeck runtime fields: `pageSize` maps to the snapshot article count, page is fixed to 1, while collection cadence and HTTP timeout remain local runtime settings. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
+For Weather and News, Admin validates submitted configuration and tests the remote provider before enabling a new working configuration. News separates provider request fields from PulseDeck runtime fields, fixes provider pagination to page 1 for the current snapshot, and keeps collection cadence / HTTP timeout as local runtime settings. NewsAPI and GNews keys are stored independently, so switching provider does not overwrite the other secret. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
 
 ## Runtime paths
 
@@ -45,6 +45,7 @@ For Weather and News, Admin validates the submitted configuration and tests the 
 /etc/pulsedeck/pulsedeck.toml
 /etc/pulsedeck/secrets/openweather_api_key
 /etc/pulsedeck/secrets/newsapi_api_key
+/etc/pulsedeck/secrets/gnews_api_key
 /var/lib/pulsedeck/admin/password.hash
 /var/lib/pulsedeck/admin/session.key
 ```

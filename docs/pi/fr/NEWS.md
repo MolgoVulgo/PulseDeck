@@ -1,130 +1,45 @@
-# News — NewsAPI v2
+# News — sélection du fournisseur
 
 > L’anglais fait référence : [`../NEWS.md`](../NEWS.md).
 
-## Contrat fournisseur
+## Vue d’ensemble
 
-News V1 utilise **NewsAPI v2** via `newsapi.org`. Les requêtes fournisseur utilisent uniquement HTTPS. PulseDeck envoie la clé API exclusivement dans l’en-tête HTTP :
+News V1 prend en charge deux fournisseurs interchangeables :
+
+- **NewsAPI v2** (`newsapi.org`) ;
+- **GNews v4** (`gnews.io`).
+
+Les deux sont interrogés en HTTPS. PulseDeck authentifie exclusivement les deux fournisseurs avec le header HTTP :
 
 ```text
 X-Api-Key: <secret>
 ```
 
-La clé n’est jamais placée dans la query string. PulseDeck utilise les endpoints fournisseur suivants :
+Les clés ne sont jamais placées dans les URL, les payloads MQTT ou les logs. Le fournisseur actif est choisi dans PulseDeck Admin et persisté dans `collectors.news.provider`.
 
-```text
-GET https://newsapi.org/v2/top-headlines
-GET https://newsapi.org/v2/everything
-```
-
-NewsAPI accepte aussi l’authentification par query string et `Authorization`, mais PulseDeck utilise volontairement uniquement `X-Api-Key` afin de garder le secret hors des URL.
-
-## Configuration
-
-La configuration normale se fait depuis PulseDeck Admin. Une nouvelle clé est testée auprès du fournisseur avant d’être enregistrée, même lorsque le collector reste désactivé.
-
-Exemple TOML runtime :
-
-```toml
-[collectors.news]
-enabled = false
-provider = "newsapi"
-mode = "top-headlines"
-query = ""
-sources = ""
-country = "fr"
-category = ""
-search_in = ""
-domains = ""
-exclude_domains = ""
-from = ""
-to = ""
-lang = "fr"
-sort_by = "publishedAt"
-max_articles = 10
-interval = 1800
-request_timeout = 15
-api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
-```
-
-Secret :
+Les secrets restent séparés :
 
 ```text
 /etc/pulsedeck/secrets/newsapi_api_key
+/etc/pulsedeck/secrets/gnews_api_key
 ```
 
-`interval` et `request_timeout` sont des paramètres runtime PulseDeck, pas des paramètres NewsAPI. `max_articles` correspond à `pageSize`. PulseDeck conserve volontairement `page=1` car `news/latest` est un snapshot courant destiné à l’affichage, pas un navigateur d’archives.
+Changer de fournisseur ne supprime ni n’écrase la clé de l’autre fournisseur.
 
-## `top-headlines`
+## Comportement commun PulseDeck
 
-PulseDeck prend en charge les paramètres documentés de `/v2/top-headlines` utiles au snapshot courant :
-
-```text
-q
-sources
-country
-category
-pageSize
-page=1
-```
-
-`q` est optionnel. `sources` contient une liste d’identifiants de sources NewsAPI séparés par des virgules. NewsAPI interdit de combiner `sources` avec `country` ou `category` ; PulseDeck valide cette règle et l’Admin omet automatiquement `country` et `category` lorsqu’une ou plusieurs sources sont renseignées.
-
-Catégories prises en charge :
-
-```text
-business, entertainment, general, health,
-science, sports, technology
-```
-
-`country` est limité aux codes pays actuellement documentés par NewsAPI. `/v2/top-headlines` ne possède pas de paramètre `language`, donc PulseDeck n’en envoie pas dans ce mode.
-
-## `everything`
-
-PulseDeck prend en charge les filtres documentés de `/v2/everything` :
-
-```text
-q
-searchIn
-sources
-domains
-excludeDomains
-from
-to
-language
-sortBy
-pageSize
-page=1
-```
-
-`q` accepte la syntaxe de recherche avancée NewsAPI et est limité à 500 caractères. `searchIn` peut limiter la recherche à `title`, `description` et/ou `content`; PulseDeck omet `searchIn` quand `q` est vide.
-
-`sources` accepte jusqu’à 20 identifiants séparés par des virgules. `domains` et `excludeDomains` sont des listes de domaines séparées par des virgules. `from` et `to` acceptent des dates/date-heures ISO 8601. Pour un dashboard live, il est recommandé de les laisser vides ; des valeurs fixes figent volontairement la fenêtre temporelle fournisseur.
-
-`language` est limité aux codes actuellement documentés par NewsAPI. `sortBy` accepte :
-
-```text
-relevancy
-popularity
-publishedAt
-```
-
-La valeur par défaut est `publishedAt`. `country` et `category` ne sont pas envoyés à `/v2/everything`.
-
-## MQTT
-
-News V1 publie des messages retained QoS 1 :
+News publie en retained QoS 1 sur :
 
 ```text
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
 ```
 
-`news/latest` utilise le schema 1 et contient un tableau `articles` normalisé. Chaque article utilisable peut contenir :
+`news/latest` conserve le schema 1 quel que soit le fournisseur. PulseDeck normalise les champs utiles à l’affichage :
 
 ```text
 title
-author
+author          # si fourni
 description
 url
 image_url
@@ -133,10 +48,66 @@ source.id
 source.name
 ```
 
-Le champ NewsAPI `content` n’est volontairement pas republié. `publishedAt` est normalisé en timestamp Unix `published_ts`.
+Le `content` long des fournisseurs n’est pas republié. Les totaux sont normalisés en `total_results`. `source` et `feed.provider` identifient le fournisseur actif (`newsapi` ou `gnews`).
 
-Le payload contient aussi un objet `feed` décrivant le mode actif et les filtres pertinents, ainsi que `total_results` lorsque le fournisseur le renvoie.
+PulseDeck fixe la pagination fournisseur à la page 1 car `news/latest` est un snapshot courant et non un navigateur d’archives. `max_articles`, `interval` et `request_timeout` restent des réglages runtime PulseDeck.
+
+## NewsAPI v2
+
+Endpoints :
+
+```text
+GET https://newsapi.org/v2/top-headlines
+GET https://newsapi.org/v2/everything
+```
+
+### `top-headlines`
+
+PulseDeck peut envoyer `q`, `sources`, `country`, `category`, `pageSize` et `page=1`. `sources` ne peut pas être combiné avec `country` ou `category` ; PulseDeck valide cette règle.
+
+Catégories : `business`, `entertainment`, `general`, `health`, `science`, `sports`, `technology`.
+
+### `everything`
+
+PulseDeck peut envoyer `q`, `searchIn`, `sources`, `domains`, `excludeDomains`, `from`, `to`, `language`, `sortBy`, `pageSize` et `page=1`.
+
+`q` reste optionnel dans PulseDeck. `searchIn` n’est envoyé que si `q` est renseigné. `sources` est limité à 20 IDs. `sortBy` accepte `publishedAt`, `relevancy` et `popularity`.
+
+## GNews v4
+
+Endpoints :
+
+```text
+GET https://gnews.io/api/v4/top-headlines
+GET https://gnews.io/api/v4/search
+```
+
+PulseDeck utilise `X-Api-Key` même si GNews accepte aussi `apikey` dans la query string afin de garder le secret hors des URL.
+
+Pour les deux endpoints GNews, PulseDeck envoie `max`, fixe `page=1` et envoie `truncate=content` puisque le contenu fournisseur n’est pas republié.
+
+### `top-headlines`
+
+PulseDeck peut envoyer `category`, `lang`, `country`, `max`, `nullable`, `from`, `to`, `q`, `page=1` et `truncate=content`.
+
+Les neuf catégories GNews sont : `general`, `world`, `nation`, `business`, `technology`, `entertainment`, `sports`, `science`, `health`.
+
+`q` est optionnel et limité à 200 caractères.
+
+### `search`
+
+`q` est obligatoire et limité à 200 caractères. PulseDeck peut aussi envoyer `lang`, `country`, `max`, `in`, `nullable`, `from`, `to`, `sortby`, `page=1` et `truncate=content`.
+
+`in` accepte `title`, `description`, `content` et leurs combinaisons séparées par des virgules. `nullable` accepte `description`, `content` et `image`. `sortby` accepte `publishedAt` et `relevance`.
+
+Les codes langue/pays GNews sont saisis sur deux lettres puis validés par un test fournisseur avant sauvegarde.
+
+## Modèle transactionnel Admin
+
+Une nouvelle clé est testée auprès du fournisseur sélectionné avant stockage. Quand News est activé, la sauvegarde impose également un test fournisseur réussi. PulseDeck met ensuite à jour atomiquement TOML / la clé du fournisseur sélectionné et recharge le collector à chaud.
+
+En cas d’échec après persistance, PulseDeck tente de restaurer la configuration précédente et l’ancienne valeur du secret du fournisseur sélectionné.
 
 ## Erreurs
 
-Si NewsAPI échoue, PulseDeck conserve le dernier snapshot retained valide `news/latest` et publie `news/availability=offline` avec une raison non sensible. La clé API n’est jamais journalisée ni incluse dans les payloads MQTT.
+Si le fournisseur échoue, PulseDeck conserve le dernier snapshot retained valide `news/latest` et publie `news/availability=offline` avec une raison nettoyée. Les clés API ne sont jamais incluses dans les erreurs, logs ou messages MQTT.

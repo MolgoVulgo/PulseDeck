@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from pulsedeck_hub.collectors.news import NewsAPIClient, NewsError, normalize_news
+from pulsedeck_hub.collectors.news import GNewsClient, NewsAPIClient, NewsError, build_news_client, normalize_news
 from pulsedeck_hub.config import NewsConfig, news_config_from_mapping
 
 
@@ -237,3 +237,131 @@ def test_provider_http_error_is_sanitized(monkeypatch) -> None:
     with pytest.raises(NewsError, match="NewsAPI HTTP 401") as exc:
         client.fetch()
     assert "secret-key" not in str(exc.value)
+
+
+
+def test_gnews_config_supports_top_headlines_and_search() -> None:
+    top = news_config_from_mapping({"enabled": False, "provider": "gnews", "mode": "top-headlines", "category": "world", "lang": "fr", "country": "fr"})
+    assert top.provider == "gnews"
+    assert top.category == "world"
+    assert top.api_key_file.name == "gnews_api_key"
+    search = news_config_from_mapping({"enabled": False, "provider": "gnews", "mode": "search", "query": "OpenAI", "search_in": "title,description", "nullable": "description,image", "sort_by": "relevance"})
+    assert search.mode == "search"
+    assert search.query == "OpenAI"
+    assert search.nullable == "description,image"
+    assert search.sort_by == "relevance"
+
+
+def test_gnews_search_requires_query_and_limits_it_to_200() -> None:
+    with pytest.raises(ValueError, match="query is required"):
+        news_config_from_mapping({"provider": "gnews", "mode": "search", "query": ""})
+    with pytest.raises(ValueError, match="<= 200"):
+        news_config_from_mapping({"provider": "gnews", "mode": "search", "query": "x" * 201})
+
+
+def test_gnews_rejects_newsapi_only_filters() -> None:
+    with pytest.raises(ValueError, match="not supported by GNews"):
+        news_config_from_mapping({"provider": "gnews", "mode": "top-headlines", "sources": "bbc-news"})
+    with pytest.raises(ValueError, match="nullable"):
+        news_config_from_mapping({"provider": "gnews", "mode": "top-headlines", "nullable": "author"})
+
+
+def test_gnews_uses_https_x_api_key_and_documented_search_params(monkeypatch) -> None:
+    cfg = NewsConfig(
+        enabled=True,
+        provider="gnews",
+        mode="search",
+        query="OpenAI",
+        lang="fr",
+        country="fr",
+        search_in="title,description",
+        from_date="2026-09-27T00:00:00Z",
+        to_date="2026-09-28T00:00:00Z",
+        sort_by="relevance",
+        nullable="description,image",
+        max_articles=10,
+        api_key_file=Path("/unused"),
+    )
+    client = GNewsClient(cfg, api_key="gnews-secret")
+    seen = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): return False
+        def read(self): return b'{"totalArticles":0,"articles":[]}'
+
+    def fake_open(request, timeout):
+        seen["url"] = request.full_url
+        seen["headers"] = {k.lower(): v for k, v in request.header_items()}
+        return FakeResponse()
+
+    monkeypatch.setattr(client._opener, "open", fake_open)
+    client.fetch()
+    q = _query(seen["url"])
+    assert seen["url"].startswith("https://gnews.io/api/v4/search?")
+    assert "apikey=" not in seen["url"].lower()
+    assert seen["headers"]["x-api-key"] == "gnews-secret"
+    assert q["q"] == ["OpenAI"]
+    assert q["lang"] == ["fr"]
+    assert q["country"] == ["fr"]
+    assert q["in"] == ["title,description"]
+    assert q["nullable"] == ["description,image"]
+    assert q["sortby"] == ["relevance"]
+    assert q["max"] == ["10"]
+    assert q["page"] == ["1"]
+    assert q["truncate"] == ["content"]
+
+
+def test_gnews_top_headlines_maps_nine_category_contract(monkeypatch) -> None:
+    cfg = NewsConfig(enabled=True, provider="gnews", mode="top-headlines", category="nation", query="France", lang="fr", country="fr")
+    client = GNewsClient(cfg, api_key="gnews-secret")
+    seen = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, exc_type, exc, tb): return False
+        def read(self): return b'{"totalArticles":0,"articles":[]}'
+
+    def fake_open(request, timeout):
+        seen["url"] = request.full_url
+        return FakeResponse()
+
+    monkeypatch.setattr(client._opener, "open", fake_open)
+    client.fetch()
+    q = _query(seen["url"])
+    assert "/top-headlines?" in seen["url"]
+    assert q["category"] == ["nation"]
+    assert q["q"] == ["France"]
+    assert q["lang"] == ["fr"]
+    assert q["country"] == ["fr"]
+
+
+def test_gnews_normalizes_to_common_mqtt_schema(monkeypatch) -> None:
+    monkeypatch.setattr("pulsedeck_hub.collectors.news.time.time", lambda: 3000)
+    raw = {
+        "totalArticles": 2,
+        "articles": [{
+            "id": "provider-id",
+            "title": "GNews example",
+            "description": "Summary",
+            "content": "not republished",
+            "url": "https://example.com/gnews",
+            "image": "https://example.com/gnews.jpg",
+            "publishedAt": "2026-09-28T10:00:00Z",
+            "lang": "fr",
+            "source": {"id": "src", "name": "Example"},
+        }],
+    }
+    cfg = NewsConfig(provider="gnews", mode="top-headlines", category="general")
+    payload = normalize_news(raw, cfg)
+    assert payload["schema"] == 1
+    assert payload["source"] == "gnews"
+    assert payload["total_results"] == 2
+    assert payload["feed"]["provider"] == "gnews"
+    assert payload["articles"][0]["image_url"] == "https://example.com/gnews.jpg"
+    assert "content" not in payload["articles"][0]
+
+
+def test_news_client_factory_selects_provider() -> None:
+    assert isinstance(build_news_client(NewsConfig(provider="newsapi"), api_key="x"), NewsAPIClient)
+    assert isinstance(build_news_client(NewsConfig(provider="gnews", mode="top-headlines"), api_key="x"), GNewsClient)

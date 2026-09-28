@@ -96,15 +96,15 @@ Voir [`docs/pi/fr/WEATHER.md`](docs/pi/fr/WEATHER.md).
 
 ## News
 
-News V1 utilise **NewsAPI v2** en HTTPS avec authentification fournisseur dans l’en-tête HTTP :
+News V1 prend en charge **NewsAPI v2** et **GNews v4**. Les deux fournisseurs sont appelés en HTTPS et PulseDeck transmet leur clé uniquement via le header HTTP :
 
 ```text
 X-Api-Key: <secret>
 ```
 
-La clé n’est jamais ajoutée à la query string. PulseDeck prend en charge `top-headlines` et `everything`, normalise les métadonnées d’articles, exclut volontairement le champ fournisseur `content`, puis publie un snapshot retained compact sur `pulsedeck/v1/news/latest`.
+Le fournisseur se choisit dans PulseDeck Admin. NewsAPI propose `top-headlines` / `everything` ; GNews propose `top-headlines` / `search`. L’interface affiche dynamiquement les filtres propres au fournisseur, puis normalise les réponses dans le même schéma MQTT retained sur `pulsedeck/v1/news/latest`. Le `content` long des fournisseurs n’est pas republié.
 
-Le secret NewsAPI est stocké dans `/etc/pulsedeck/secrets/newsapi_api_key` et se configure depuis PulseDeck Admin.
+Les secrets restent séparés dans `/etc/pulsedeck/secrets/newsapi_api_key` et `/etc/pulsedeck/secrets/gnews_api_key` ; changer de fournisseur n’écrase pas l’autre clé.
 
 Voir [`docs/pi/fr/NEWS.md`](docs/pi/fr/NEWS.md).
 
@@ -120,7 +120,7 @@ Admin fournit actuellement :
 
 - état Hub / MQTT / système ;
 - configuration Weather, test API et hot reload ;
-- configuration News, test NewsAPI et hot reload ;
+- sélection du fournisseur News (NewsAPI / GNews), filtres adaptés, test API et hot reload ;
 - catalogue Services commun aux futurs collectors ;
 - gestion du mot de passe administrateur local.
 
@@ -187,7 +187,7 @@ Socle déjà réalisé :
 2. runtime minimal `pulsedeck-hub` ;
 3. collector Weather ;
 4. Web Admin ;
-5. collector News / NewsAPI.
+5. collector News avec fournisseur NewsAPI / GNews sélectionnable.
 
 Prochaines intégrations prévues :
 

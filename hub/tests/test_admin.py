@@ -65,6 +65,8 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     assert by_id["news"]["available"] is True
     assert by_id["news"]["view"] == "news"
     assert by_id["news"]["provider"] == "NewsAPI"
+    gnews_catalog = build_service_catalog({"state": "online"}, True, {"state": "online"}, True, "gnews")
+    assert {item["id"]: item for item in gnews_catalog}["news"]["provider"] == "GNews"
     assert by_id["news"]["transport"] == "HTTPS"
     assert by_id["news"]["auth"] == "X-Api-Key"
     assert by_id["pc_gamer"]["provider"] is None
@@ -75,6 +77,8 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
+    assert 'id="newsProvider"' in ADMIN_HTML
+    assert '<option value="gnews">GNews v4</option>' in ADMIN_HTML
     assert 'id="newsSources"' in ADMIN_HTML
     assert 'id="newsSearchIn"' in ADMIN_HTML
     assert 'id="newsDomains"' in ADMIN_HTML
@@ -124,3 +128,30 @@ def test_render_news_documents_header_auth_contract() -> None:
     assert 'provider = "newsapi"' in text
     assert 'api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"' in text
     assert "api_key =" not in text
+
+
+
+def test_gnews_section_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "pulsedeck.toml"
+    base_config(path)
+    config = NewsConfig(
+        enabled=True,
+        provider="gnews",
+        mode="search",
+        query="OpenAI",
+        country="fr",
+        lang="fr",
+        search_in="title,description",
+        nullable="description,image",
+        sort_by="relevance",
+        api_key_file=tmp_path / "gnews_api_key",
+    )
+    update_news_config(path, config)
+    loaded = load_config(path)
+    assert loaded.news.provider == "gnews"
+    assert loaded.news.mode == "search"
+    assert loaded.news.nullable == "description,image"
+    assert loaded.news.api_key_file == tmp_path / "gnews_api_key"
+    text = path.read_text(encoding="utf-8")
+    assert 'provider = "gnews"' in text
+    assert 'api_key_file = ' in text

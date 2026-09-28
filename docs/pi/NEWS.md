@@ -1,63 +1,69 @@
-# News — NewsAPI v2
+# News — provider selection
 
 > English is authoritative. French translation: [`fr/NEWS.md`](fr/NEWS.md).
 
-## Provider contract
+## Overview
 
-News V1 uses **NewsAPI v2** from `newsapi.org`. Provider requests are HTTPS-only. PulseDeck sends the API key exclusively in the HTTP header:
+PulseDeck News V1 supports two interchangeable providers:
+
+- **NewsAPI v2** (`newsapi.org`);
+- **GNews v4** (`gnews.io`).
+
+Both are called over HTTPS. PulseDeck authenticates both providers exclusively with the HTTP header:
 
 ```text
 X-Api-Key: <secret>
 ```
 
-The key is never placed in the query string. PulseDeck uses these provider endpoints:
+Provider keys are never placed in request URLs, MQTT payloads or logs. The active provider is selected in PulseDeck Admin and persisted as `collectors.news.provider`.
+
+The provider-specific secrets are stored independently:
+
+```text
+/etc/pulsedeck/secrets/newsapi_api_key
+/etc/pulsedeck/secrets/gnews_api_key
+```
+
+Switching provider does not delete or overwrite the other provider's stored key.
+
+## Common PulseDeck behavior
+
+News publishes retained QoS 1 messages on:
+
+```text
+pulsedeck/v1/news/availability
+pulsedeck/v1/news/latest
+```
+
+`news/latest` keeps schema 1 regardless of provider. PulseDeck normalizes the common display fields:
+
+```text
+title
+author          # when supplied by the provider
+description
+url
+image_url
+published_ts
+source.id
+source.name
+```
+
+Long provider `content` is deliberately not republished. Provider totals are normalized to `total_results`. The payload `source` and `feed.provider` identify the active provider (`newsapi` or `gnews`).
+
+PulseDeck fixes provider pagination to page 1 because `news/latest` is a current display snapshot rather than an archive browser. `max_articles`, `interval` and `request_timeout` remain PulseDeck runtime settings.
+
+## NewsAPI v2
+
+Endpoints:
 
 ```text
 GET https://newsapi.org/v2/top-headlines
 GET https://newsapi.org/v2/everything
 ```
 
-NewsAPI also accepts query-string and `Authorization` authentication, but PulseDeck intentionally uses only `X-Api-Key` so the secret stays out of request URLs.
+### `top-headlines`
 
-## Configuration
-
-Normal configuration is performed through PulseDeck Admin. A newly supplied key is provider-tested before it is persisted, even when the collector remains disabled.
-
-Runtime TOML example:
-
-```toml
-[collectors.news]
-enabled = false
-provider = "newsapi"
-mode = "top-headlines"
-query = ""
-sources = ""
-country = "fr"
-category = ""
-search_in = ""
-domains = ""
-exclude_domains = ""
-from = ""
-to = ""
-lang = "fr"
-sort_by = "publishedAt"
-max_articles = 10
-interval = 1800
-request_timeout = 15
-api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
-```
-
-Secret path:
-
-```text
-/etc/pulsedeck/secrets/newsapi_api_key
-```
-
-`interval` and `request_timeout` are PulseDeck runtime settings, not NewsAPI request parameters. `max_articles` maps to NewsAPI `pageSize`. PulseDeck deliberately keeps `page=1` because `news/latest` is a current display snapshot rather than a historical browser.
-
-## `top-headlines`
-
-PulseDeck supports the documented `/v2/top-headlines` request parameters relevant to the current snapshot:
+PulseDeck can send:
 
 ```text
 q
@@ -68,20 +74,18 @@ pageSize
 page=1
 ```
 
-`q` is optional. `sources` is a comma-separated list of NewsAPI source identifiers. NewsAPI does **not** allow `sources` to be combined with `country` or `category`; PulseDeck validates this rule and the Admin UI automatically omits `country` and `category` while source IDs are selected.
+`sources` cannot be combined with `country` or `category`. PulseDeck validates this rule and omits `country` / `category` while source IDs are selected.
 
-Supported categories are:
+Supported categories used by PulseDeck:
 
 ```text
 business, entertainment, general, health,
 science, sports, technology
 ```
 
-`country` is restricted to the country codes currently documented by NewsAPI. `/v2/top-headlines` has no `language` parameter, so PulseDeck does not send one in this mode.
+### `everything`
 
-## `everything`
-
-PulseDeck supports the documented `/v2/everything` filters:
+PulseDeck can send:
 
 ```text
 q
@@ -97,46 +101,74 @@ pageSize
 page=1
 ```
 
-`q` accepts NewsAPI advanced search syntax and is limited to 500 characters. `searchIn` can restrict a query to `title`, `description` and/or `content`; PulseDeck omits `searchIn` when `q` is empty.
+`q` is optional in PulseDeck. `searchIn` is only sent when `q` is present. `sources` is limited to 20 source IDs. `sortBy` supports `publishedAt`, `relevancy` and `popularity`.
 
-`sources` accepts up to 20 comma-separated source IDs. `domains` and `excludeDomains` are comma-separated domain lists. `from` and `to` accept ISO 8601 date/date-time values. Leaving them empty is recommended for a continuously live dashboard; setting fixed values intentionally freezes the provider time window.
+## GNews v4
 
-`language` is restricted to NewsAPI's documented language codes. `sortBy` supports:
-
-```text
-relevancy
-popularity
-publishedAt
-```
-
-The default is `publishedAt`. `country` and `category` are not sent to `/v2/everything`.
-
-## MQTT
-
-News V1 publishes retained QoS 1 messages:
+Endpoints:
 
 ```text
-pulsedeck/v1/news/availability
-pulsedeck/v1/news/latest
+GET https://gnews.io/api/v4/top-headlines
+GET https://gnews.io/api/v4/search
 ```
 
-`news/latest` uses schema 1 and contains a normalized `articles` array. Each usable article may include:
+PulseDeck uses `X-Api-Key` even though GNews also accepts an `apikey` query parameter, so the secret stays out of URLs.
+
+For both GNews endpoints PulseDeck sends `max`, fixes `page=1`, and sends `truncate=content` because PulseDeck does not republish provider content.
+
+### `top-headlines`
+
+PulseDeck can send:
 
 ```text
-title
-author
-description
-url
-image_url
-published_ts
-source.id
-source.name
+category
+lang
+country
+max
+nullable
+from
+to
+q
+page=1
+truncate=content
 ```
 
-NewsAPI `content` is deliberately not republished. `publishedAt` is normalized to Unix `published_ts`.
+The nine GNews categories are:
 
-The payload also contains a `feed` object describing the active mode and relevant filters, plus `total_results` when the provider returns it.
+```text
+general, world, nation, business, technology,
+entertainment, sports, science, health
+```
+
+`q` is optional and limited to 200 characters.
+
+### `search`
+
+`q` is mandatory and limited to 200 characters. PulseDeck can also send:
+
+```text
+lang
+country
+max
+in
+nullable
+from
+to
+sortby
+page=1
+truncate=content
+```
+
+`in` supports `title`, `description` and `content`, including comma-separated combinations. `nullable` supports `description`, `content` and `image`. `sortby` supports `publishedAt` and `relevance`.
+
+GNews language and country values are entered as two-letter codes and are provider-tested before save.
+
+## Admin transaction model
+
+A new key is tested against the selected provider before it is persisted. When News is enabled, saving configuration also requires a successful provider test. Only after validation does PulseDeck atomically update TOML / the selected provider key and hot-reload the collector.
+
+If application fails after persistence, PulseDeck attempts to restore the previous configuration and the previous value of the selected provider secret.
 
 ## Failure behavior
 
-If NewsAPI fails, PulseDeck keeps the last good retained `news/latest` snapshot and publishes `news/availability=offline` with a sanitized reason. The API key is never logged or included in MQTT payloads.
+If a provider request fails, PulseDeck preserves the last valid retained `news/latest` snapshot and publishes `news/availability=offline` with a sanitized reason. API keys are never included in errors, logs or MQTT messages.

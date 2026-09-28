@@ -1,4 +1,4 @@
-"""NewsAPI collector for PulseDeck News V1."""
+"""Provider-pluggable News collector for PulseDeck News V1."""
 
 from __future__ import annotations
 
@@ -21,12 +21,12 @@ if TYPE_CHECKING:
 
 
 LOG = logging.getLogger(__name__)
-SOURCE = "newsapi"
-API_ROOT = "https://newsapi.org/v2"
+NEWSAPI_ROOT = "https://newsapi.org/v2"
+GNEWS_ROOT = "https://gnews.io/api/v4"
 
 
 class NewsError(RuntimeError):
-    """Sanitized NewsAPI provider or publication failure."""
+    """Sanitized news-provider or publication failure."""
 
 
 class _RejectRedirects(HTTPRedirectHandler):
@@ -34,7 +34,9 @@ class _RejectRedirects(HTTPRedirectHandler):
         return None
 
 
-class NewsAPIClient:
+class _BaseNewsClient:
+    provider_name = "News provider"
+
     def __init__(self, config: NewsConfig, *, api_key: str | None = None) -> None:
         self.config = config
         self._api_key_override = api_key
@@ -49,8 +51,34 @@ class NewsAPIClient:
             except OSError as exc:
                 raise NewsError(f"API key file unavailable: {self.config.api_key_file}") from exc
         if not key:
-            raise NewsError("NewsAPI API key is empty")
+            raise NewsError(f"{self.provider_name} API key is empty")
         return key
+
+    def _read_json(self, request: Request) -> dict[str, Any]:
+        try:
+            with self._opener.open(request, timeout=self.config.request_timeout) as response:
+                body = response.read()
+        except HTTPError as exc:
+            raise NewsError(f"{self.provider_name} HTTP {exc.code}") from exc
+        except URLError as exc:
+            reason = getattr(exc, "reason", None)
+            raise NewsError(
+                f"{self.provider_name} network error: {type(reason).__name__ if reason else 'unknown'}"
+            ) from exc
+        except TimeoutError as exc:
+            raise NewsError(f"{self.provider_name} request timed out") from exc
+
+        try:
+            raw = json.loads(body)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise NewsError(f"{self.provider_name} returned invalid JSON") from exc
+        if not isinstance(raw, dict):
+            raise NewsError(f"{self.provider_name} returned an unexpected response")
+        return raw
+
+
+class NewsAPIClient(_BaseNewsClient):
+    provider_name = "NewsAPI"
 
     def _params(self) -> dict[str, object]:
         params: dict[str, object] = {"pageSize": self.config.max_articles, "page": 1}
@@ -87,39 +115,85 @@ class NewsAPIClient:
 
     def fetch(self) -> dict[str, Any]:
         endpoint = "top-headlines" if self.config.mode == "top-headlines" else "everything"
-        url = f"{API_ROOT}/{endpoint}?{urlencode(self._params())}"
+        url = f"{NEWSAPI_ROOT}/{endpoint}?{urlencode(self._params())}"
         request = Request(
             url,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "PulseDeck/0.4.1",
+                "User-Agent": "PulseDeck/0.4.2",
                 "X-Api-Key": self._api_key(),
             },
         )
-        try:
-            with self._opener.open(request, timeout=self.config.request_timeout) as response:
-                body = response.read()
-        except HTTPError as exc:
-            raise NewsError(f"NewsAPI HTTP {exc.code}") from exc
-        except URLError as exc:
-            reason = getattr(exc, "reason", None)
-            raise NewsError(f"NewsAPI network error: {type(reason).__name__ if reason else 'unknown'}") from exc
-        except TimeoutError as exc:
-            raise NewsError("NewsAPI request timed out") from exc
-
-        try:
-            raw = json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise NewsError("NewsAPI returned invalid JSON") from exc
-        if not isinstance(raw, dict):
-            raise NewsError("NewsAPI returned an unexpected response")
+        raw = self._read_json(request)
         if raw.get("status") != "ok":
             code = raw.get("code")
             raise NewsError(f"NewsAPI provider error{f' ({code})' if isinstance(code, str) and code else ''}")
-        articles = raw.get("articles")
-        if not isinstance(articles, list):
+        if not isinstance(raw.get("articles"), list):
             raise NewsError("NewsAPI response contains no articles array")
         return raw
+
+
+class GNewsClient(_BaseNewsClient):
+    provider_name = "GNews"
+
+    def _params(self) -> dict[str, object]:
+        params: dict[str, object] = {
+            "max": self.config.max_articles,
+            "page": 1,
+            # PulseDeck never republishes provider content; requesting truncation avoids
+            # needlessly large response bodies on plans where full content is available.
+            "truncate": "content",
+        }
+        if self.config.mode == "top-headlines":
+            if self.config.category:
+                params["category"] = self.config.category
+            if self.config.lang:
+                params["lang"] = self.config.lang
+            if self.config.country:
+                params["country"] = self.config.country
+            if self.config.query:
+                params["q"] = self.config.query
+        else:
+            params["q"] = self.config.query
+            if self.config.lang:
+                params["lang"] = self.config.lang
+            if self.config.country:
+                params["country"] = self.config.country
+            if self.config.search_in:
+                params["in"] = self.config.search_in
+            if self.config.sort_by:
+                params["sortby"] = self.config.sort_by
+        if self.config.nullable:
+            params["nullable"] = self.config.nullable
+        if self.config.from_date:
+            params["from"] = self.config.from_date
+        if self.config.to_date:
+            params["to"] = self.config.to_date
+        return params
+
+    def fetch(self) -> dict[str, Any]:
+        endpoint = "top-headlines" if self.config.mode == "top-headlines" else "search"
+        url = f"{GNEWS_ROOT}/{endpoint}?{urlencode(self._params())}"
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "PulseDeck/0.4.2",
+                "X-Api-Key": self._api_key(),
+            },
+        )
+        raw = self._read_json(request)
+        if not isinstance(raw.get("articles"), list):
+            raise NewsError("GNews response contains no articles array")
+        return raw
+
+
+def build_news_client(config: NewsConfig, *, api_key: str | None = None) -> NewsAPIClient | GNewsClient:
+    if config.provider == "newsapi":
+        return NewsAPIClient(config, api_key=api_key)
+    if config.provider == "gnews":
+        return GNewsClient(config, api_key=api_key)
+    raise NewsError(f"Unsupported News provider: {config.provider}")
 
 
 def _published_ts(value: object) -> int | None:
@@ -137,7 +211,7 @@ def _published_ts(value: object) -> int | None:
 def normalize_news(raw: dict[str, Any], config: NewsConfig) -> dict[str, object]:
     articles_raw = raw.get("articles")
     if not isinstance(articles_raw, list):
-        raise NewsError("NewsAPI response contains no articles array")
+        raise NewsError(f"{config.provider} response contains no articles array")
 
     articles: list[dict[str, object]] = []
     for raw_article in articles_raw[: config.max_articles]:
@@ -154,14 +228,19 @@ def normalize_news(raw: dict[str, Any], config: NewsConfig) -> dict[str, object]
             "url": url,
             "published_ts": published,
         }
-        for provider_key, target_key in (
-            ("author", "author"),
-            ("description", "description"),
-            ("urlToImage", "image_url"),
-        ):
-            value = raw_article.get(provider_key)
-            if isinstance(value, str) and value:
-                item[target_key] = value
+        description = raw_article.get("description")
+        if isinstance(description, str) and description:
+            item["description"] = description
+
+        if config.provider == "newsapi":
+            author = raw_article.get("author")
+            if isinstance(author, str) and author:
+                item["author"] = author
+            image = raw_article.get("urlToImage")
+        else:
+            image = raw_article.get("image")
+        if isinstance(image, str) and image:
+            item["image_url"] = image
 
         source_raw = raw_article.get("source")
         if isinstance(source_raw, dict):
@@ -174,24 +253,43 @@ def normalize_news(raw: dict[str, Any], config: NewsConfig) -> dict[str, object]
                 item["source"] = source
         articles.append(item)
 
-    total_results = raw.get("totalResults")
+    total_results = raw.get("totalResults") if config.provider == "newsapi" else raw.get("totalArticles")
     payload: dict[str, object] = {
         "schema": 1,
-        "source": SOURCE,
+        "source": config.provider,
         "ts": int(time.time()),
         "feed": {
+            "provider": config.provider,
             "mode": config.mode,
             "query": config.query or None,
-            "sources": config.sources or None,
-            "country": config.country if config.mode == "top-headlines" and not config.sources else None,
-            "category": config.category if config.mode == "top-headlines" and not config.sources else None,
-            "search_in": config.search_in if config.mode == "everything" else None,
-            "domains": config.domains if config.mode == "everything" else None,
-            "exclude_domains": config.exclude_domains if config.mode == "everything" else None,
-            "from": config.from_date if config.mode == "everything" else None,
-            "to": config.to_date if config.mode == "everything" else None,
-            "language": config.lang if config.mode == "everything" else None,
-            "sort_by": config.sort_by if config.mode == "everything" else None,
+            "sources": config.sources or None if config.provider == "newsapi" else None,
+            "country": config.country if (
+                config.provider == "gnews"
+                or (config.provider == "newsapi" and config.mode == "top-headlines" and not config.sources)
+            ) else None,
+            "category": config.category if (
+                config.mode == "top-headlines" and (config.provider == "gnews" or not config.sources)
+            ) else None,
+            "search_in": config.search_in if (
+                (config.provider == "newsapi" and config.mode == "everything" and bool(config.query))
+                or (config.provider == "gnews" and config.mode == "search")
+            ) else None,
+            "domains": config.domains if config.provider == "newsapi" and config.mode == "everything" else None,
+            "exclude_domains": config.exclude_domains if config.provider == "newsapi" and config.mode == "everything" else None,
+            "from": config.from_date if (
+                config.provider == "gnews" or (config.provider == "newsapi" and config.mode == "everything")
+            ) else None,
+            "to": config.to_date if (
+                config.provider == "gnews" or (config.provider == "newsapi" and config.mode == "everything")
+            ) else None,
+            "language": config.lang if (
+                config.provider == "gnews" or (config.provider == "newsapi" and config.mode == "everything")
+            ) else None,
+            "sort_by": config.sort_by if (
+                (config.provider == "newsapi" and config.mode == "everything")
+                or (config.provider == "gnews" and config.mode == "search")
+            ) else None,
+            "nullable": config.nullable if config.provider == "gnews" else None,
         },
         "articles": articles,
     }
@@ -205,13 +303,13 @@ class NewsCollector:
         self.config = config
         self.mqtt = mqtt_client
         self.health = health
-        self.provider = NewsAPIClient(config)
+        self.provider = build_news_client(config)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="news-collector", daemon=True)
         self._last_success: int | None = None
 
     def start(self) -> None:
-        LOG.info("Starting News collector: NewsAPI %s", self.config.mode)
+        LOG.info("Starting News collector: %s %s", self.config.provider, self.config.mode)
         if self.health is not None:
             self.health.news_started()
         self._thread.start()
@@ -227,7 +325,7 @@ class NewsCollector:
     def _publish_availability(self, state: str, *, reason: str | None = None) -> None:
         payload = source_availability_payload(
             state,
-            source=SOURCE,
+            source=self.config.provider,
             last_success=self._last_success,
             reason=reason,
         )
@@ -245,7 +343,7 @@ class NewsCollector:
         self._publish_availability("online")
         if self.health is not None:
             self.health.news_success(count)
-        LOG.info("News updated: %d articles", count)
+        LOG.info("News updated from %s: %d articles", self.config.provider, count)
 
     def _run(self) -> None:
         self._publish_availability("offline", reason="starting")

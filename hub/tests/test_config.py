@@ -76,3 +76,17 @@ def test_news_interval_below_minimum_is_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="collectors.news.interval"):
         load_config(path)
+
+
+
+def test_gnews_configuration_loads_with_separate_secret(tmp_path: Path) -> None:
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """[collectors.weather]\nenabled = false\n\n[collectors.news]\nenabled = false\nprovider = \"gnews\"\nmode = \"search\"\nquery = \"OpenAI\"\ncategory = \"world\"\nlang = \"fr\"\ncountry = \"fr\"\nnullable = \"description,image\"\nsort_by = \"relevance\"\n""",
+        )
+    )
+    assert cfg.news.provider == "gnews"
+    assert cfg.news.mode == "search"
+    assert cfg.news.api_key_file.name == "gnews_api_key"
+    assert cfg.news.nullable == "description,image"

@@ -116,11 +116,11 @@ knowledge:
     - "À partir de patch_0008, les scripts installent le socle sans questions métier ; Weather est configuré via PulseDeck Admin, qui gère clé, géocodage, test fournisseur, activation et cadences."
     - "À partir de patch_0009, PulseDeck Admin utilise une navigation Vue d’ensemble / Weather / Services / Sécurité, des notifications homogènes et un catalogue commun destiné aux collectors présents et futurs."
     - "Ordre de développement prévu après le framework Admin : News, PC gamer, Printer."
-    - "News V1 utilise NewsAPI v2, exclusivement en HTTPS, avec authentification fournisseur envoyée uniquement dans le header X-Api-Key."
-    - "News V1 prend en charge NewsAPI top-headlines et everything avec des champs fournisseur propres à chaque endpoint ; q est optionnel, sources est supporté dans les deux modes et les filtres avancés everything incluent searchIn/domains/excludeDomains/from/to/language/sortBy."
+    - "News V1 prend en charge NewsAPI v2 et GNews v4 sélectionnables, exclusivement en HTTPS, avec authentification envoyée uniquement dans le header X-Api-Key."
+    - "NewsAPI prend en charge top-headlines/everything ; GNews prend en charge top-headlines/search. Admin affiche dynamiquement les champs propres au fournisseur et les deux réponses sont normalisées vers le même schéma MQTT News."
     - "News V1 utilise par défaut top-headlines, country=fr, aucune restriction de catégorie, max_articles/pageSize=10 et une cadence de 1800 s ; ces valeurs sont configurables dans PulseDeck Admin."
     - "News V1 publie retained/QoS 1 sur news/availability et news/latest avec schema 1 ; le champ fournisseur content n’est pas republié."
-    - "La clé NewsAPI runtime est séparée du TOML et stockée par défaut dans /etc/pulsedeck/secrets/newsapi_api_key ; PulseDeck Admin ne la renvoie jamais en clair."
+    - "Les secrets News sont séparés : /etc/pulsedeck/secrets/newsapi_api_key et /etc/pulsedeck/secrets/gnews_api_key ; PulseDeck Admin ne renvoie aucune clé en clair."
     - "À partir de patch_0010-1, la documentation du projet et opérationnelle est bilingue : anglais prioritaire dans README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md et docs/pi/*.md ; miroirs français dans README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md et docs/pi/fr/*.md."
   unresolved:
     - "Schémas exacts des payloads applicatifs hors Weather et News."
@@ -146,7 +146,7 @@ contracts:
     - "Les snapshots Weather restent retained lors d'une erreur fournisseur ; weather/availability porte l'état de la source."
     - "Les unités MQTT sont normalisées explicitement en Celsius, hPa, pourcentage, m/s et millimètres selon les champs."
   news:
-    - "Provider V1 : NewsAPI v2."
+    - "Providers V1 : NewsAPI v2 et GNews v4, sélectionnables depuis Admin."
     - "Transport fournisseur : HTTPS uniquement."
     - "Authentification fournisseur : header X-Api-Key uniquement ; la clé n’est jamais placée dans la query string."
     - "Modes V1 : top-headlines ou everything. top-headlines supporte q/sources/country/category et interdit de combiner sources avec country/category. everything supporte q/searchIn/sources/domains/excludeDomains/from/to/language/sortBy."
@@ -168,7 +168,7 @@ contracts:
     - "Dans le périmètre domestique LAN actuel, MQTT V1 fonctionne sans authentification, sans ACL et sans TLS."
     - "Si le périmètre réseau change ou si MQTT porte des commandes sensibles, le modèle de sécurité MQTT doit être réévalué."
     - "La clé OpenWeather n'est jamais versionnée et reste confinée à /etc/pulsedeck ; PulseDeck Admin peut la remplacer mais ne la renvoie jamais en clair via son API."
-    - "La clé NewsAPI n'est jamais versionnée, n'est jamais placée dans les URL fournisseur et reste confinée à /etc/pulsedeck/secrets/newsapi_api_key ; PulseDeck Admin peut la remplacer mais ne la renvoie jamais en clair."
+    - "Les clés NewsAPI/GNews ne sont jamais versionnées ni placées dans les URL fournisseur ; elles restent dans des fichiers séparés sous /etc/pulsedeck/secrets et ne sont jamais renvoyées en clair par PulseDeck Admin."
   compatibility:
     - "Matériel écran ciblé : ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 est la cible UI ; sa version exacte reste unresolved."
@@ -220,6 +220,7 @@ security:
   sensitive_runtime_files:
     - "/etc/pulsedeck/secrets/openweather_api_key"
     - "/etc/pulsedeck/secrets/newsapi_api_key"
+    - "/etc/pulsedeck/secrets/gnews_api_key"
 ```
 
 ## Statut

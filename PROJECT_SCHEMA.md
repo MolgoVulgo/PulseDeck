@@ -117,11 +117,11 @@ knowledge:
     - "From patch_0008, scripts install the technical foundation without service-specific questions; Weather is configured in PulseDeck Admin."
     - "From patch_0009, PulseDeck Admin has Dashboard / Weather / Services / Security navigation, uniform notifications and a common service catalog."
     - "Development order after the Admin framework: News, gaming PC, Printer."
-    - "News V1 uses NewsAPI v2 over HTTPS only, with provider authentication sent only in X-Api-Key."
-    - "News V1 supports NewsAPI top-headlines and everything with endpoint-specific provider fields; q is optional, sources is supported in both modes, and advanced everything filters include searchIn/domains/excludeDomains/from/to/language/sortBy."
+    - "News V1 supports selectable NewsAPI v2 and GNews v4 providers over HTTPS only, with authentication sent only in X-Api-Key."
+    - "NewsAPI supports top-headlines/everything; GNews supports top-headlines/search. Provider-specific fields are exposed dynamically in PulseDeck Admin and both providers normalize to the same News MQTT schema."
     - "News V1 defaults: top-headlines, country=fr, no category restriction, max_articles/pageSize=10, interval=1800 s; configurable in PulseDeck Admin."
     - "News V1 publishes retained QoS 1 schema 1 on news/availability and news/latest; provider content is not republished."
-    - "The NewsAPI runtime key is outside TOML at /etc/pulsedeck/secrets/newsapi_api_key; PulseDeck Admin never returns it in clear text."
+    - "News provider secrets are separate: /etc/pulsedeck/secrets/newsapi_api_key and /etc/pulsedeck/secrets/gnews_api_key; PulseDeck Admin never returns either in clear text."
     - "From patch_0010-1, documentation is bilingual: English primary files in README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md and docs/pi/*.md; French mirrors in *.fr.md and docs/pi/fr/*.md."
   unresolved:
     - "Exact application payload schemas outside Weather and News."
@@ -147,11 +147,11 @@ contracts:
     - "Weather snapshots stay retained on provider errors; weather/availability carries source state."
     - "MQTT units are explicitly normalized to Celsius, hPa, percent, m/s and millimeters as applicable."
   news:
-    - "V1 provider: NewsAPI v2."
+    - "V1 providers: NewsAPI v2 and GNews v4; provider is selectable in Admin."
     - "Provider transport: HTTPS only."
     - "Provider authentication: X-Api-Key header only; the key is never put in the query string."
-    - "V1 modes: top-headlines or everything. top-headlines supports q/sources/country/category and forbids combining sources with country/category. everything supports q/searchIn/sources/domains/excludeDomains/from/to/language/sortBy."
-    - "Initial V1 values: country=fr, category unrestricted, lang=fr for everything, sort_by=publishedAt, max_articles/pageSize=10, interval=1800 s, timeout=15 s; page remains fixed to 1 for the current snapshot."
+    - "NewsAPI modes: top-headlines/everything. GNews modes: top-headlines/search; GNews search requires q (<=200 chars), supports in/nullable/from/to/lang/country/sortby, and GNews top-headlines exposes nine categories."
+    - "Default provider remains NewsAPI for migration compatibility; max_articles=10, interval=1800 s, timeout=15 s and provider pagination page=1 for the current snapshot."
     - "news/latest schema 1: feed metadata plus normalized articles; provider content deliberately excluded; publishedAt converted to Unix published_ts."
     - "news/availability and news/latest are retained QoS 1; the last valid snapshot remains available after a provider failure."
   persistence:
@@ -169,7 +169,7 @@ contracts:
     - "Within the current trusted home-LAN scope, MQTT V1 has no authentication, ACL or TLS."
     - "If network scope changes or MQTT carries sensitive commands, the MQTT security model must be reevaluated."
     - "The OpenWeather key is never versioned, stays confined under /etc/pulsedeck and is never returned in clear text by PulseDeck Admin."
-    - "The NewsAPI key is never versioned, never put in provider URLs, stays at /etc/pulsedeck/secrets/newsapi_api_key and is never returned in clear text by PulseDeck Admin."
+    - "NewsAPI/GNews keys are never versioned or put in provider URLs; they stay in separate files under /etc/pulsedeck/secrets and are never returned in clear text by PulseDeck Admin."
   compatibility:
     - "Target display hardware: ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 is the UI target; exact version remains unresolved."
@@ -222,6 +222,7 @@ security:
   sensitive_runtime_files:
     - "/etc/pulsedeck/secrets/openweather_api_key"
     - "/etc/pulsedeck/secrets/newsapi_api_key"
+    - "/etc/pulsedeck/secrets/gnews_api_key"
 ```
 
 ## Status

@@ -73,7 +73,7 @@ def render_news_section(config: NewsConfig) -> str:
         [
             "[collectors.news]",
             f"enabled = {'true' if config.enabled else 'false'}",
-            'provider = "newsapi"',
+            f"provider = {json.dumps(config.provider)}",
             f"mode = {json.dumps(config.mode)}",
             f"query = {json.dumps(config.query, ensure_ascii=False)}",
             f"sources = {json.dumps(config.sources)}",
@@ -86,6 +86,7 @@ def render_news_section(config: NewsConfig) -> str:
             f"to = {json.dumps(config.to_date)}",
             f"lang = {json.dumps(config.lang)}",
             f"sort_by = {json.dumps(config.sort_by)}",
+            f"nullable = {json.dumps(config.nullable)}",
             f"max_articles = {config.max_articles}",
             f"interval = {config.interval}",
             f"request_timeout = {config.request_timeout}",

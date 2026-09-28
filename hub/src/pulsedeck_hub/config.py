@@ -10,7 +10,9 @@ import tomllib
 DEFAULT_CONFIG_PATH = Path("/etc/pulsedeck/pulsedeck.toml")
 DEFAULT_OPENWEATHER_KEY_PATH = Path("/etc/pulsedeck/secrets/openweather_api_key")
 DEFAULT_NEWSAPI_KEY_PATH = Path("/etc/pulsedeck/secrets/newsapi_api_key")
-NEWS_CATEGORIES = {
+DEFAULT_GNEWS_KEY_PATH = Path("/etc/pulsedeck/secrets/gnews_api_key")
+NEWS_PROVIDERS = {"newsapi", "gnews"}
+NEWSAPI_CATEGORIES = {
     "general",
     "business",
     "technology",
@@ -19,16 +21,20 @@ NEWS_CATEGORIES = {
     "science",
     "health",
 }
-NEWS_MODES = {"top-headlines", "everything"}
-NEWS_LANGUAGES = {"ar", "de", "en", "es", "fr", "he", "it", "nl", "no", "pt", "ru", "sv", "ud", "zh"}
-NEWS_COUNTRIES = {
+NEWSAPI_MODES = {"top-headlines", "everything"}
+GNEWS_MODES = {"top-headlines", "search"}
+GNEWS_CATEGORIES = {"general", "world", "nation", "business", "technology", "entertainment", "sports", "science", "health"}
+NEWSAPI_LANGUAGES = {"ar", "de", "en", "es", "fr", "he", "it", "nl", "no", "pt", "ru", "sv", "ud", "zh"}
+NEWSAPI_COUNTRIES = {
     "ae", "ar", "at", "au", "be", "bg", "br", "ca", "ch", "cn", "co", "cu", "cz", "de", "eg",
     "fr", "gb", "gr", "hk", "hu", "id", "ie", "il", "in", "it", "jp", "kr", "lt", "lv", "ma",
     "mx", "my", "ng", "nl", "no", "nz", "ph", "pl", "pt", "ro", "rs", "ru", "sa", "se", "sg",
     "si", "sk", "th", "tr", "tw", "ua", "us", "ve", "za",
 }
 NEWS_SEARCH_FIELDS = {"title", "description", "content"}
-NEWS_SORT_ORDERS = {"relevancy", "popularity", "publishedAt"}
+NEWSAPI_SORT_ORDERS = {"relevancy", "popularity", "publishedAt"}
+GNEWS_SORT_ORDERS = {"publishedAt", "relevance"}
+GNEWS_NULLABLE_FIELDS = {"description", "content", "image"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +92,7 @@ class NewsConfig:
     to_date: str = ""
     lang: str = "fr"
     sort_by: str = "publishedAt"
+    nullable: str = ""
     max_articles: int = 10
     interval: int = 1800
     request_timeout: int = 15
@@ -129,6 +136,15 @@ def _optional_choice(value: object, name: str, choices: set[str]) -> str:
     result = value.strip().lower()
     if result and result not in choices:
         raise ValueError(f"{name} is unsupported")
+    return result
+
+
+def _optional_two_letter_code(value: object, name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    result = value.strip().lower()
+    if result and (len(result) != 2 or not result.isalpha()):
+        raise ValueError(f"{name} must be empty or a 2-letter code")
     return result
 
 
@@ -220,47 +236,67 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
 
     enabled = _bool(raw.get("enabled", False), "collectors.news.enabled")
     provider = raw.get("provider", "newsapi")
-    if not isinstance(provider, str) or provider != "newsapi":
-        raise ValueError("collectors.news.provider must be 'newsapi'")
+    if not isinstance(provider, str) or provider not in NEWS_PROVIDERS:
+        raise ValueError("collectors.news.provider must be 'newsapi' or 'gnews'")
 
-    mode = raw.get("mode", "top-headlines")
-    if not isinstance(mode, str) or mode not in NEWS_MODES:
-        raise ValueError("collectors.news.mode must be 'top-headlines' or 'everything'")
+    default_mode = "top-headlines"
+    mode = raw.get("mode", default_mode)
+    allowed_modes = NEWSAPI_MODES if provider == "newsapi" else GNEWS_MODES
+    if not isinstance(mode, str) or mode not in allowed_modes:
+        allowed = " or ".join(repr(value) for value in sorted(allowed_modes))
+        raise ValueError(f"collectors.news.mode must be {allowed} for provider {provider}")
 
     query = raw.get("query", "")
     if not isinstance(query, str):
         raise ValueError("collectors.news.query must be a string")
     query = query.strip()
-    if len(query) > 500:
-        raise ValueError("collectors.news.query must be <= 500 characters")
+    query_limit = 500 if provider == "newsapi" else 200
+    if len(query) > query_limit:
+        raise ValueError(f"collectors.news.query must be <= {query_limit} characters for provider {provider}")
+    if provider == "gnews" and mode == "search" and not query:
+        raise ValueError("collectors.news.query is required for GNews search")
 
     sources = _csv(raw.get("sources", ""), "collectors.news.sources")
-    if mode == "everything" and sources and len(sources.split(",")) > 20:
-        raise ValueError("collectors.news.sources must contain at most 20 comma-separated values in everything mode")
-    country = _optional_choice(raw.get("country", "fr"), "collectors.news.country", NEWS_COUNTRIES)
-
-    category_raw = raw.get("category", "")
-    if not isinstance(category_raw, str):
-        raise ValueError("collectors.news.category must be a string")
-    category = category_raw.strip().lower()
-    if category and category not in NEWS_CATEGORIES:
-        raise ValueError("collectors.news.category is unsupported")
-
-    if mode == "top-headlines" and sources and (country or category):
-        raise ValueError("collectors.news.sources cannot be combined with country or category in top-headlines mode")
-
     search_in = _search_in(raw.get("search_in", ""))
     domains = _csv(raw.get("domains", ""), "collectors.news.domains")
     exclude_domains = _csv(raw.get("exclude_domains", ""), "collectors.news.exclude_domains")
     from_date = _optional_iso8601(raw.get("from", ""), "collectors.news.from")
     to_date = _optional_iso8601(raw.get("to", ""), "collectors.news.to")
-    lang = _optional_choice(raw.get("lang", "fr"), "collectors.news.lang", NEWS_LANGUAGES)
 
-    sort_by = raw.get("sort_by", "publishedAt")
-    if not isinstance(sort_by, str) or sort_by not in NEWS_SORT_ORDERS:
-        raise ValueError("collectors.news.sort_by is unsupported")
+    category_raw = raw.get("category", "")
+    if not isinstance(category_raw, str):
+        raise ValueError("collectors.news.category must be a string")
+    category = category_raw.strip().lower()
 
-    api_key_file = raw.get("api_key_file", str(DEFAULT_NEWSAPI_KEY_PATH))
+    if provider == "newsapi":
+        if mode == "everything" and sources and len(sources.split(",")) > 20:
+            raise ValueError("collectors.news.sources must contain at most 20 comma-separated values in everything mode")
+        country = _optional_choice(raw.get("country", "fr"), "collectors.news.country", NEWSAPI_COUNTRIES)
+        if category and category not in NEWSAPI_CATEGORIES:
+            raise ValueError("collectors.news.category is unsupported for NewsAPI")
+        if mode == "top-headlines" and sources and (country or category):
+            raise ValueError("collectors.news.sources cannot be combined with country or category in NewsAPI top-headlines mode")
+        lang = _optional_choice(raw.get("lang", "fr"), "collectors.news.lang", NEWSAPI_LANGUAGES)
+        sort_by = raw.get("sort_by", "publishedAt")
+        if not isinstance(sort_by, str) or sort_by not in NEWSAPI_SORT_ORDERS:
+            raise ValueError("collectors.news.sort_by is unsupported for NewsAPI")
+        nullable = ""
+    else:
+        if sources or domains or exclude_domains:
+            raise ValueError("collectors.news.sources/domains/exclude_domains are not supported by GNews")
+        country = _optional_two_letter_code(raw.get("country", "fr"), "collectors.news.country")
+        lang = _optional_two_letter_code(raw.get("lang", "fr"), "collectors.news.lang")
+        if category and category not in GNEWS_CATEGORIES:
+            raise ValueError("collectors.news.category is unsupported for GNews")
+        sort_by = raw.get("sort_by", "publishedAt")
+        if not isinstance(sort_by, str) or sort_by not in GNEWS_SORT_ORDERS:
+            raise ValueError("collectors.news.sort_by is unsupported for GNews")
+        nullable = _csv(raw.get("nullable", ""), "collectors.news.nullable")
+        if nullable and any(field not in GNEWS_NULLABLE_FIELDS for field in nullable.split(",")):
+            raise ValueError("collectors.news.nullable contains an unsupported GNews field")
+
+    default_key_path = DEFAULT_NEWSAPI_KEY_PATH if provider == "newsapi" else DEFAULT_GNEWS_KEY_PATH
+    api_key_file = raw.get("api_key_file", str(default_key_path))
     if not isinstance(api_key_file, str) or not api_key_file.strip():
         raise ValueError("collectors.news.api_key_file must be a non-empty string")
 
@@ -279,6 +315,7 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
         to_date=to_date,
         lang=lang,
         sort_by=sort_by,
+        nullable=nullable,
         max_articles=_positive_int(raw.get("max_articles", 10), "collectors.news.max_articles", maximum=100),
         interval=_positive_int(raw.get("interval", 1800), "collectors.news.interval", minimum=300, maximum=86400),
         request_timeout=_positive_int(raw.get("request_timeout", 15), "collectors.news.request_timeout", maximum=60),

@@ -12,9 +12,10 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from ..collectors.news import NewsAPIClient, NewsError, normalize_news
+from ..collectors.news import NewsError, build_news_client, normalize_news
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
 from ..config import (
+    DEFAULT_GNEWS_KEY_PATH,
     DEFAULT_NEWSAPI_KEY_PATH,
     DEFAULT_OPENWEATHER_KEY_PATH,
     NewsConfig,
@@ -117,11 +118,23 @@ def _test_weather(candidate: WeatherConfig, key: str) -> dict[str, Any]:
     }
 
 
+def _news_key_path(provider: str) -> Path:
+    return DEFAULT_GNEWS_KEY_PATH if provider == "gnews" else DEFAULT_NEWSAPI_KEY_PATH
+
+
+def _provider_label(provider: str) -> str:
+    return "GNews" if provider == "gnews" else "NewsAPI"
+
+
 def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str | None]:
     current = runtime.config.news
+    provider = body.get("provider", current.provider)
+    if not isinstance(provider, str):
+        raise _json_error(400, "provider must be a string")
+    candidate_key_path = current.api_key_file if provider == current.provider else _news_key_path(provider)
     raw = {
         "enabled": body.get("enabled", current.enabled),
-        "provider": "newsapi",
+        "provider": provider,
         "mode": body.get("mode", current.mode),
         "query": body.get("query", current.query),
         "sources": body.get("sources", current.sources),
@@ -134,10 +147,11 @@ def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str
         "to": body.get("to", current.to_date),
         "lang": body.get("lang", current.lang),
         "sort_by": body.get("sort_by", current.sort_by),
+        "nullable": body.get("nullable", current.nullable),
         "max_articles": body.get("max_articles", current.max_articles),
         "interval": body.get("interval", current.interval),
         "request_timeout": body.get("request_timeout", current.request_timeout),
-        "api_key_file": str(current.api_key_file or DEFAULT_NEWSAPI_KEY_PATH),
+        "api_key_file": str(candidate_key_path),
     }
     try:
         candidate = news_config_from_mapping(raw)
@@ -146,20 +160,22 @@ def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str
     provided = body.get("api_key")
     if provided is not None and not isinstance(provided, str):
         raise _json_error(400, "api_key must be a string or null")
-    key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(current.api_key_file)
+    key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(candidate.api_key_file)
     if candidate.enabled and not key:
-        raise _json_error(400, "NewsAPI API key is required when News is enabled")
+        raise _json_error(400, f"{_provider_label(candidate.provider)} API key is required when News is enabled")
     return candidate, key
 
 
 def _test_news(candidate: NewsConfig, key: str) -> dict[str, Any]:
-    raw = NewsAPIClient(candidate, api_key=key).fetch()
+    raw = build_news_client(candidate, api_key=key).fetch()
     payload = normalize_news(raw, candidate)
     articles = payload.get("articles")
     count = len(articles) if isinstance(articles, list) else 0
     first_title = articles[0].get("title") if count and isinstance(articles[0], dict) else None
     return {
         "ok": True,
+        "provider": candidate.provider,
+        "provider_label": _provider_label(candidate.provider),
         "article_count": count,
         "total_results": payload.get("total_results"),
         "first_title": first_title,
@@ -284,6 +300,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 runtime.config.weather.enabled,
                 state["news"],
                 runtime.config.news.enabled,
+                runtime.config.news.provider,
             ),
         }
 
@@ -391,10 +408,15 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             "to": n.to_date,
             "lang": n.lang,
             "sort_by": n.sort_by,
+            "nullable": n.nullable,
             "max_articles": n.max_articles,
             "interval": n.interval,
             "request_timeout": n.request_timeout,
             "api_key_configured": bool(_configured_secret(n.api_key_file)),
+            "api_keys_configured": {
+                "newsapi": bool(_configured_secret(n.api_key_file if n.provider == "newsapi" else DEFAULT_NEWSAPI_KEY_PATH)),
+                "gnews": bool(_configured_secret(n.api_key_file if n.provider == "gnews" else DEFAULT_GNEWS_KEY_PATH)),
+            },
             "auth": "X-Api-Key",
             "transport": "HTTPS",
         }
@@ -407,7 +429,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             raise _json_error(400, "Invalid body")
         candidate, key = _candidate_news(runtime, body)
         if not key:
-            raise _json_error(400, "NewsAPI API key is required for a provider test")
+            raise _json_error(400, f"{_provider_label(candidate.provider)} API key is required for a provider test")
         try:
             return _test_news(candidate, key)
         except NewsError as exc:
@@ -428,8 +450,8 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 raise _json_error(502, str(exc)) from exc
 
         old_config = runtime.config_path.read_text(encoding="utf-8")
-        old_key = _configured_secret(runtime.config.news.api_key_file)
         key_path = candidate.api_key_file
+        old_key = _configured_secret(key_path)
         try:
             if isinstance(body.get("api_key"), str) and body["api_key"].strip():
                 update_secret(key_path, body["api_key"])

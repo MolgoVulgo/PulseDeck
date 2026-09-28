@@ -46,10 +46,13 @@ from = ""
 to = ""
 lang = "fr"
 sort_by = "publishedAt"
+nullable = ""
 max_articles = 10
 interval = 1800
 request_timeout = 15
 api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
+# For provider = "gnews", PulseDeck Admin switches this to:
+# /etc/pulsedeck/secrets/gnews_api_key
 
 [collectors.pc_gamer]
 enabled = false

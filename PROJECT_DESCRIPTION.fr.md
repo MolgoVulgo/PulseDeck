@@ -121,7 +121,7 @@ Le déploiement Raspberry Pi utilise un bootstrap unique `scripts/install.sh`, u
 
 À partir de `patch_0007`, le premier collector actif est Weather avec OpenWeather One Call API 4.0. Le hub utilise les endpoints `current`, `timeline/1h` et `timeline/1day`, en unités métriques et en français. Les cadences V1 sont 10 minutes pour `current`, 30 minutes pour les prévisions horaires et 3 heures pour les prévisions quotidiennes. La clé OpenWeather est stockée séparément dans `/etc/pulsedeck/secrets/openweather_api_key` et n'est jamais placée dans la configuration versionnée. Depuis `patch_0008`, Weather est configuré et testé depuis PulseDeck Admin, qui recharge le collector sans redémarrage manuel du service.
 
-À partir de `patch_0010-1`, News utilise NewsAPI v2. Les appels fournisseur sont exclusivement en HTTPS et la clé est envoyée uniquement dans le header `X-Api-Key`, jamais dans la query string. À partir de `patch_0012`, le contrat Admin/fournisseur suit les paramètres propres à chaque endpoint NewsAPI : `top-headlines` supporte `q`, `sources`, `country` et `category` avec la règle d’exclusion documentée pour `sources`, tandis que `everything` supporte `q`, `searchIn`, `sources`, `domains`, `excludeDomains`, `from`, `to`, `language` et `sortBy`. PulseDeck fixe `page=1` pour le snapshot courant et mappe `max_articles` sur `pageSize`. Le hub publie `news/availability` et `news/latest` en retained QoS 1 et conserve le dernier snapshot valide lors d'un échec fournisseur. La clé NewsAPI est stockée dans `/etc/pulsedeck/secrets/newsapi_api_key`.
+À partir de `patch_0010-1`, News utilise NewsAPI v2. Les appels fournisseur sont exclusivement en HTTPS et la clé est envoyée uniquement dans le header `X-Api-Key`, jamais dans la query string. À partir de `patch_0012`, le contrat Admin/fournisseur suit les paramètres propres à chaque endpoint NewsAPI : `top-headlines` supporte `q`, `sources`, `country` et `category` avec la règle d’exclusion documentée pour `sources`, tandis que `everything` supporte `q`, `searchIn`, `sources`, `domains`, `excludeDomains`, `from`, `to`, `language` et `sortBy`. PulseDeck fixe `page=1` pour le snapshot courant et mappe `max_articles` sur `pageSize`. Le hub publie `news/availability` et `news/latest` en retained QoS 1 et conserve le dernier snapshot valide lors d'un échec fournisseur. La clé NewsAPI est stockée dans `/etc/pulsedeck/secrets/newsapi_api_key`. À partir de `patch_0013`, News prend aussi en charge GNews v4 comme fournisseur sélectionnable. GNews utilise `top-headlines` ou `search`, HTTPS et `X-Api-Key` ; `search` impose `q` (200 caractères maximum) et Admin expose les champs GNews de langue/pays/catégorie/champs de recherche/nullable/dates/tri. Les clés NewsAPI et GNews restent séparées dans `/etc/pulsedeck/secrets/newsapi_api_key` et `/etc/pulsedeck/secrets/gnews_api_key`. Les deux fournisseurs sont normalisés vers le même schéma MQTT News.
 
 Éviter les microservices, conteneurs et dépendances d'infrastructure non nécessaires au départ.
 
@@ -374,7 +374,7 @@ Plusieurs pages possibles :
 
 ### News
 
-Fournisseur V1 : NewsAPI v2. Le Raspberry Pi interroge `top-headlines` ou `everything` en HTTPS avec authentification `X-Api-Key`, normalise les métadonnées utiles à l'affichage et publie un snapshot retained sur `news/latest` ainsi qu'un état séparé sur `news/availability`. Le contenu long fournisseur n'est pas republié afin de garder le payload compact pour l'ESP32.
+Fournisseurs News V1 : NewsAPI v2 et GNews v4. Le fournisseur actif se choisit dans PulseDeck Admin. NewsAPI utilise `top-headlines` / `everything` ; GNews utilise `top-headlines` / `search`. Les deux utilisent HTTPS avec `X-Api-Key`, les champs propres au fournisseur sont affichés dynamiquement, la pagination reste fixée à la page 1 et les réponses sont normalisées vers `news/latest` / `news/availability`. Le contenu long fournisseur n'est pas republié afin de garder le payload compact pour l'ESP32.
 
 ### Printer
 
@@ -482,10 +482,10 @@ Weather sert d'application de référence. `patch_0007` implémente le collector
 ### Phase 4 — News
 
 Intégrer le flux News de référence :
-- NewsAPI v2 ;
+- fournisseur NewsAPI v2 / GNews v4 sélectionnable ;
 - HTTPS ;
 - authentification `X-Api-Key` ;
-- `top-headlines` / `everything` ;
+- endpoints et filtres propres au fournisseur ;
 - snapshot MQTT normalisé retained ;
 - configuration via PulseDeck Admin.
 
