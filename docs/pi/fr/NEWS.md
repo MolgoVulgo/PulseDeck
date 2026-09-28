@@ -111,3 +111,10 @@ En cas d’échec après persistance, PulseDeck tente de restaurer la configurat
 ## Erreurs
 
 Si le fournisseur échoue, PulseDeck conserve le dernier snapshot retained valide `news/latest` et publie `news/availability=offline` avec une raison nettoyée. Les clés API ne sont jamais incluses dans les erreurs, logs ou messages MQTT.
+
+
+## Limitation de débit GNews
+
+GNews documente actuellement une limite de 1 requête/seconde sur le plan Free et 10 requêtes/seconde sur les offres payantes. HTTP `429` signifie que la limite par seconde a été dépassée ; un quota journalier épuisé est signalé par HTTP `403`. PulseDeck sérialise tous les appels GNews effectués dans le processus (collector, test Admin et validation transactionnelle lors de l’enregistrement) et conserve au moins 1,10 seconde entre deux requêtes GNews. Cette règle utilise volontairement la limite fournisseur la plus sûre même si le compte configuré est payant.
+
+Le déployeur autonome ajoute également une courte garde après un smoke test GNews réussi avant de démarrer le service hub, car ce smoke test s’exécute dans un processus séparé et ne peut donc pas partager le limiteur du hub.

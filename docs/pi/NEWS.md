@@ -172,3 +172,10 @@ If application fails after persistence, PulseDeck attempts to restore the previo
 ## Failure behavior
 
 If a provider request fails, PulseDeck preserves the last valid retained `news/latest` snapshot and publishes `news/availability=offline` with a sanitized reason. API keys are never included in errors, logs or MQTT messages.
+
+
+## GNews rate limiting
+
+GNews currently documents a per-second rate limit of 1 request/second on the Free plan and 10 requests/second on paid plans. HTTP `429` means that the per-second rate was exceeded; exhausted daily quota is reported as HTTP `403`. PulseDeck serializes all in-process GNews calls (collector, Admin test, and transactional save validation) and keeps at least 1.10 seconds between GNews requests. This deliberately uses the safest provider rate even when the configured account is paid.
+
+The standalone deployer also inserts a short guard after a successful GNews smoke test before starting the hub service, because that smoke test runs in a separate process and therefore cannot share the in-process limiter.

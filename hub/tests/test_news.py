@@ -5,12 +5,40 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+import pulsedeck_hub.collectors.news as news_module
 from pulsedeck_hub.collectors.news import GNewsClient, NewsAPIClient, NewsError, build_news_client, normalize_news
 from pulsedeck_hub.config import NewsConfig, news_config_from_mapping
 
 
 def _query(url: str) -> dict[str, list[str]]:
     return parse_qs(urlparse(url).query)
+
+
+@pytest.fixture(autouse=True)
+def _disable_real_gnews_waits(monkeypatch):
+    # Network-shape unit tests should not spend real time waiting on the production pacer.
+    monkeypatch.setattr(news_module, "_GNEWS_RATE_LIMITER", news_module._RequestRateLimiter(0.0))
+
+
+def test_gnews_rate_limiter_enforces_quiet_period(monkeypatch) -> None:
+    clock = [100.0]
+    sleeps = []
+
+    monkeypatch.setattr(news_module.time, "monotonic", lambda: clock[0])
+
+    def fake_sleep(delay: float) -> None:
+        sleeps.append(delay)
+        clock[0] += delay
+
+    monkeypatch.setattr(news_module.time, "sleep", fake_sleep)
+    limiter = news_module._RequestRateLimiter(1.10)
+    starts = []
+    limiter.run(lambda: starts.append(clock[0]))
+    limiter.run(lambda: starts.append(clock[0]))
+
+    assert starts[0] == 100.0
+    assert starts[1] == pytest.approx(101.10)
+    assert sleeps == [pytest.approx(1.10)]
 
 
 def test_news_defaults_match_live_top_headlines() -> None:

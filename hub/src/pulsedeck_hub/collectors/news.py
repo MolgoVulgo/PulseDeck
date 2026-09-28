@@ -34,6 +34,30 @@ class _RejectRedirects(HTTPRedirectHandler):
         return None
 
 
+class _RequestRateLimiter:
+    """Serialize provider calls and keep a minimum quiet period between them."""
+
+    def __init__(self, min_interval: float) -> None:
+        self.min_interval = float(min_interval)
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def run(self, operation):  # type: ignore[no-untyped-def]
+        with self._lock:
+            delay = self._next_allowed - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            try:
+                return operation()
+            finally:
+                # GNews Free allows one request per second. Keep a small margin and
+                # measure from completion so test/save/collector calls cannot burst.
+                self._next_allowed = time.monotonic() + self.min_interval
+
+
+_GNEWS_RATE_LIMITER = _RequestRateLimiter(1.10)
+
+
 class _BaseNewsClient:
     provider_name = "News provider"
 
@@ -120,7 +144,7 @@ class NewsAPIClient(_BaseNewsClient):
             url,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "PulseDeck/0.4.2",
+                "User-Agent": "PulseDeck/0.4.3",
                 "X-Api-Key": self._api_key(),
             },
         )
@@ -178,11 +202,11 @@ class GNewsClient(_BaseNewsClient):
             url,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "PulseDeck/0.4.2",
+                "User-Agent": "PulseDeck/0.4.3",
                 "X-Api-Key": self._api_key(),
             },
         )
-        raw = self._read_json(request)
+        raw = _GNEWS_RATE_LIMITER.run(lambda: self._read_json(request))
         if not isinstance(raw.get("articles"), list):
             raise NewsError("GNews response contains no articles array")
         return raw
