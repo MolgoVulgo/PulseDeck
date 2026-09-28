@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/pulsedeck /etc/pulsedeck
+ReadWritePaths=/var/lib/pulsedeck /etc/pulsedeck /var/lib/pulsedeck-updater/inbox
 
 [Install]
 WantedBy=multi-user.target

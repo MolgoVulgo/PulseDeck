@@ -98,6 +98,8 @@ Le déployeur du hub :
 - prépare `/etc/pulsedeck/secrets/` ;
 - active PulseDeck Admin sur l’IPv4 LAN détectée, port `8080` ;
 - installe/met à jour le lanceur maître persistant `/usr/local/sbin/pulsedeck` ;
+- installe le worker root `/usr/local/libexec/pulsedeck-updater` ainsi que `pulsedeck-updater.service` / `pulsedeck-updater.path` ;
+- active le watcher updater sans donner de privilèges root au processus hub ;
 - installe et redémarre `pulsedeck-hub.service` ;
 - valide l’état runtime.
 
@@ -112,8 +114,13 @@ Layout runtime :
 /etc/pulsedeck/secrets/
 /var/lib/pulsedeck
 /var/lib/pulsedeck/installer/scripts
+/var/lib/pulsedeck-updater/inbox
+/var/lib/pulsedeck-updater/status
 /usr/local/sbin/pulsedeck
+/usr/local/libexec/pulsedeck-updater
 /etc/systemd/system/pulsedeck-hub.service
+/etc/systemd/system/pulsedeck-updater.service
+/etc/systemd/system/pulsedeck-updater.path
 ```
 
 ## Web Admin après installation
@@ -134,4 +141,4 @@ sudo pulsedeck --bootstrap-only
 pulsedeck --check --verbose
 ```
 
-Une mise à jour normale du hub conserve les réglages et secrets runtime des collectors.
+Une mise à jour normale du hub conserve les réglages et secrets runtime des collectors. Lorsque le checker stable/dev détecte une cible plus récente, PulseDeck Admin peut mettre en file l’installation du canal actuellement actif. Le processus Web écrit uniquement une demande contrainte ; l’updater root séparé la valide puis invoque le chemin fixe du lanceur maître. Le rollback et un cache de releases versionnées restent reportés à une étape ultérieure.

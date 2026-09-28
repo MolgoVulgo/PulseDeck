@@ -2,8 +2,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import stat
 
-from pulsedeck_hub.update import UpdateChecker, load_install_metadata, parse_semver
+import pytest
+
+from pulsedeck_hub.update import (
+    UpdateChecker,
+    load_install_metadata,
+    load_update_install_status,
+    parse_semver,
+    queue_update_request,
+)
 
 
 DEV_SHA = "1" * 40
@@ -151,3 +160,83 @@ def test_checker_failure_is_non_fatal_state(tmp_path: Path) -> None:
     assert state["state"] == "error"
     assert state["error"] == "network down"
     assert state["latest_version"] is None
+
+
+def test_queue_update_request_is_atomic_and_channel_scoped(tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    request_path = inbox / "request.json"
+
+    payload = queue_update_request("dev", request_path=request_path)
+
+    stored = json.loads(request_path.read_text(encoding="utf-8"))
+    assert stored == payload
+    assert stored["schema"] == 1
+    assert stored["action"] == "install"
+    assert stored["channel"] == "dev"
+    assert len(stored["request_id"]) == 32
+    assert stat.S_IMODE(request_path.stat().st_mode) == 0o640
+    assert list(inbox.glob(".request.*.tmp")) == []
+
+    with pytest.raises(FileExistsError):
+        queue_update_request("dev", request_path=request_path)
+
+
+def test_queue_update_request_rejects_manual_channel(tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    with pytest.raises(ValueError):
+        queue_update_request("manual", request_path=inbox / "request.json")
+
+
+def test_install_status_reports_queue_then_root_result(tmp_path: Path) -> None:
+    request_path = tmp_path / "inbox" / "request.json"
+    status_path = tmp_path / "status" / "status.json"
+    request_path.parent.mkdir()
+    status_path.parent.mkdir()
+
+    queued = queue_update_request("stable", request_path=request_path)
+    state = load_update_install_status(request_path=request_path, status_path=status_path)
+    assert state["state"] == "queued"
+    assert state["request_id"] == queued["request_id"]
+    assert state["channel"] == "stable"
+
+    request_path.unlink()
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "state": "succeeded",
+                "request_id": queued["request_id"],
+                "channel": "stable",
+                "message": "Update installed",
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = load_update_install_status(request_path=request_path, status_path=status_path)
+    assert state["state"] == "succeeded"
+    assert state["request_id"] == queued["request_id"]
+
+
+def test_running_root_status_wins_over_request_file(tmp_path: Path) -> None:
+    request_path = tmp_path / "inbox" / "request.json"
+    status_path = tmp_path / "status" / "status.json"
+    request_path.parent.mkdir()
+    status_path.parent.mkdir()
+    queued = queue_update_request("dev", request_path=request_path)
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "state": "running",
+                "request_id": queued["request_id"],
+                "channel": "dev",
+                "message": "Update in progress",
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = load_update_install_status(request_path=request_path, status_path=status_path)
+    assert state["state"] == "running"
+    assert state["request_id"] == queued["request_id"]

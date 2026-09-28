@@ -93,6 +93,9 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="security"' in ADMIN_HTML
     assert 'Current <span class="hint">minutes</span>' in ADMIN_HTML
     assert 'Daily <span class="hint">minutes</span>' in ADMIN_HTML
+    assert 'id="installUpdateButton"' in ADMIN_HTML
+    assert '/api/update/install' in ADMIN_HTML
+    assert 'Installer la mise à jour' in ADMIN_HTML
 
 
 def test_news_section_round_trip(tmp_path: Path) -> None:

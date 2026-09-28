@@ -23,7 +23,8 @@ The local user is `admin`. The first Web-enabled deployment generates a random i
 - mutation guard and same-origin verification;
 - CSP, anti-frame, no-sniff and no-store headers;
 - service API keys are never returned in clear text after storage;
-- no privileged system command is exposed through the UI.
+- the Web process remains unprivileged; update installation is delegated to a separate root `pulsedeck-updater.service` triggered by `pulsedeck-updater.path`;
+- the browser cannot submit a shell command, Git ref or arbitrary channel: Web Admin can only queue the already active `stable` or `dev` channel after the update checker reports it as available.
 
 Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Internet.
 
@@ -34,6 +35,7 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 - News — selectable NewsAPI/GNews provider, provider-specific endpoint/filter configuration, provider test and hot reload;
 - Services — common collector catalog for implemented and planned services;
 - Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Admin filters;
+- Updates — stable/dev checker state and installation of a verified update for the currently active channel;
 - Security — local admin password change.
 
 ## Runtime logs
@@ -55,4 +57,16 @@ For Weather and News, Admin validates submitted configuration and tests the remo
 /var/lib/pulsedeck/admin/session.key
 ```
 
-`pulsedeck-hub.service` keeps `ProtectSystem=strict` while explicitly allowing writes to `/etc/pulsedeck` and `/var/lib/pulsedeck`.
+`pulsedeck-hub.service` keeps `ProtectSystem=strict`. Its update privilege is limited to writing one strict request contract under `/var/lib/pulsedeck-updater/inbox`; it cannot write the updater status directory or execute the root worker directly.
+
+The privileged updater uses:
+
+```text
+/var/lib/pulsedeck-updater/inbox/request.json
+/var/lib/pulsedeck-updater/status/status.json
+/usr/local/libexec/pulsedeck-updater
+/etc/systemd/system/pulsedeck-updater.service
+/etc/systemd/system/pulsedeck-updater.path
+```
+
+The root worker accepts only fresh `install` requests for `stable` or `dev`, validates file ownership/permissions and the root-owned master launcher, then executes the fixed `pulsedeck --channel <stable|dev> --hub-only --non-interactive` path. Rollback and versioned release caching are intentionally deferred.

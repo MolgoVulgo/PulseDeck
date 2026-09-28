@@ -1,0 +1,10 @@
+# Managed by PulseDeck deploy_hub.sh
+[Unit]
+Description=Watch for PulseDeck Web Admin update requests
+
+[Path]
+PathExists=/var/lib/pulsedeck-updater/inbox/request.json
+Unit=pulsedeck-updater.service
+
+[Install]
+WantedBy=multi-user.target

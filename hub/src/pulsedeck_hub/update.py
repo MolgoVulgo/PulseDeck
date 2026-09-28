@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 import json
 import logging
+import os
 from pathlib import Path
 import re
+import secrets
 import threading
 import time
 from typing import Any
@@ -22,6 +24,9 @@ DEFAULT_DEV_BRANCH = "dev"
 DEFAULT_TIMEOUT = 5.0
 MAX_RELEASE_NOTES = 8000
 INSTALL_METADATA_PATH = Path("/var/lib/pulsedeck/installer/current.json")
+UPDATER_ROOT = Path("/var/lib/pulsedeck-updater")
+UPDATE_REQUEST_PATH = UPDATER_ROOT / "inbox" / "request.json"
+UPDATE_STATUS_PATH = UPDATER_ROOT / "status" / "status.json"
 SEMVER_RE = re.compile(r"^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -96,6 +101,85 @@ def load_install_metadata(path: Path = INSTALL_METADATA_PATH) -> dict[str, Any]:
     channel = payload.get("channel")
     if channel not in {"stable", "dev", "manual"}:
         return {"channel": "stable", "metadata_error": "unsupported channel metadata"}
+    return payload
+
+
+def load_update_install_status(
+    request_path: Path = UPDATE_REQUEST_PATH,
+    status_path: Path = UPDATE_STATUS_PATH,
+) -> dict[str, Any]:
+    """Return the privileged updater state without granting the hub write access to it."""
+    status: dict[str, Any] | None = None
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        payload = None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        LOG.warning("Unable to read updater status %s: %s", status_path, exc)
+        payload = {"state": "error", "message": "Updater status is unreadable"}
+    if isinstance(payload, dict):
+        state = payload.get("state")
+        if state in {"running", "succeeded", "failed", "error"}:
+            status = dict(payload)
+
+    if status is not None and status.get("state") == "running":
+        return status
+
+    try:
+        request_payload = json.loads(request_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        request_payload = None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        request_payload = {"channel": None, "request_id": None}
+    if isinstance(request_payload, dict):
+        return {
+            "state": "queued",
+            "channel": request_payload.get("channel"),
+            "request_id": request_payload.get("request_id"),
+            "requested_at": request_payload.get("requested_at"),
+        }
+
+    return status or {"state": "idle"}
+
+
+def queue_update_request(
+    channel: str,
+    request_path: Path = UPDATE_REQUEST_PATH,
+) -> dict[str, Any]:
+    """Queue one stable/dev install request for the root-owned systemd updater."""
+    if channel not in {"stable", "dev"}:
+        raise ValueError("Only stable or dev channels can be installed from Web Admin")
+    request_dir = request_path.parent
+    if not request_dir.is_dir():
+        raise RuntimeError("Privileged updater inbox is not installed")
+    if request_path.exists():
+        raise FileExistsError("An update request is already queued")
+
+    request_id = secrets.token_hex(16)
+    payload = {
+        "schema": 1,
+        "action": "install",
+        "channel": channel,
+        "request_id": request_id,
+        "requested_at": int(time.time()),
+    }
+    temp_path = request_dir / f".request.{request_id}.tmp"
+    fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temp_path, request_path)
+        except FileExistsError as exc:
+            raise FileExistsError("An update request is already queued") from exc
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
     return payload
 
 

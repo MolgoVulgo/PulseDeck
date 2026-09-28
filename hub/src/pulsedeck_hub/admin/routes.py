@@ -25,6 +25,7 @@ from ..config import (
     weather_config_from_mapping,
 )
 from ..logging_setup import LOG_SERVICES, recent_logs
+from ..update import load_update_install_status, queue_update_request
 from .catalog import build_service_catalog
 from .security import (
     COOKIE_NAME,
@@ -295,16 +296,41 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             "system": _system_metrics(),
         }
 
+    def update_payload() -> dict[str, Any]:
+        payload = runtime.update_checker.snapshot()
+        payload["installer"] = load_update_install_status()
+        return payload
+
     @app.get("/api/update")
     def update_status(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
-        return runtime.update_checker.snapshot()
+        return update_payload()
 
     @app.post("/api/update/check")
     def update_check(request: Request) -> dict[str, Any]:
         _require_mutation_guard(request, session_key)
         runtime.update_checker.trigger()
-        return runtime.update_checker.snapshot()
+        return update_payload()
+
+    @app.post("/api/update/install", status_code=202)
+    def update_install(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        snapshot = runtime.update_checker.snapshot()
+        if snapshot.get("state") != "available":
+            raise _json_error(409, "No verified update is currently available")
+        channel = snapshot.get("channel")
+        if channel not in {"stable", "dev"}:
+            raise _json_error(409, "This installation channel cannot be updated from Web Admin")
+        try:
+            queued = queue_update_request(channel)
+        except FileExistsError as exc:
+            raise _json_error(409, str(exc)) from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            LOG.error("Unable to queue privileged update: %s", exc)
+            raise _json_error(503, str(exc)) from exc
+        payload = update_payload()
+        payload["request"] = queued
+        return payload
 
     @app.get("/api/services")
     def services(request: Request) -> dict[str, Any]:
