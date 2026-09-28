@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
-# PulseDeck master installer launcher — patch_0010-1
-# Persistent entry point: refreshes installer scripts from GitHub, then runs setup_pi.sh.
+# PulseDeck master installer launcher — git-003
+# Stable channel follows immutable GitHub Releases; dev follows an immutable SHA resolved from branch dev.
 
 set -u
 set -o pipefail
 
-REF="${PULSEDECK_REF:-main}"
 REPO="${PULSEDECK_GITHUB_REPO:-MolgoVulgo/PulseDeck}"
 INSTALL_PATH="${PULSEDECK_MASTER_PATH:-/usr/local/sbin/pulsedeck}"
 SYSTEM_CACHE="${PULSEDECK_INSTALLER_CACHE:-/var/lib/pulsedeck/installer}"
+METADATA_PATH="${SYSTEM_CACHE}/current.json"
+DEV_BRANCH="${PULSEDECK_DEV_BRANCH:-dev}"
+CHANNEL="${PULSEDECK_CHANNEL:-}"
+LEGACY_ENV_REF="${PULSEDECK_REF:-}"
+PINNED_COMMIT="${PULSEDECK_PINNED_COMMIT:-}"
+RESOLVED_REF="${PULSEDECK_RESOLVED_REF:-}"
+RESOLVED_COMMIT="${PULSEDECK_RESOLVED_COMMIT:-}"
+EXPLICIT_REF=""
+CHANNEL_EXPLICIT=0
 CHECK_ONLY=0
 OFFLINE=0
 PASSTHRU=()
 TEMP_DIR=""
+ORIGINAL_ARGS=("$@")
 
 info() { printf '[INFO] %s\n' "$*"; }
 ok() { printf '[OK]   %s\n' "$*"; }
@@ -26,57 +35,233 @@ cleanup() {
 trap cleanup EXIT
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage: pulsedeck [options passed to setup_pi.sh]
 
-Master launcher behavior:
-  1. fetch the current PulseDeck installer scripts from GitHub;
-  2. validate their shell syntax;
-  3. replace the cached copies only when content changed;
-  4. update /usr/local/sbin/pulsedeck itself when needed;
-  5. execute the refreshed setup_pi.sh.
+Update channels:
+  stable  Default production channel. Resolves the latest stable GitHub Release,
+          then pins every installer script to that release commit SHA.
+  dev     Development channel. Resolves branch "dev" once, then pins every
+          installer script to that exact commit SHA. No GitHub Release is used.
 
 Common options:
-  --check              Validate without changing the PulseDeck system runtime.
-  --hub-only           Update/check only pulsedeck-hub.
-  --bootstrap-only     Update/check only the MQTT/system base.
-  --verbose            Extra diagnostics.
-  --non-interactive    Never prompt.
-  --ref REF            Use another Git branch/tag.
-  --offline            Skip GitHub refresh and use the cached scripts.
-  --help               Show this help.
+  --channel stable|dev  Select the update channel.
+  --check               Validate without changing the PulseDeck system runtime.
+  --hub-only            Update/check only pulsedeck-hub.
+  --bootstrap-only      Update/check only the MQTT/system base.
+  --verbose             Extra diagnostics.
+  --non-interactive     Never prompt.
+  --offline             Skip GitHub resolution/refresh and use the selected
+                        channel's cached scripts.
+  --ref REF             Legacy/diagnostic override. REF is resolved once to a
+                        commit SHA. "--ref dev" is treated as the dev channel.
+  --help                Show this help.
 
-After the first installation, this command replaces repeated curl downloads of
-setup_pi.sh. Internet access is only required when refreshing installer scripts
-or when the selected deployment itself needs it.
-EOF
+Without --channel, PulseDeck reuses the installed stable/dev channel recorded
+in /var/lib/pulsedeck/installer/current.json. If no metadata exists, stable is
+used. The Git repository is not required on the Raspberry Pi.
+USAGE
 }
 
 while (($#)); do
   case "$1" in
     --check) CHECK_ONLY=1; PASSTHRU+=("$1"); shift ;;
     --offline) OFFLINE=1; shift ;;
+    --channel)
+      [[ $# -ge 2 ]] || { fail 'Missing value for --channel'; exit 64; }
+      case "$2" in stable|dev) CHANNEL="$2"; CHANNEL_EXPLICIT=1 ;; *) fail 'Channel must be stable or dev'; exit 64 ;; esac
+      shift 2 ;;
     --ref)
       [[ $# -ge 2 ]] || { fail 'Missing value for --ref'; exit 64; }
-      REF="$2"; PASSTHRU+=("--ref" "$2"); shift 2 ;;
+      EXPLICIT_REF="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) PASSTHRU+=("$1"); shift ;;
   esac
 done
 
+if [[ -n "$EXPLICIT_REF" && "$CHANNEL_EXPLICIT" == "1" ]]; then
+  fail '--ref and --channel cannot be combined'
+  exit 64
+fi
+
 if (( CHECK_ONLY == 0 )) && (( EUID != 0 )); then
   if command_exists sudo; then
     info 'Root privileges required; re-executing master launcher with sudo'
-    sudo_args=("${PASSTHRU[@]}")
-    (( OFFLINE )) && sudo_args+=(--offline)
     exec sudo env \
-      PULSEDECK_REF="$REF" \
       PULSEDECK_GITHUB_REPO="$REPO" \
       PULSEDECK_INSTALLER_CACHE="$SYSTEM_CACHE" \
-      bash "$0" "${sudo_args[@]}"
+      PULSEDECK_DEV_BRANCH="$DEV_BRANCH" \
+      bash "$0" "${ORIGINAL_ARGS[@]}"
   fi
   fail 'Apply mode requires root and sudo is unavailable'
   exit 1
+fi
+
+read_installed_channel() {
+  [[ -r "$METADATA_PATH" ]] || return 1
+  python - "$METADATA_PATH" <<'PY' 2>/dev/null
+import json, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, ValueError, TypeError):
+    raise SystemExit(1)
+channel = data.get("channel")
+if channel not in {"stable", "dev"}:
+    raise SystemExit(1)
+print(channel)
+PY
+}
+
+if [[ -n "$EXPLICIT_REF" ]]; then
+  if [[ "$EXPLICIT_REF" == "$DEV_BRANCH" ]]; then
+    CHANNEL="dev"
+  else
+    CHANNEL="manual"
+  fi
+elif [[ -z "$CHANNEL" ]]; then
+  if [[ -n "$LEGACY_ENV_REF" && "$LEGACY_ENV_REF" != "main" ]]; then
+    EXPLICIT_REF="$LEGACY_ENV_REF"
+    if [[ "$EXPLICIT_REF" == "$DEV_BRANCH" ]]; then CHANNEL="dev"; else CHANNEL="manual"; fi
+  else
+    CHANNEL="$(read_installed_channel || true)"
+    [[ -n "$CHANNEL" ]] || CHANNEL="stable"
+  fi
+fi
+
+case "$CHANNEL" in stable|dev|manual) ;; *) fail "Invalid resolved channel: $CHANNEL"; exit 64 ;; esac
+
+if [[ "$CHANNEL" == "manual" && -z "$EXPLICIT_REF" ]]; then
+  fail 'Manual channel requires --ref REF'
+  exit 64
+fi
+
+resolve_target() {
+  if [[ -n "$PINNED_COMMIT" ]]; then
+    [[ "$PINNED_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || { fail 'Invalid pinned commit SHA'; return 1; }
+    RESOLVED_COMMIT="${PINNED_COMMIT,,}"
+    [[ -n "$RESOLVED_REF" ]] || RESOLVED_REF="$CHANNEL"
+    return 0
+  fi
+
+  command_exists python || { fail 'Python is required to resolve GitHub refs'; return 1; }
+  local output status
+  output="$(python - "$REPO" "$CHANNEL" "$DEV_BRANCH" "$EXPLICIT_REF" <<'PY'
+from __future__ import annotations
+import json
+import re
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+repo, channel, dev_branch, manual_ref = sys.argv[1:5]
+if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+    raise SystemExit("invalid repository")
+headers = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "PulseDeck-Installer/git-003",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
+
+def get(path: str):
+    req = urllib.request.Request(f"https://api.github.com/repos/{repo}/{path}", headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise SystemExit(f"GitHub HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"GitHub unavailable: {exc.reason}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SystemExit("GitHub returned invalid JSON") from exc
+
+def commit_for(ref: str) -> str:
+    payload = get("commits/" + urllib.parse.quote(ref, safe=""))
+    sha = payload.get("sha") if isinstance(payload, dict) else None
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+        raise SystemExit("GitHub returned an invalid commit SHA")
+    return sha.lower()
+
+if channel == "stable":
+    release = get("releases/latest")
+    tag = release.get("tag_name") if isinstance(release, dict) else None
+    if not isinstance(tag, str) or not re.fullmatch(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", tag):
+        raise SystemExit("Latest GitHub Release has no valid stable tag")
+    print(tag)
+    print(commit_for(tag))
+elif channel == "dev":
+    print(dev_branch)
+    print(commit_for(dev_branch))
+elif channel == "manual":
+    if not manual_ref:
+        raise SystemExit("manual ref missing")
+    print(manual_ref)
+    print(commit_for(manual_ref))
+else:
+    raise SystemExit("unsupported channel")
+PY
+)"
+  status=$?
+  if (( status != 0 )); then
+    fail "Unable to resolve ${CHANNEL} target"
+    return 1
+  fi
+  RESOLVED_REF="$(sed -n '1p' <<<"$output")"
+  RESOLVED_COMMIT="$(sed -n '2p' <<<"$output")"
+  [[ -n "$RESOLVED_REF" && "$RESOLVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+    fail 'GitHub target resolution returned invalid data'; return 1;
+  }
+}
+
+load_offline_metadata() {
+  [[ -r "$METADATA_PATH" ]] || return 1
+  local output
+  output="$(python - "$METADATA_PATH" "$CHANNEL" <<'PY' 2>/dev/null
+import json,re,sys
+try:
+    data=json.load(open(sys.argv[1],encoding="utf-8"))
+except (OSError,ValueError,TypeError):
+    raise SystemExit(1)
+if data.get("channel") != sys.argv[2]:
+    raise SystemExit(1)
+ref=data.get("resolved_ref") or data.get("branch") or data.get("tag_name") or data.get("channel")
+commit=data.get("commit")
+if not isinstance(ref,str) or not isinstance(commit,str) or not re.fullmatch(r"[0-9a-fA-F]{40}",commit):
+    raise SystemExit(1)
+print(ref); print(commit.lower())
+PY
+)" || return 1
+  RESOLVED_REF="$(sed -n '1p' <<<"$output")"
+  RESOLVED_COMMIT="$(sed -n '2p' <<<"$output")"
+  return 0
+}
+
+if (( OFFLINE == 0 )); then
+  resolve_target || exit 1
+  info "Resolved PulseDeck channel ${CHANNEL}: ${RESOLVED_REF} -> ${RESOLVED_COMMIT:0:12}"
+else
+  if load_offline_metadata; then
+    info "Offline mode: using recorded ${CHANNEL} target ${RESOLVED_COMMIT:0:12}"
+  else
+    warn "Offline mode: no matching installed commit metadata for channel ${CHANNEL}"
+  fi
+fi
+
+TEMP_DIR="$(mktemp -d)" || { fail 'mktemp failed'; exit 1; }
+if (( CHECK_ONLY == 1 && OFFLINE == 0 )); then
+  CACHE_DIR="${TEMP_DIR}/scripts"
+else
+  CACHE_DIR="${SYSTEM_CACHE}/${CHANNEL}/scripts"
+fi
+
+if (( OFFLINE == 1 )); then
+  if [[ ! -d "$CACHE_DIR" && -d "${SYSTEM_CACHE}/scripts" ]]; then
+    warn "Using legacy installer cache: ${SYSTEM_CACHE}/scripts"
+    CACHE_DIR="${SYSTEM_CACHE}/scripts"
+  fi
+  [[ -d "$CACHE_DIR" ]] || { fail "Offline installer cache is missing: $CACHE_DIR"; exit 1; }
+else
+  mkdir -p "$CACHE_DIR" || { fail "Cannot create installer cache: $CACHE_DIR"; exit 1; }
 fi
 
 download_file() {
@@ -90,7 +275,8 @@ download_file() {
 import sys
 import urllib.request
 url, dest = sys.argv[1:3]
-with urllib.request.urlopen(url, timeout=15) as response, open(dest, "wb") as handle:
+request = urllib.request.Request(url, headers={"User-Agent": "PulseDeck-Installer/git-003"})
+with urllib.request.urlopen(request, timeout=15) as response, open(dest, "wb") as handle:
     handle.write(response.read())
 PY
   else
@@ -98,29 +284,15 @@ PY
   fi
 }
 
-TEMP_DIR="$(mktemp -d)" || { fail 'mktemp failed'; exit 1; }
-if (( CHECK_ONLY == 1 && OFFLINE == 0 )); then
-  CACHE_DIR="${TEMP_DIR}/scripts"
-elif (( EUID == 0 )); then
-  CACHE_DIR="$SYSTEM_CACHE/scripts"
-else
-  CACHE_DIR="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/pulsedeck/installer/scripts"
-fi
-if (( CHECK_ONLY == 1 && OFFLINE == 1 )); then
-  [[ -d "$CACHE_DIR" ]] || { fail "Offline installer cache is missing: $CACHE_DIR"; exit 1; }
-else
-  mkdir -p "$CACHE_DIR" || { fail "Cannot create installer cache: $CACHE_DIR"; exit 1; }
-fi
-
 scripts=(pulsedeck.sh setup_pi.sh bootstrap_pi.sh deploy_hub.sh)
 
 if (( OFFLINE == 0 )); then
-  info "Refreshing PulseDeck installer scripts from ${REPO}@${REF}"
+  info "Refreshing PulseDeck installer scripts from ${REPO}@${RESOLVED_COMMIT} (${CHANNEL})"
   for name in "${scripts[@]}"; do
-    url="https://raw.githubusercontent.com/${REPO}/${REF}/scripts/${name}"
+    url="https://raw.githubusercontent.com/${REPO}/${RESOLVED_COMMIT}/scripts/${name}"
     candidate="${TEMP_DIR}/${name}"
     if ! download_file "$url" "$candidate" || [[ ! -s "$candidate" ]]; then
-      fail "Unable to download ${name}"
+      fail "Unable to download ${name} from commit ${RESOLVED_COMMIT}"
       exit 1
     fi
     if ! bash -n "$candidate"; then
@@ -147,7 +319,16 @@ if (( OFFLINE == 0 )); then
       install -m 0755 "$remote_master" "$INSTALL_PATH" || { fail "Cannot install master launcher at ${INSTALL_PATH}"; exit 1; }
       ok "Master launcher installed/updated: ${INSTALL_PATH}"
       if [[ "${PULSEDECK_MASTER_REEXEC:-0}" != "1" ]]; then
-        exec env PULSEDECK_MASTER_REEXEC=1 PULSEDECK_REF="$REF" PULSEDECK_GITHUB_REPO="$REPO" "$INSTALL_PATH" "${PASSTHRU[@]}"
+        exec env \
+          PULSEDECK_MASTER_REEXEC=1 \
+          PULSEDECK_CHANNEL="$CHANNEL" \
+          PULSEDECK_GITHUB_REPO="$REPO" \
+          PULSEDECK_INSTALLER_CACHE="$SYSTEM_CACHE" \
+          PULSEDECK_DEV_BRANCH="$DEV_BRANCH" \
+          PULSEDECK_PINNED_COMMIT="$RESOLVED_COMMIT" \
+          PULSEDECK_RESOLVED_REF="$RESOLVED_REF" \
+          PULSEDECK_RESOLVED_COMMIT="$RESOLVED_COMMIT" \
+          "$INSTALL_PATH" "${ORIGINAL_ARGS[@]}"
       fi
     fi
   fi
@@ -162,7 +343,11 @@ for name in setup_pi.sh bootstrap_pi.sh deploy_hub.sh; do
 done
 
 exec env \
-  PULSEDECK_REF="$REF" \
+  PULSEDECK_REF="${RESOLVED_COMMIT:-${RESOLVED_REF:-$CHANNEL}}" \
   PULSEDECK_GITHUB_REPO="$REPO" \
   PULSEDECK_MASTER=1 \
+  PULSEDECK_CHANNEL="$CHANNEL" \
+  PULSEDECK_DEV_BRANCH="$DEV_BRANCH" \
+  PULSEDECK_RESOLVED_REF="$RESOLVED_REF" \
+  PULSEDECK_RESOLVED_COMMIT="$RESOLVED_COMMIT" \
   bash "${CACHE_DIR}/setup_pi.sh" --source-dir "$CACHE_DIR" "${PASSTHRU[@]}"
