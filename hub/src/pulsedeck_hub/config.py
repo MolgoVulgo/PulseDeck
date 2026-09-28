@@ -9,11 +9,9 @@ import tomllib
 
 DEFAULT_CONFIG_PATH = Path("/etc/pulsedeck/pulsedeck.toml")
 DEFAULT_OPENWEATHER_KEY_PATH = Path("/etc/pulsedeck/secrets/openweather_api_key")
-DEFAULT_GNEWS_KEY_PATH = Path("/etc/pulsedeck/secrets/gnews_api_key")
+DEFAULT_NEWSAPI_KEY_PATH = Path("/etc/pulsedeck/secrets/newsapi_api_key")
 NEWS_CATEGORIES = {
     "general",
-    "world",
-    "nation",
     "business",
     "technology",
     "entertainment",
@@ -21,7 +19,7 @@ NEWS_CATEGORIES = {
     "science",
     "health",
 }
-NEWS_MODES = {"top-headlines", "search"}
+NEWS_MODES = {"top-headlines", "everything"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +64,7 @@ class WeatherConfig:
 @dataclass(frozen=True, slots=True)
 class NewsConfig:
     enabled: bool = False
-    provider: str = "gnews"
+    provider: str = "newsapi"
     mode: str = "top-headlines"
     category: str = "general"
     query: str = ""
@@ -75,7 +73,7 @@ class NewsConfig:
     max_articles: int = 10
     interval: int = 1800
     request_timeout: int = 15
-    api_key_file: Path = DEFAULT_GNEWS_KEY_PATH
+    api_key_file: Path = DEFAULT_NEWSAPI_KEY_PATH
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,13 +169,13 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
         raise ValueError("[collectors.news] must be a table")
 
     enabled = _bool(raw.get("enabled", False), "collectors.news.enabled")
-    provider = raw.get("provider", "gnews")
-    if not isinstance(provider, str) or provider != "gnews":
-        raise ValueError("collectors.news.provider must be 'gnews'")
+    provider = raw.get("provider", "newsapi")
+    if not isinstance(provider, str) or provider != "newsapi":
+        raise ValueError("collectors.news.provider must be 'newsapi'")
 
     mode = raw.get("mode", "top-headlines")
     if not isinstance(mode, str) or mode not in NEWS_MODES:
-        raise ValueError("collectors.news.mode must be 'top-headlines' or 'search'")
+        raise ValueError("collectors.news.mode must be 'top-headlines' or 'everything'")
     category = raw.get("category", "general")
     if not isinstance(category, str) or category not in NEWS_CATEGORIES:
         raise ValueError("collectors.news.category is unsupported")
@@ -185,12 +183,12 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
     if not isinstance(query, str):
         raise ValueError("collectors.news.query must be a string")
     query = query.strip()
-    if len(query) > 200:
-        raise ValueError("collectors.news.query must be <= 200 characters")
-    if mode == "search" and not query:
-        raise ValueError("collectors.news.query is required in search mode")
+    if len(query) > 500:
+        raise ValueError("collectors.news.query must be <= 500 characters")
+    if mode == "everything" and not query:
+        raise ValueError("collectors.news.query is required in everything mode")
 
-    api_key_file = raw.get("api_key_file", str(DEFAULT_GNEWS_KEY_PATH))
+    api_key_file = raw.get("api_key_file", str(DEFAULT_NEWSAPI_KEY_PATH))
     if not isinstance(api_key_file, str) or not api_key_file.strip():
         raise ValueError("collectors.news.api_key_file must be a non-empty string")
 

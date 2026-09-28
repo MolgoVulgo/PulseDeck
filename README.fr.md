@@ -96,15 +96,15 @@ Voir [`docs/pi/fr/WEATHER.md`](docs/pi/fr/WEATHER.md).
 
 ## News
 
-News V1 utilise **GNews API v4** en HTTPS avec authentification fournisseur dans l’en-tête HTTP :
+News V1 utilise **NewsAPI v2** en HTTPS avec authentification fournisseur dans l’en-tête HTTP :
 
 ```text
 X-Api-Key: <secret>
 ```
 
-La clé n’est jamais ajoutée à la query string. PulseDeck prend en charge `top-headlines` et `search`, normalise les métadonnées d’articles, exclut volontairement le champ fournisseur `content`, puis publie un snapshot retained compact sur `pulsedeck/v1/news/latest`.
+La clé n’est jamais ajoutée à la query string. PulseDeck prend en charge `top-headlines` et `everything`, normalise les métadonnées d’articles, exclut volontairement le champ fournisseur `content`, puis publie un snapshot retained compact sur `pulsedeck/v1/news/latest`.
 
-Le secret GNews est stocké dans `/etc/pulsedeck/secrets/gnews_api_key` et se configure depuis PulseDeck Admin.
+Le secret NewsAPI est stocké dans `/etc/pulsedeck/secrets/newsapi_api_key` et se configure depuis PulseDeck Admin.
 
 Voir [`docs/pi/fr/NEWS.md`](docs/pi/fr/NEWS.md).
 
@@ -120,7 +120,7 @@ Admin fournit actuellement :
 
 - état Hub / MQTT / système ;
 - configuration Weather, test API et hot reload ;
-- configuration News, test GNews et hot reload ;
+- configuration News, test NewsAPI et hot reload ;
 - catalogue Services commun aux futurs collectors ;
 - gestion du mot de passe administrateur local.
 
@@ -128,7 +128,7 @@ Les secrets restent masqués après stockage. Les changements Weather et News so
 
 ## Installation Raspberry Pi
 
-Aucun clone Git n’est requis sur la cible.
+Aucun clone Git n’est requis sur la cible. Une cible neuve nécessite un seul téléchargement initial :
 
 ```bash
 curl -fsSL \
@@ -140,15 +140,17 @@ chmod +x setup_pi.sh
 sudo ./setup_pi.sh
 ```
 
-Mise à jour ciblée du hub :
+Cette première application installe la commande maître persistante `/usr/local/sbin/pulsedeck`. Les contrôles et mises à jour suivants utilisent directement :
 
 ```bash
-sudo ./setup_pi.sh --hub-only
+pulsedeck --check
+sudo pulsedeck
+sudo pulsedeck --hub-only
 ```
 
-L’installateur gère le socle technique. Les clés, filtres et réglages fonctionnels des collectors appartiennent à PulseDeck Admin.
+Le lanceur maître rafraîchit `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` et `deploy_hub.sh` depuis la référence Git sélectionnée, valide leur syntaxe shell et ne remplace que les copies de cache modifiées avant d’exécuter le worker `setup_pi.sh` rafraîchi. Le retéléchargement manuel de `setup_pi.sh` ne fait donc plus partie du flux normal de mise à jour.
 
-Les scripts n’exécutent jamais de mise à jour globale Arch Linux (`pacman -Sy` / `pacman -Syu`).
+L’installateur gère le socle technique. Les clés, filtres et réglages fonctionnels des collectors appartiennent à PulseDeck Admin. Les scripts n’exécutent jamais de mise à jour globale Arch Linux (`pacman -Sy` / `pacman -Syu`).
 
 ## Organisation du dépôt
 
@@ -187,7 +189,7 @@ Socle déjà réalisé :
 2. runtime minimal `pulsedeck-hub` ;
 3. collector Weather ;
 4. Web Admin ;
-5. collector News / GNews.
+5. collector News / NewsAPI.
 
 Prochaines intégrations prévues :
 

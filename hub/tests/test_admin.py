@@ -64,7 +64,7 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     assert by_id["weather"]["state"] == "online"
     assert by_id["news"]["available"] is True
     assert by_id["news"]["view"] == "news"
-    assert by_id["news"]["provider"] == "GNews"
+    assert by_id["news"]["provider"] == "NewsAPI"
     assert by_id["news"]["transport"] == "HTTPS"
     assert by_id["news"]["auth"] == "X-Api-Key"
     assert by_id["pc_gamer"]["provider"] is None
@@ -86,23 +86,23 @@ def test_news_section_round_trip(tmp_path: Path) -> None:
     base_config(path)
     config = NewsConfig(
         enabled=True,
-        mode="search",
+        mode="everything",
         query="OpenAI",
         lang="en",
         country="us",
-        api_key_file=tmp_path / "gnews_api_key",
+        api_key_file=tmp_path / "newsapi_api_key",
     )
     update_news_config(path, config)
     loaded = load_config(path)
     assert loaded.news.enabled is True
-    assert loaded.news.mode == "search"
+    assert loaded.news.mode == "everything"
     assert loaded.news.query == "OpenAI"
-    assert loaded.news.api_key_file == tmp_path / "gnews_api_key"
+    assert loaded.news.api_key_file == tmp_path / "newsapi_api_key"
     assert "[collectors.weather]" in path.read_text(encoding="utf-8")
 
 
 def test_render_news_documents_header_auth_contract() -> None:
     text = render_news_section(NewsConfig())
-    assert 'provider = "gnews"' in text
-    assert 'api_key_file = "/etc/pulsedeck/secrets/gnews_api_key"' in text
+    assert 'provider = "newsapi"' in text
+    assert 'api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"' in text
     assert "api_key =" not in text

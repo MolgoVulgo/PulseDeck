@@ -31,7 +31,7 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 
 - Dashboard — état hub, MQTT, système et collectors ;
 - Weather — configuration OpenWeather, test fournisseur et hot reload ;
-- News — configuration GNews, filtres, test fournisseur et hot reload ;
+- News — configuration NewsAPI, filtres, test fournisseur et hot reload ;
 - Services — catalogue commun des collectors implémentés et prévus ;
 - Sécurité — changement du mot de passe administrateur.
 
@@ -44,7 +44,7 @@ Pour Weather et News, Admin valide les valeurs et teste le fournisseur distant a
 ```text
 /etc/pulsedeck/pulsedeck.toml
 /etc/pulsedeck/secrets/openweather_api_key
-/etc/pulsedeck/secrets/gnews_api_key
+/etc/pulsedeck/secrets/newsapi_api_key
 /var/lib/pulsedeck/admin/password.hash
 /var/lib/pulsedeck/admin/session.key
 ```

@@ -31,7 +31,7 @@ def build_service_catalog(
             "available": True,
             "state": news_state.get("state", "disabled"),
             "enabled": news_enabled,
-            "provider": "GNews",
+            "provider": "NewsAPI",
             "transport": "HTTPS",
             "auth": "X-Api-Key",
             "view": "news",

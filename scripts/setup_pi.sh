@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0007
+# PulseDeck complete Raspberry Pi installer/orchestrator — patch_0010-1
 # Works from a repository checkout or as a standalone script downloaded from GitHub.
 
 set -u
@@ -34,6 +34,9 @@ trap cleanup EXIT
 usage() {
     cat <<'USAGE'
 Usage: ./setup_pi.sh [options]
+
+This script is the worker/orchestrator. After installation, use the persistent
+`pulsedeck` master command, which refreshes installer scripts before invoking it.
 
 Installation complète par défaut :
   1. bootstrap Raspberry Pi / Mosquitto
@@ -224,6 +227,7 @@ run_component() {
 }
 
 info "PulseDeck installation orchestrée"
+[[ "${PULSEDECK_MASTER:-0}" == "1" ]] && info "Lancé via le script maître pulsedeck (scripts rafraîchis)"
 info "Source GitHub: ${REPO}@${REF}"
 (( CHECK_ONLY )) && info "Mode --check : aucune modification demandée aux sous-scripts"
 

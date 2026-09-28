@@ -14,7 +14,7 @@ Les scripts suivent trois règles :
 
 ## Point d’entrée recommandé
 
-`setup_pi.sh` est l’installateur normal pour une cible neuve ou existante.
+Le lanceur maître persistant **`pulsedeck`** devient le point d’entrée normal après la première installation. `setup_pi.sh` reste l’orchestrateur de travail utilisé par ce lanceur. Une cible neuve nécessite un seul téléchargement initial de `setup_pi.sh` ; les mises à jour suivantes n’en ont plus besoin.
 
 ```bash
 curl -fsSL \
@@ -27,6 +27,16 @@ sudo ./setup_pi.sh
 ```
 
 Le script autonome récupère `bootstrap_pi.sh` et `deploy_hub.sh` depuis GitHub lorsqu’ils ne sont pas présents localement. Le clone du dépôt reste facultatif.
+
+Lors d’un déploiement en mode application, `deploy_hub.sh` installe `/usr/local/sbin/pulsedeck`. Ensuite :
+
+```bash
+pulsedeck --check
+sudo pulsedeck
+sudo pulsedeck --hub-only
+```
+
+Le lanceur maître vérifie sur GitHub `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` et `deploy_hub.sh`, valide leur syntaxe shell, ne remplace que les copies de cache modifiées sous `/var/lib/pulsedeck/installer/scripts/`, puis exécute le worker `setup_pi.sh` rafraîchi. `--offline` désactive explicitement le rafraîchissement GitHub et utilise le cache.
 
 Options principales :
 
@@ -55,6 +65,7 @@ Le déployeur du hub :
 - crée ou conserve `/etc/pulsedeck/pulsedeck.toml` ;
 - prépare `/etc/pulsedeck/secrets/` ;
 - active PulseDeck Admin sur l’IPv4 LAN détectée, port `8080` ;
+- installe/met à jour le lanceur maître persistant `/usr/local/sbin/pulsedeck` ;
 - installe et redémarre `pulsedeck-hub.service` ;
 - valide l’état runtime.
 
@@ -68,6 +79,8 @@ Layout runtime :
 /etc/pulsedeck/pulsedeck.toml
 /etc/pulsedeck/secrets/
 /var/lib/pulsedeck
+/var/lib/pulsedeck/installer/scripts
+/usr/local/sbin/pulsedeck
 /etc/systemd/system/pulsedeck-hub.service
 ```
 
@@ -84,9 +97,9 @@ Lors du premier déploiement Web, l’installateur crée les identifiants locaux
 ## Mises à jour ciblées
 
 ```bash
-sudo ./setup_pi.sh --hub-only
-sudo ./setup_pi.sh --bootstrap-only
-./setup_pi.sh --check --verbose
+sudo pulsedeck --hub-only
+sudo pulsedeck --bootstrap-only
+pulsedeck --check --verbose
 ```
 
 Une mise à jour normale du hub conserve les réglages et secrets runtime des collectors.

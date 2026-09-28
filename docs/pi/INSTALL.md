@@ -14,7 +14,7 @@ Deployment scripts follow three rules:
 
 ## Recommended entry point
 
-`setup_pi.sh` is the normal installer for both a fresh target and an existing installation.
+The persistent **`pulsedeck` master launcher** is the normal entry point after the first installation. `setup_pi.sh` remains the worker/orchestrator used by that launcher. A fresh target needs one bootstrap download of `setup_pi.sh`; later updates do not.
 
 ```bash
 curl -fsSL \
@@ -27,6 +27,16 @@ sudo ./setup_pi.sh
 ```
 
 The standalone script downloads `bootstrap_pi.sh` and `deploy_hub.sh` from GitHub when they are not present locally. A repository checkout is optional.
+
+During an apply deployment, `deploy_hub.sh` installs `/usr/local/sbin/pulsedeck`. On later runs:
+
+```bash
+pulsedeck --check
+sudo pulsedeck
+sudo pulsedeck --hub-only
+```
+
+The master launcher checks GitHub for `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` and `deploy_hub.sh`, validates shell syntax, updates only changed cached copies under `/var/lib/pulsedeck/installer/scripts/`, and executes the refreshed setup worker. `--offline` explicitly skips the GitHub refresh and uses the cache.
 
 Main options:
 
@@ -55,6 +65,7 @@ The hub deployer:
 - creates or preserves `/etc/pulsedeck/pulsedeck.toml`;
 - prepares `/etc/pulsedeck/secrets/`;
 - enables PulseDeck Admin on the detected LAN IPv4, port `8080`;
+- installs/updates the persistent `/usr/local/sbin/pulsedeck` master launcher;
 - installs and restarts `pulsedeck-hub.service`;
 - validates runtime availability.
 
@@ -68,6 +79,8 @@ Runtime layout:
 /etc/pulsedeck/pulsedeck.toml
 /etc/pulsedeck/secrets/
 /var/lib/pulsedeck
+/var/lib/pulsedeck/installer/scripts
+/usr/local/sbin/pulsedeck
 /etc/systemd/system/pulsedeck-hub.service
 ```
 
@@ -84,9 +97,9 @@ On the first Web-enabled deployment, the installer creates the local `admin` cre
 ## Targeted updates
 
 ```bash
-sudo ./setup_pi.sh --hub-only
-sudo ./setup_pi.sh --bootstrap-only
-./setup_pi.sh --check --verbose
+sudo pulsedeck --hub-only
+sudo pulsedeck --bootstrap-only
+pulsedeck --check --verbose
 ```
 
 A normal hub update preserves runtime collector settings and secrets.

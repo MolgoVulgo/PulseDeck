@@ -24,7 +24,7 @@ The validated reference host is a Raspberry Pi 3 Model B Plus running Arch Linux
 ## Implemented collectors
 
 - Weather — OpenWeather One Call 4.0;
-- News — GNews API v4 over HTTPS with `X-Api-Key` authentication.
+- News — NewsAPI v2 over HTTPS with `X-Api-Key` authentication.
 
 Planned collectors: PC gamer, mini server and printer.
 
@@ -35,4 +35,4 @@ Planned collectors: PC gamer, mini server and printer.
 - [`MQTT.md`](MQTT.md) — broker and topic contract;
 - [`ADMIN.md`](ADMIN.md) — local Web Admin;
 - [`WEATHER.md`](WEATHER.md) — Weather V1;
-- [`NEWS.md`](NEWS.md) — News V1 / GNews.
+- [`NEWS.md`](NEWS.md) — News V1 / NewsAPI.

@@ -19,6 +19,7 @@ project:
 architecture:
   entrypoints:
     - "hub/src/pulsedeck_hub/main.py"
+    - "scripts/pulsedeck.sh"
     - "scripts/setup_pi.sh"
     - "scripts/deploy_hub.sh"
   modules:
@@ -102,6 +103,7 @@ knowledge:
     - "MQTT foundation was live-validated on bluebox on 2026-09-27: Mosquitto active/enabled, single LAN IPv4 listener, retained persistence operational."
     - "scripts/setup_pi.sh is the complete installer orchestrator: MQTT bootstrap followed by hub deployment."
     - "setup_pi.sh can run without a clone and downloads specialized scripts from GitHub when absent locally."
+    - "From patch_0010-1, /usr/local/sbin/pulsedeck is the persistent master launcher: it refreshes pulsedeck.sh, setup_pi.sh, bootstrap_pi.sh and deploy_hub.sh from the selected Git ref, validates shell syntax, updates only changed cached copies under /var/lib/pulsedeck/installer/scripts, then executes the refreshed setup worker."
     - "Deployment scripts automate deterministic operations and only ask for information that cannot safely be derived."
     - "--non-interactive forbids questions and turns an unavoidable manual decision into an explicit failure."
     - "PulseDeck Admin V1 uses local password authentication, signed sessions, HttpOnly/SameSite=Strict cookies and remains LAN-only; V1 HTTP must not be exposed to the Internet."
@@ -113,12 +115,12 @@ knowledge:
     - "From patch_0008, scripts install the technical foundation without service-specific questions; Weather is configured in PulseDeck Admin."
     - "From patch_0009, PulseDeck Admin has Dashboard / Weather / Services / Security navigation, uniform notifications and a common service catalog."
     - "Development order after the Admin framework: News, gaming PC, Printer."
-    - "News V1 uses GNews API v4 over HTTPS only, with provider authentication sent only in X-Api-Key."
-    - "News V1 supports GNews top-headlines and search; top-headlines supports the 9 documented categories, search requires q and requests sortby=publishedAt."
+    - "News V1 uses NewsAPI v2 over HTTPS only, with provider authentication sent only in X-Api-Key."
+    - "News V1 supports NewsAPI top-headlines and everything; top-headlines supports the 7 documented categories, everything requires q and requests sortBy=publishedAt."
     - "News V1 defaults: lang=fr, country=fr, max_articles=10, interval=1800 s; configurable in PulseDeck Admin."
     - "News V1 publishes retained QoS 1 schema 1 on news/availability and news/latest; provider content is not republished."
-    - "The GNews runtime key is outside TOML at /etc/pulsedeck/secrets/gnews_api_key; PulseDeck Admin never returns it in clear text."
-    - "From patch_0010, documentation is bilingual: English primary files in README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md and docs/pi/*.md; French mirrors in *.fr.md and docs/pi/fr/*.md."
+    - "The NewsAPI runtime key is outside TOML at /etc/pulsedeck/secrets/newsapi_api_key; PulseDeck Admin never returns it in clear text."
+    - "From patch_0010-1, documentation is bilingual: English primary files in README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md and docs/pi/*.md; French mirrors in *.fr.md and docs/pi/fr/*.md."
   unresolved:
     - "Exact application payload schemas outside Weather and News."
     - "Exact cache policy."
@@ -143,10 +145,10 @@ contracts:
     - "Weather snapshots stay retained on provider errors; weather/availability carries source state."
     - "MQTT units are explicitly normalized to Celsius, hPa, percent, m/s and millimeters as applicable."
   news:
-    - "V1 provider: GNews API v4."
+    - "V1 provider: NewsAPI v2."
     - "Provider transport: HTTPS only."
     - "Provider authentication: X-Api-Key header only; the key is never put in the query string."
-    - "V1 modes: top-headlines or search; search requires query and uses sortby=publishedAt."
+    - "V1 modes: top-headlines or everything; everything requires query and uses sortBy=publishedAt."
     - "Initial V1 values: category=general, lang=fr, country=fr, max_articles=10, interval=1800 s, timeout=15 s."
     - "news/latest schema 1: feed metadata plus normalized articles; provider content deliberately excluded; publishedAt converted to Unix published_ts."
     - "news/availability and news/latest are retained QoS 1; the last valid snapshot remains available after a provider failure."
@@ -165,7 +167,7 @@ contracts:
     - "Within the current trusted home-LAN scope, MQTT V1 has no authentication, ACL or TLS."
     - "If network scope changes or MQTT carries sensitive commands, the MQTT security model must be reevaluated."
     - "The OpenWeather key is never versioned, stays confined under /etc/pulsedeck and is never returned in clear text by PulseDeck Admin."
-    - "The GNews key is never versioned, never put in provider URLs, stays at /etc/pulsedeck/secrets/gnews_api_key and is never returned in clear text by PulseDeck Admin."
+    - "The NewsAPI key is never versioned, never put in provider URLs, stays at /etc/pulsedeck/secrets/newsapi_api_key and is never returned in clear text by PulseDeck Admin."
   compatibility:
     - "Target display hardware: ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 is the UI target; exact version remains unresolved."
@@ -184,7 +186,7 @@ contracts:
 
 validation:
   commands:
-    - command: "./scripts/setup_pi.sh --check"
+    - command: "./scripts/pulsedeck.sh --check"
       scope: "complete Raspberry Pi preflight: MQTT foundation then hub runtime"
       mode: "external_or_live"
     - command: "./scripts/deploy_hub.sh --check"
@@ -217,7 +219,7 @@ security:
   secret_patterns: []
   sensitive_runtime_files:
     - "/etc/pulsedeck/secrets/openweather_api_key"
-    - "/etc/pulsedeck/secrets/gnews_api_key"
+    - "/etc/pulsedeck/secrets/newsapi_api_key"
 ```
 
 ## Status

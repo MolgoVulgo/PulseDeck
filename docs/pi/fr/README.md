@@ -24,7 +24,7 @@ La cible validée est un Raspberry Pi 3 Model B Plus sous Arch Linux ARM `armv7l
 ## Collectors implémentés
 
 - Weather — OpenWeather One Call 4.0 ;
-- News — GNews API v4 en HTTPS avec authentification `X-Api-Key`.
+- News — NewsAPI v2 en HTTPS avec authentification `X-Api-Key`.
 
 Collectors prévus : PC gamer, mini-serveur et imprimante.
 
@@ -35,4 +35,4 @@ Collectors prévus : PC gamer, mini-serveur et imprimante.
 - [`../MQTT.md`](../MQTT.md) — contrat MQTT ;
 - [`../ADMIN.md`](../ADMIN.md) — Web Admin local ;
 - [`../WEATHER.md`](../WEATHER.md) — Weather V1 ;
-- [`../NEWS.md`](../NEWS.md) — News V1 / GNews.
+- [`../NEWS.md`](../NEWS.md) — News V1 / NewsAPI.

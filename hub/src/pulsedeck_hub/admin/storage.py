@@ -73,7 +73,7 @@ def render_news_section(config: NewsConfig) -> str:
         [
             "[collectors.news]",
             f"enabled = {'true' if config.enabled else 'false'}",
-            'provider = "gnews"',
+            'provider = "newsapi"',
             f"mode = {json.dumps(config.mode)}",
             f"category = {json.dumps(config.category)}",
             f"query = {json.dumps(config.query, ensure_ascii=False)}",

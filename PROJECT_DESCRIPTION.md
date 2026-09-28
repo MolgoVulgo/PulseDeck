@@ -117,11 +117,11 @@ Runtime layout established from `patch_0003`:
 
 The first hub service maintains `pulsedeck/v1/system/availability` with retained QoS 1, MQTT Last Will and automatic reconnect. This runtime was deployed and validated on `bluebox` on 2026-09-27: systemd service active and a retained `schema=1/state=online` payload observed.
 
-Raspberry Pi deployment is driven by three scripts: `setup_pi.sh` is the recommended complete orchestrator, `bootstrap_pi.sh` manages the system/Mosquitto foundation, and `deploy_hub.sh` manages the application service. `setup_pi.sh` works from a repository checkout or as a standalone downloaded file; when specialized scripts are not available locally it retrieves them from GitHub. Deterministic steps are automatic. The scripts install and repair the technical foundation; API keys, filters and collector-specific settings are configured in PulseDeck Admin.
+Raspberry Pi deployment uses a persistent master launcher plus three worker scripts. After the initial bootstrap, `/usr/local/sbin/pulsedeck` is the recommended entry point. It refreshes `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` and `deploy_hub.sh` from the selected Git ref, validates shell syntax, updates only changed cached copies under `/var/lib/pulsedeck/installer/scripts/`, then invokes the refreshed `setup_pi.sh`. `bootstrap_pi.sh` manages the system/Mosquitto foundation and `deploy_hub.sh` manages the application service. Deterministic steps are automatic. The scripts install and repair the technical foundation; API keys, filters and collector-specific settings are configured in PulseDeck Admin.
 
 From `patch_0007`, Weather is the first active collector and uses OpenWeather One Call API 4.0. The hub uses `current`, `timeline/1h` and `timeline/1day`, metric units and French provider localization. V1 cadences are 10 minutes for current, 30 minutes for hourly forecasts and 3 hours for daily forecasts. The OpenWeather key is stored separately in `/etc/pulsedeck/secrets/openweather_api_key` and is never placed in versioned configuration. Since `patch_0008`, Weather is configured and tested in PulseDeck Admin, which reloads the collector without a manual service restart.
 
-From `patch_0010`, News uses GNews API v4. Provider calls are HTTPS-only and the key is sent only in the `X-Api-Key` header, never in the query string. The hub supports `top-headlines` and `search`, publishes retained QoS 1 snapshots on `news/availability` and `news/latest`, and preserves the last valid News snapshot when the provider fails. The GNews key is stored at `/etc/pulsedeck/secrets/gnews_api_key`. Configuration, provider testing and enable/disable are handled through PulseDeck Admin.
+From `patch_0010-1`, News uses NewsAPI v2. Provider calls are HTTPS-only and the key is sent only in the `X-Api-Key` header, never in the query string. The hub supports `top-headlines` and `everything`, publishes retained QoS 1 snapshots on `news/availability` and `news/latest`, and preserves the last valid News snapshot when the provider fails. The NewsAPI key is stored at `/etc/pulsedeck/secrets/newsapi_api_key`. Configuration, provider testing and enable/disable are handled through PulseDeck Admin.
 
 Avoid microservices, containers and infrastructure dependencies that are not needed initially.
 
@@ -235,7 +235,7 @@ Payloads must be:
 - display-oriented;
 - timestamped.
 
-Exact JSON schemas are defined application by application before implementation, except Weather (`patch_0007`) and News (`patch_0010`) whose schema 1 contracts are fixed in the hub.
+Exact JSON schemas are defined application by application before implementation, except Weather (`patch_0007`) and News (`patch_0010-1`) whose schema 1 contracts are fixed in the hub.
 
 Example:
 
@@ -374,7 +374,7 @@ Possible pages:
 
 ### News
 
-V1 provider: GNews API v4. The Raspberry Pi calls `top-headlines` or `search` over HTTPS with `X-Api-Key` authentication, normalizes display-relevant metadata, and publishes retained `news/latest` plus `news/availability`. Long provider `content` is deliberately not republished so the ESP32 payload stays compact.
+V1 provider: NewsAPI v2. The Raspberry Pi calls `top-headlines` or `everything` over HTTPS with `X-Api-Key` authentication, normalizes display-relevant metadata, and publishes retained `news/latest` plus `news/availability`. Long provider `content` is deliberately not republished so the ESP32 payload stays compact.
 
 ### Printer
 
@@ -482,10 +482,10 @@ Weather is the reference application. `patch_0007` implements the Pi collector a
 ### Phase 4 — News
 
 Integrate the reference News feed:
-- GNews API v4;
+- NewsAPI v2;
 - HTTPS;
 - `X-Api-Key` authentication;
-- `top-headlines` / `search`;
+- `top-headlines` / `everything`;
 - normalized retained MQTT snapshot;
 - PulseDeck Admin configuration.
 

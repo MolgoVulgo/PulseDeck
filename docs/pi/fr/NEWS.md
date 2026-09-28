@@ -1,34 +1,36 @@
-# News — GNews API v4
+# News — NewsAPI v2
 
 > L’anglais fait référence : [`../NEWS.md`](../NEWS.md).
 
 ## Contrat fournisseur
 
-News V1 utilise **GNews API v4**. Les requêtes distantes sont exclusivement en HTTPS et l’authentification fournisseur est envoyée uniquement via l’en-tête HTTP :
+News V1 utilise **NewsAPI v2** via `newsapi.org`. Les requêtes fournisseur utilisent uniquement HTTPS et PulseDeck envoie la clé API exclusivement dans l’en-tête HTTP :
 
 ```text
 X-Api-Key: <secret>
 ```
 
-PulseDeck ne place pas la clé GNews dans la query string. Le secret reste ainsi hors des URL de requête, des logs d’accès ordinaires et des données referrer.
+PulseDeck ne place jamais la clé NewsAPI dans la query string.
 
 Endpoints pris en charge :
 
 ```text
-GET https://gnews.io/api/v4/top-headlines
-GET https://gnews.io/api/v4/search
+GET https://newsapi.org/v2/top-headlines
+GET https://newsapi.org/v2/everything
 ```
+
+NewsAPI accepte aussi l’authentification par query string et `Authorization`, mais PulseDeck utilise volontairement uniquement `X-Api-Key` afin de garder la clé hors des URL de requête.
 
 ## Configuration
 
-La configuration normale se fait depuis PulseDeck Admin. Une nouvelle clé fournie est testée auprès du fournisseur avant d’être enregistrée, même si le collector reste désactivé.
+La configuration normale se fait depuis PulseDeck Admin. Une nouvelle clé est testée auprès du fournisseur avant d’être enregistrée, même lorsque le collector reste désactivé.
 
 Exemple TOML runtime :
 
 ```toml
 [collectors.news]
 enabled = false
-provider = "gnews"
+provider = "newsapi"
 mode = "top-headlines"
 category = "general"
 query = ""
@@ -37,35 +39,53 @@ country = "fr"
 max_articles = 10
 interval = 1800
 request_timeout = 15
-api_key_file = "/etc/pulsedeck/secrets/gnews_api_key"
+api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
 ```
 
 Secret :
 
 ```text
-/etc/pulsedeck/secrets/gnews_api_key
+/etc/pulsedeck/secrets/newsapi_api_key
 ```
 
-La cadence par défaut de 30 minutes est prudente pour une petite installation. Les quotas GNews et la valeur maximale autorisée de `max` dépendent du plan fournisseur. PulseDeck expose donc cadence et nombre d’articles dans Admin au lieu de supposer un quota payant.
+La cadence par défaut est de 30 minutes. Les quotas dépendent du plan NewsAPI ; PulseDeck expose donc la cadence et la taille du snapshot dans Admin sans supposer un quota particulier.
 
 ## Modes
 
 ### `top-headlines`
 
-Utilise les actualités courantes classées par le fournisseur. Catégories GNews disponibles :
+Utilise `/v2/top-headlines`. PulseDeck peut envoyer :
 
 ```text
-general, world, nation, business, technology,
-entertainment, sports, science, health
+country
+category
+q
+pageSize
+page=1
 ```
 
-Une requête optionnelle peut filtrer davantage `top-headlines`.
+Catégories définies par le fournisseur :
 
-### `search`
+```text
+business, entertainment, general, health,
+science, sports, technology
+```
 
-Nécessite une requête. PulseDeck recherche dans titre/description et demande `sortby=publishedAt` pour que le snapshot retained représente les articles correspondants les plus récents.
+`q` est optionnel. `country` est un code pays optionnel sur deux lettres. PulseDeck n’envoie pas de paramètre de langue dans ce mode car NewsAPI n’en définit pas pour `/v2/top-headlines`.
 
-Langue et pays sont des codes optionnels à deux lettres. Une valeur vide omet le filtre fournisseur correspondant.
+### `everything`
+
+Utilise `/v2/everything` et nécessite `q`. PulseDeck envoie :
+
+```text
+q
+language
+sortBy=publishedAt
+pageSize
+page=1
+```
+
+La requête est limitée à 500 caractères par le contrat fournisseur. `language` est un code langue optionnel sur deux lettres. `country` et `category` ne sont pas envoyés dans ce mode.
 
 ## MQTT
 
@@ -79,21 +99,20 @@ pulsedeck/v1/news/latest
 `news/latest` utilise le schema 1 et contient un tableau `articles` normalisé. Chaque article utilisable peut contenir :
 
 ```text
-id
 title
+author
 description
 url
 image_url
 published_ts
-lang
 source.id
 source.name
-source.url
-source.country
 ```
 
-Le champ fournisseur `content` n’est volontairement pas republié afin de garder le payload retained compact pour les consommateurs ESP32. `publishedAt` est normalisé en timestamp Unix `published_ts`.
+Le champ NewsAPI `content` n’est volontairement pas republié. `publishedAt` est normalisé en timestamp Unix `published_ts`.
+
+Le payload contient également un objet `feed` décrivant le mode et les filtres pertinents, ainsi que `total_results` lorsque le fournisseur le renvoie.
 
 ## Erreurs
 
-Si GNews échoue, PulseDeck conserve le dernier snapshot retained valide `news/latest` et publie `news/availability=offline` avec une raison non sensible. La clé API n’est jamais journalisée ni incluse dans les payloads MQTT.
+Si NewsAPI échoue, PulseDeck conserve le dernier snapshot retained valide `news/latest` et publie `news/availability=offline` avec une raison non sensible. La clé API n’est jamais journalisée ni incluse dans les payloads MQTT.

@@ -96,15 +96,15 @@ See [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md).
 
 ## News
 
-News V1 uses **GNews API v4** with HTTPS and provider authentication in the HTTP header:
+News V1 uses **NewsAPI v2** with HTTPS and provider authentication in the HTTP header:
 
 ```text
 X-Api-Key: <secret>
 ```
 
-The key is never added to the query string. PulseDeck supports both GNews `top-headlines` and `search` modes, normalizes article metadata, deliberately excludes full provider `content`, then publishes a compact retained snapshot on `pulsedeck/v1/news/latest`.
+The key is never added to the query string. PulseDeck supports both NewsAPI `top-headlines` and `everything` modes, normalizes article metadata, deliberately excludes full provider `content`, then publishes a compact retained snapshot on `pulsedeck/v1/news/latest`.
 
-The GNews secret is stored at `/etc/pulsedeck/secrets/gnews_api_key` and is configured from PulseDeck Admin.
+The NewsAPI secret is stored at `/etc/pulsedeck/secrets/newsapi_api_key` and is configured from PulseDeck Admin.
 
 See [`docs/pi/NEWS.md`](docs/pi/NEWS.md).
 
@@ -120,7 +120,7 @@ Admin currently provides:
 
 - Hub / MQTT / system health;
 - Weather configuration, API test and hot reload;
-- News configuration, GNews API test and hot reload;
+- News configuration, NewsAPI API test and hot reload;
 - common Services catalog for upcoming collectors;
 - local administrator password management.
 
@@ -128,7 +128,7 @@ Secrets are masked after storage. Weather and News changes are tested before act
 
 ## Raspberry Pi installation
 
-A Git clone is not required on the target.
+A Git clone is not required on the target. A fresh target needs one bootstrap download:
 
 ```bash
 curl -fsSL \
@@ -140,15 +140,17 @@ chmod +x setup_pi.sh
 sudo ./setup_pi.sh
 ```
 
-Targeted hub update:
+That apply run installs the persistent master command `/usr/local/sbin/pulsedeck`. Normal future checks and upgrades use it directly:
 
 ```bash
-sudo ./setup_pi.sh --hub-only
+pulsedeck --check
+sudo pulsedeck
+sudo pulsedeck --hub-only
 ```
 
-The installer handles the technical foundation. Collector-specific keys, filters and service settings belong in PulseDeck Admin.
+The master launcher refreshes `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` and `deploy_hub.sh` from the selected Git ref, validates shell syntax, and replaces only changed cached copies before invoking the refreshed setup worker. Manual re-downloads of `setup_pi.sh` are therefore not part of the normal update flow.
 
-The deployment scripts never perform a global Arch Linux update (`pacman -Sy` / `pacman -Syu`).
+The installer handles the technical foundation. Collector-specific keys, filters and service settings belong in PulseDeck Admin. The deployment scripts never perform a global Arch Linux update (`pacman -Sy` / `pacman -Syu`).
 
 ## Repository layout
 
@@ -187,7 +189,7 @@ Completed foundation:
 2. minimal `pulsedeck-hub` runtime;
 3. Weather collector;
 4. Web Admin;
-5. News / GNews collector.
+5. News / NewsAPI collector.
 
 Next planned integrations:
 

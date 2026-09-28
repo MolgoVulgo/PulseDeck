@@ -59,11 +59,11 @@ def test_news_configuration_loads(tmp_path: Path) -> None:
     cfg = load_config(
         _write(
             tmp_path,
-            """[collectors.weather]\nenabled = false\n\n[collectors.news]\nenabled = true\nprovider = \"gnews\"\nmode = \"top-headlines\"\ncategory = \"technology\"\nlang = \"fr\"\ncountry = \"fr\"\nmax_articles = 10\ninterval = 1800\n""",
+            """[collectors.weather]\nenabled = false\n\n[collectors.news]\nenabled = true\nprovider = \"newsapi\"\nmode = \"top-headlines\"\ncategory = \"technology\"\nlang = \"fr\"\ncountry = \"fr\"\nmax_articles = 10\ninterval = 1800\n""",
         )
     )
     assert cfg.news.enabled is True
-    assert cfg.news.provider == "gnews"
+    assert cfg.news.provider == "newsapi"
     assert cfg.news.mode == "top-headlines"
     assert cfg.news.category == "technology"
     assert cfg.news.interval == 1800

@@ -12,10 +12,10 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from ..collectors.news import GNewsClient, NewsError, normalize_news
+from ..collectors.news import NewsAPIClient, NewsError, normalize_news
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
 from ..config import (
-    DEFAULT_GNEWS_KEY_PATH,
+    DEFAULT_NEWSAPI_KEY_PATH,
     DEFAULT_OPENWEATHER_KEY_PATH,
     NewsConfig,
     WeatherConfig,
@@ -121,7 +121,7 @@ def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str
     current = runtime.config.news
     raw = {
         "enabled": body.get("enabled", current.enabled),
-        "provider": "gnews",
+        "provider": "newsapi",
         "mode": body.get("mode", current.mode),
         "category": body.get("category", current.category),
         "query": body.get("query", current.query),
@@ -130,7 +130,7 @@ def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str
         "max_articles": body.get("max_articles", current.max_articles),
         "interval": body.get("interval", current.interval),
         "request_timeout": body.get("request_timeout", current.request_timeout),
-        "api_key_file": str(current.api_key_file or DEFAULT_GNEWS_KEY_PATH),
+        "api_key_file": str(current.api_key_file or DEFAULT_NEWSAPI_KEY_PATH),
     }
     try:
         candidate = news_config_from_mapping(raw)
@@ -141,12 +141,12 @@ def _candidate_news(runtime: Any, body: dict[str, Any]) -> tuple[NewsConfig, str
         raise _json_error(400, "api_key must be a string or null")
     key = provided.strip() if isinstance(provided, str) and provided.strip() else _configured_secret(current.api_key_file)
     if candidate.enabled and not key:
-        raise _json_error(400, "GNews API key is required when News is enabled")
+        raise _json_error(400, "NewsAPI API key is required when News is enabled")
     return candidate, key
 
 
 def _test_news(candidate: NewsConfig, key: str) -> dict[str, Any]:
-    raw = GNewsClient(candidate, api_key=key).fetch()
+    raw = NewsAPIClient(candidate, api_key=key).fetch()
     payload = normalize_news(raw, candidate)
     articles = payload.get("articles")
     count = len(articles) if isinstance(articles, list) else 0
@@ -393,7 +393,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             raise _json_error(400, "Invalid body")
         candidate, key = _candidate_news(runtime, body)
         if not key:
-            raise _json_error(400, "GNews API key is required for a provider test")
+            raise _json_error(400, "NewsAPI API key is required for a provider test")
         try:
             return _test_news(candidate, key)
         except NewsError as exc:

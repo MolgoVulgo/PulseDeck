@@ -6,7 +6,7 @@
 
 ```bash
 ./setup_pi.sh --check
-./setup_pi.sh --check --verbose
+pulsedeck --check --verbose
 ```
 
 ## Services
@@ -64,7 +64,7 @@ Collector configuration and detailed status require an authenticated Admin sessi
 ```text
 /etc/pulsedeck/pulsedeck.toml
 /etc/pulsedeck/secrets/openweather_api_key
-/etc/pulsedeck/secrets/gnews_api_key
+/etc/pulsedeck/secrets/newsapi_api_key
 ```
 
 Use PulseDeck Admin for normal collector changes instead of editing these files manually.
