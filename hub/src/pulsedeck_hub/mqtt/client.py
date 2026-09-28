@@ -20,6 +20,8 @@ class HubMQTTClient:
         self.config = config
         self.session_started = int(time.time())
         self.connected = threading.Event()
+        self._retained_lock = threading.Lock()
+        self._retained_publications: dict[str, dict[str, object]] = {}
         self.client = mqtt.Client(
             callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
             client_id=config.client_id,
@@ -111,7 +113,29 @@ class HubMQTTClient:
         except RuntimeError:
             LOG.warning("MQTT publish confirmation timed out for %s", topic_name)
             return False
-        return info.is_published()
+        if not info.is_published():
+            return False
+        normalized_suffix = suffix.lstrip("/")
+        with self._retained_lock:
+            self._retained_publications[normalized_suffix] = {
+                "topic": topic_name,
+                "payload": payload,
+                "published_at": int(time.time()),
+                "qos": qos,
+            }
+        return True
+
+    def retained_snapshot(self, prefix: str | None = None) -> dict[str, dict[str, object]]:
+        """Return the last retained publications confirmed by this hub process."""
+        normalized_prefix = prefix.strip("/") if prefix else None
+        with self._retained_lock:
+            return {
+                suffix: dict(entry)
+                for suffix, entry in self._retained_publications.items()
+                if normalized_prefix is None
+                or suffix == normalized_prefix
+                or suffix.startswith(normalized_prefix + "/")
+            }
 
     def stop(self) -> None:
         if self.connected.is_set():

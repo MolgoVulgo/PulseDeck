@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pulsedeck_hub.admin.catalog import build_service_catalog
+from pulsedeck_hub.admin.routes import _retained_messages
 from pulsedeck_hub.admin.ui import ADMIN_HTML
 from pulsedeck_hub.admin.security import hash_password, make_session, verify_password, verify_session
 from pulsedeck_hub.admin.storage import render_news_section, render_weather_section, update_news_config, update_secret, update_weather_config
@@ -77,6 +78,11 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
+    assert 'data-view="data"' in ADMIN_HTML
+    assert 'data-view-panel="data"' in ADMIN_HTML
+    assert 'id="refreshDataButton"' in ADMIN_HTML
+    assert '/api/data' in ADMIN_HTML
+    assert 'aucun appel fournisseur' in ADMIN_HTML.lower()
     assert 'id="newsProvider"' in ADMIN_HTML
     assert '<option value="gnews">GNews v4</option>' in ADMIN_HTML
     assert 'id="newsSources"' in ADMIN_HTML
@@ -176,3 +182,31 @@ def test_gnews_section_round_trip(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     assert 'provider = "gnews"' in text
     assert 'api_key_file = ' in text
+
+def test_retained_messages_decode_confirmed_publications() -> None:
+    class MQTT:
+        def retained_snapshot(self, prefix: str):  # type: ignore[no-untyped-def]
+            assert prefix == "weather"
+            return {
+                "weather/current": {
+                    "topic": "pulsedeck/v1/weather/current",
+                    "payload": '{"schema":1,"data":{"temperature_c":18.5}}',
+                    "published_at": 123,
+                    "qos": 1,
+                },
+                "weather/hourly": {
+                    "topic": "pulsedeck/v1/weather/hourly",
+                    "payload": "not-json",
+                    "published_at": 124,
+                    "qos": 1,
+                },
+            }
+
+    class Runtime:
+        mqtt_client = MQTT()
+
+    messages = _retained_messages(Runtime(), "weather")
+    assert [item["suffix"] for item in messages] == ["weather/current", "weather/hourly"]
+    assert messages[0]["payload"]["data"]["temperature_c"] == 18.5
+    assert messages[1]["payload"] == "not-json"
+

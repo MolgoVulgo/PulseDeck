@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -188,6 +189,28 @@ def _test_news(candidate: NewsConfig, key: str) -> dict[str, Any]:
     }
 
 
+def _retained_messages(runtime: Any, prefix: str) -> list[dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    for suffix, entry in sorted(runtime.mqtt_client.retained_snapshot(prefix).items()):
+        raw_payload = entry.get("payload")
+        payload: object = raw_payload
+        if isinstance(raw_payload, str):
+            try:
+                payload = json.loads(raw_payload)
+            except json.JSONDecodeError:
+                payload = raw_payload
+        messages.append(
+            {
+                "suffix": suffix,
+                "topic": entry.get("topic"),
+                "published_at": entry.get("published_at"),
+                "qos": entry.get("qos"),
+                "payload": payload,
+            }
+        )
+    return messages
+
+
 def _system_metrics() -> dict[str, Any]:
     memory_available = memory_total = 0
     try:
@@ -344,6 +367,28 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 runtime.config.news.enabled,
                 runtime.config.news.provider,
             ),
+        }
+
+    @app.get("/api/data")
+    def data_snapshot(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        state = runtime.health.snapshot()
+        return {
+            "captured_at": int(time.time()),
+            "mqtt": {
+                "connected": runtime.mqtt_client.connected.is_set(),
+                "namespace": runtime.config.mqtt.namespace,
+            },
+            "weather": {
+                "enabled": runtime.config.weather.enabled,
+                "health": state["weather"],
+                "messages": _retained_messages(runtime, "weather"),
+            },
+            "news": {
+                "enabled": runtime.config.news.enabled,
+                "health": state["news"],
+                "messages": _retained_messages(runtime, "news"),
+            },
         }
 
     @app.get("/api/logs")
