@@ -12,31 +12,62 @@ Deployment scripts follow three rules:
 2. service-specific functional configuration is handled by PulseDeck Admin, not by installer prompts;
 3. every script is rerunnable and provides a read-only `--check` mode.
 
-## Recommended entry point
+## First installation
 
-The persistent **`pulsedeck` master launcher** is the normal entry point after the first installation. `setup_pi.sh` remains the worker/orchestrator used by that launcher. A fresh target needs one bootstrap download of `setup_pi.sh`; later updates do not.
+The only user-facing bootstrap command on a fresh Raspberry Pi is:
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
-  -o setup_pi.sh
-chmod +x setup_pi.sh
-
-./setup_pi.sh --check
-sudo ./setup_pi.sh
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/install.sh \
+  | sudo bash
 ```
 
-The standalone script downloads `bootstrap_pi.sh` and `deploy_hub.sh` from GitHub when they are not present locally. A repository checkout is optional.
+`install.sh` is intentionally small. It:
 
-During an apply deployment, `deploy_hub.sh` installs `/usr/local/sbin/pulsedeck`. On later runs:
+1. downloads `scripts/pulsedeck.sh` from the selected Git ref;
+2. validates its Bash syntax before installation;
+3. installs it as `/usr/local/sbin/pulsedeck`;
+4. seeds `/var/lib/pulsedeck/installer/scripts/pulsedeck.sh`;
+5. immediately runs the installed master launcher.
+
+The master launcher then refreshes the worker scripts and performs the normal complete installation. The Git repository does not need to be cloned on the Pi.
+
+For a dry run during bootstrap:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/install.sh \
+  | sudo bash -s -- --check
+```
+
+To install only the persistent launcher without starting deployment:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/install.sh \
+  | sudo bash -s -- --install-only
+```
+
+## Persistent master launcher
+
+After the first bootstrap, the normal entry point is always:
+
+```bash
+sudo pulsedeck
+```
+
+Useful variants:
 
 ```bash
 pulsedeck --check
-sudo pulsedeck
 sudo pulsedeck --hub-only
+sudo pulsedeck --bootstrap-only
+sudo pulsedeck --offline --hub-only
 ```
 
-The master launcher checks GitHub for `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` and `deploy_hub.sh`, validates shell syntax, updates only changed cached copies under `/var/lib/pulsedeck/installer/scripts/`, and executes the refreshed setup worker. `--offline` explicitly skips the GitHub refresh and uses the cache.
+The master launcher checks GitHub for `pulsedeck.sh`, `setup_pi.sh`, `bootstrap_pi.sh` and `deploy_hub.sh`, validates their shell syntax, updates only changed cached copies under `/var/lib/pulsedeck/installer/scripts/`, and executes the refreshed `setup_pi.sh` worker. `--offline` explicitly skips GitHub refresh and uses the cached scripts.
+
+`setup_pi.sh` remains the internal complete orchestrator. It is still usable directly for development/diagnostics, but users do not need to download it manually.
 
 Main options:
 
@@ -46,8 +77,8 @@ Main options:
 --bootstrap-only     install/check MQTT foundation only
 --hub-only           install/check pulsedeck-hub only
 --non-interactive    never request manual input
---source-dir DIR     use local specialized scripts from DIR
 --ref REF            Git branch/tag/commit used for downloads
+--offline            master only: skip GitHub refresh and use the cache
 ```
 
 ## `bootstrap_pi.sh`

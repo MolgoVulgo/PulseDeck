@@ -19,6 +19,7 @@ project:
 architecture:
   entrypoints:
     - "hub/src/pulsedeck_hub/main.py"
+    - "scripts/install.sh"
     - "scripts/pulsedeck.sh"
     - "scripts/setup_pi.sh"
     - "scripts/deploy_hub.sh"
@@ -103,6 +104,7 @@ knowledge:
     - "scripts/setup_pi.sh est l'orchestrateur d'installation complet : bootstrap MQTT puis déploiement du hub."
     - "setup_pi.sh peut fonctionner sans clone du dépôt : il récupère les scripts spécialisés depuis GitHub lorsqu'ils ne sont pas disponibles localement."
     - "À partir de patch_0010-1, /usr/local/sbin/pulsedeck est le lanceur maître persistant : il rafraîchit pulsedeck.sh, setup_pi.sh, bootstrap_pi.sh et deploy_hub.sh depuis la référence Git sélectionnée, valide leur syntaxe shell, ne remplace que les copies de cache modifiées sous /var/lib/pulsedeck/installer/scripts, puis exécute le worker setup rafraîchi."
+    - "À partir de patch_0011, scripts/install.sh est l’unique bootstrap de première installation : il télécharge et valide la syntaxe de pulsedeck.sh, installe /usr/local/sbin/pulsedeck, initialise le cache de l’installateur puis délègue l’installation complète au lanceur maître persistant."
     - "Les scripts de déploiement automatisent les opérations déterministes et ne demandent une saisie que lorsqu'une information ne peut pas être déduite ou qu'un choix manuel est nécessaire."
     - "Le mode --non-interactive interdit toute question et transforme une décision manuelle indispensable en échec explicite."
     - "PulseDeck Admin V1 utilise une authentification locale par mot de passe, une session signée, des cookies HttpOnly/SameSite=Strict et reste limité au LAN ; HTTP V1 ne doit pas être exposé à Internet."

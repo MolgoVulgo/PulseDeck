@@ -128,19 +128,17 @@ Les secrets restent masqués après stockage. Les changements Weather et News so
 
 ## Installation Raspberry Pi
 
-Aucun clone Git n’est requis sur la cible. Une cible neuve nécessite un seul téléchargement initial :
+Aucun clone Git n’est requis sur la cible. Une cible neuve utilise une seule commande de bootstrap :
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
-  -o setup_pi.sh
-
-chmod +x setup_pi.sh
-./setup_pi.sh --check
-sudo ./setup_pi.sh
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/install.sh \
+  | sudo bash
 ```
 
-Cette première application installe la commande maître persistante `/usr/local/sbin/pulsedeck`. Les contrôles et mises à jour suivants utilisent directement :
+`install.sh` télécharge et valide uniquement le lanceur maître persistant, l’installe sous `/usr/local/sbin/pulsedeck`, initialise le cache de l’installateur, puis délègue immédiatement l’installation complète à cette commande maître. `setup_pi.sh` devient un worker interne et ne fait plus partie du flux utilisateur normal.
+
+Les contrôles et mises à jour suivants utilisent directement :
 
 ```bash
 pulsedeck --check

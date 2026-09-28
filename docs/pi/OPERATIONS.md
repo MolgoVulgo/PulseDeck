@@ -5,9 +5,11 @@
 ## Global checks
 
 ```bash
-./setup_pi.sh --check
+pulsedeck --check
 pulsedeck --check --verbose
 ```
+
+`setup_pi.sh` is an internal worker. Direct execution remains useful for development diagnostics, but the persistent `pulsedeck` command is the normal operational entry point.
 
 ## Services
 

@@ -128,19 +128,17 @@ Secrets are masked after storage. Weather and News changes are tested before act
 
 ## Raspberry Pi installation
 
-A Git clone is not required on the target. A fresh target needs one bootstrap download:
+A Git clone is not required on the target. A fresh target has a single bootstrap command:
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/setup_pi.sh \
-  -o setup_pi.sh
-
-chmod +x setup_pi.sh
-./setup_pi.sh --check
-sudo ./setup_pi.sh
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/scripts/install.sh \
+  | sudo bash
 ```
 
-That apply run installs the persistent master command `/usr/local/sbin/pulsedeck`. Normal future checks and upgrades use it directly:
+`install.sh` downloads and validates only the persistent master launcher, installs it as `/usr/local/sbin/pulsedeck`, seeds the installer cache, then immediately delegates the complete installation to that master command. `setup_pi.sh` is an internal worker and is no longer part of the normal user workflow.
+
+Normal checks and upgrades use:
 
 ```bash
 pulsedeck --check
