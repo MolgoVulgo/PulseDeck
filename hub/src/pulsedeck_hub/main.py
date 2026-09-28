@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import threading
 
+from . import __version__
 from .admin.app import AdminServer
 from .collectors.news import NewsCollector
 from .collectors.weather import WeatherCollector
@@ -15,6 +16,7 @@ from .config import DEFAULT_CONFIG_PATH, HubConfig, load_config
 from .health.state import HealthState
 from .logging_setup import configure_logging
 from .mqtt.client import HubMQTTClient
+from .update import UpdateChecker
 
 
 LOG = logging.getLogger(__name__)
@@ -42,6 +44,7 @@ class HubRuntime:
         self.weather_collector: WeatherCollector | None = None
         self.news_collector: NewsCollector | None = None
         self.admin_server: AdminServer | None = None
+        self.update_checker = UpdateChecker(__version__)
         self._config_lock = threading.RLock()
 
     def _start_weather(self) -> None:
@@ -67,6 +70,7 @@ class HubRuntime:
         if self.config.admin.enabled:
             self.admin_server = AdminServer(self)
             self.admin_server.start()
+        self.update_checker.trigger()
 
     def _reload_collectors(self, *, weather: bool = False, news: bool = False) -> None:
         with self._config_lock:

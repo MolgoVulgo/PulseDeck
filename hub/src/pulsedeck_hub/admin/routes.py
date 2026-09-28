@@ -295,6 +295,17 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             "system": _system_metrics(),
         }
 
+    @app.get("/api/update")
+    def update_status(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        return runtime.update_checker.snapshot()
+
+    @app.post("/api/update/check")
+    def update_check(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        runtime.update_checker.trigger()
+        return runtime.update_checker.snapshot()
+
     @app.get("/api/services")
     def services(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
