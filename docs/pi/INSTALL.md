@@ -92,7 +92,7 @@ The hub deployer:
 - creates/reuses the `pulsedeck` system account;
 - installs application sources under `/opt/pulsedeck/hub`;
 - creates/reuses `/opt/pulsedeck/venv`;
-- installs Python dependencies inside that venv;
+- installs Python dependencies inside that venv with an isolated `umask 0022`, so the root updater may keep its restrictive `UMask=0027` without making the installed Python package unreadable to the `pulsedeck` service account;
 - keeps Python build/install output quiet in normal mode and reports only the step status; detailed pip/build output is shown only with `--verbose`;
 - creates or preserves `/etc/pulsedeck/pulsedeck.toml`;
 - prepares `/etc/pulsedeck/secrets/`;
@@ -100,8 +100,9 @@ The hub deployer:
 - installs/updates the persistent `/usr/local/sbin/pulsedeck` master launcher;
 - installs the root-only `/usr/local/libexec/pulsedeck-updater` worker plus `pulsedeck-updater.service` / `pulsedeck-updater.path`;
 - enables the updater path watcher without granting root privileges to the hub process;
+- verifies `import pulsedeck_hub.main` as the unprivileged `pulsedeck` account before starting the service;
 - installs and restarts `pulsedeck-hub.service`;
-- validates runtime availability.
+- accepts the deployment only after the service stays active and `/api/health` responds successfully on consecutive checks; if startup validation fails, the service is stopped, previous installer metadata is restored and the deployment returns a failure to the privileged updater.
 
 Functional collector configuration is not requested by the deployer. Configure Weather, News and future services through PulseDeck Admin.
 

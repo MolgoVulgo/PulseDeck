@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck Hub standalone deployer — git-004
+# PulseDeck Hub standalone deployer — git-006
 # Self-contained: no PulseDeck repository checkout is required.
 
 set -u
@@ -191,7 +191,7 @@ detect_network() {
 
 check_prereqs() {
   local cmd
-  for cmd in python systemctl tar base64 install timeout getent cmp sleep; do
+  for cmd in python systemctl tar base64 install timeout getent cmp sleep runuser; do
     command_exists "$cmd" || fail "Commande requise absente: $cmd"
   done
   if command_exists python; then
@@ -378,8 +378,52 @@ PY
   ok "Fournisseur News répond: $result"
 }
 
+validate_runtime_import() {
+  runuser -u "$RUN_USER" -- "$VENV_DIR/bin/python" -c 'import pulsedeck_hub.main' >/dev/null 2>&1
+}
+
+hub_health_check() {
+  "$VENV_DIR/bin/python" - "$LAN_IPV4" "$ADMIN_PORT" <<'PY' >/dev/null 2>&1
+import json,sys,urllib.request
+url=f'http://{sys.argv[1]}:{sys.argv[2]}/api/health'
+with urllib.request.urlopen(url,timeout=2) as response:
+    payload=json.loads(response.read().decode('utf-8'))
+raise SystemExit(0 if payload.get('ok') is True and isinstance(payload.get('version'),str) and payload['version'] else 1)
+PY
+}
+
+wait_for_hub_ready() {
+  local attempt consecutive=0
+  for ((attempt=1; attempt<=20; attempt++)); do
+    if systemctl is-active --quiet "$SERVICE" 2>/dev/null && hub_health_check; then
+      consecutive=$((consecutive + 1))
+      if (( consecutive >= 3 )); then
+        ok "$SERVICE stable et Web Admin répond après redémarrage"
+        return 0
+      fi
+    else
+      consecutive=0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+restore_install_metadata() {
+  local backup="$1" had_previous="$2"
+  if [[ "$had_previous" == "1" ]]; then
+    if install -m 0640 -o root -g "$RUN_GROUP" "$backup" "$INSTALL_METADATA_PATH"; then
+      warn "Métadonnées d'installation précédentes restaurées après échec runtime"
+    else
+      warn "Restauration des métadonnées d'installation impossible"
+    fi
+  else
+    rm -f "$INSTALL_METADATA_PATH" || warn "Suppression des métadonnées d'installation incomplètes impossible"
+  fi
+}
+
 install_app() {
-  local tmp old
+  local tmp old pip_log metadata_backup metadata_had_previous=0
   tmp="$(mktemp -d)" || { fail "mktemp échoué"; return 1; }
   if ! extract_payload "$tmp"; then
     rm -rf "$tmp"; fail "Extraction du payload embarqué échouée"; return 1
@@ -406,16 +450,20 @@ install_app() {
     ok "venv existant: $VENV_DIR"
   fi
 
-  local pip_log
   pip_log="$(mktemp)" || { rm -rf "$tmp"; fail "Installation Python du hub (KO)"; return 1; }
-  if "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "$APP_DIR" >"$pip_log" 2>&1; then
+  if ( umask 0022; "$VENV_DIR/bin/python" -m pip install --disable-pip-version-check --no-cache-dir "$APP_DIR" ) >"$pip_log" 2>&1; then
     (( VERBOSE )) && sed 's/^/[BUILD] /' "$pip_log" || true
     rm -f "$pip_log"
-    ok "Installation Python du hub (OK)"
+    ok "Installation Python du hub (OK, umask 0022 isolé)"
   else
     (( VERBOSE )) && sed 's/^/[BUILD] /' "$pip_log" >&2 || true
     rm -f "$pip_log"
     rm -rf "$tmp"; fail "Installation Python du hub (KO)"; return 1
+  fi
+  if validate_runtime_import; then
+    ok "Import pulsedeck_hub.main lisible par $RUN_USER"
+  else
+    rm -rf "$tmp"; fail "Runtime Python installé illisible ou incomplet pour $RUN_USER"; return 1
   fi
 
   install -d -m 0770 -o root -g "$RUN_GROUP" "$CONFIG_DIR" "$SECRET_DIR" || {
@@ -458,16 +506,32 @@ PY
   }
   ok "Unité systemd installée"
 
-  write_install_metadata || { rm -rf "$tmp"; return 1; }
+  metadata_backup="$tmp/current.json.before"
+  if [[ -e "$INSTALL_METADATA_PATH" ]]; then
+    cp -a "$INSTALL_METADATA_PATH" "$metadata_backup" || { rm -rf "$tmp"; fail "Sauvegarde des métadonnées d'installation échouée"; return 1; }
+    metadata_had_previous=1
+  fi
+  if ! write_install_metadata; then
+    restore_install_metadata "$metadata_backup" "$metadata_had_previous"
+    rm -rf "$tmp"
+    return 1
+  fi
 
-  systemctl daemon-reload || { rm -rf "$tmp"; fail "systemctl daemon-reload échoué"; return 1; }
-  systemctl enable --now "$UPDATER_PATH_SERVICE" >/dev/null 2>&1 || { rm -rf "$tmp"; fail "Activation de $UPDATER_PATH_SERVICE échouée"; return 1; }
+  systemctl daemon-reload || { restore_install_metadata "$metadata_backup" "$metadata_had_previous"; rm -rf "$tmp"; fail "systemctl daemon-reload échoué"; return 1; }
+  systemctl enable --now "$UPDATER_PATH_SERVICE" >/dev/null 2>&1 || { restore_install_metadata "$metadata_backup" "$metadata_had_previous"; rm -rf "$tmp"; fail "Activation de $UPDATER_PATH_SERVICE échouée"; return 1; }
   ok "$UPDATER_PATH_SERVICE actif"
-  systemctl enable "$SERVICE" >/dev/null 2>&1 || { rm -rf "$tmp"; fail "Activation de $SERVICE au boot échouée"; return 1; }
+  systemctl enable "$SERVICE" >/dev/null 2>&1 || { restore_install_metadata "$metadata_backup" "$metadata_had_previous"; rm -rf "$tmp"; fail "Activation de $SERVICE au boot échouée"; return 1; }
   if systemctl restart "$SERVICE"; then
-    ok "$SERVICE activé et redémarré"
+    ok "$SERVICE redémarré; validation runtime en cours"
   else
+    restore_install_metadata "$metadata_backup" "$metadata_had_previous"
+    systemctl stop "$SERVICE" >/dev/null 2>&1 || true
     rm -rf "$tmp"; fail "Démarrage/redémarrage $SERVICE échoué"; return 1
+  fi
+  if ! wait_for_hub_ready; then
+    restore_install_metadata "$metadata_backup" "$metadata_had_previous"
+    systemctl stop "$SERVICE" >/dev/null 2>&1 || true
+    rm -rf "$tmp"; fail "$SERVICE n'a pas atteint un état stable avec /api/health disponible"; return 1
   fi
   rm -rf "$tmp"
 }
@@ -593,7 +657,7 @@ print_summary() {
   printf '========================================\n'
 }
 
-info "PulseDeck standalone hub deployer git-004"
+info "PulseDeck standalone hub deployer git-006"
 detect_network || true
 check_prereqs
 

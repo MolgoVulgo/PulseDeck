@@ -92,7 +92,7 @@ Le déployeur du hub :
 - crée/réutilise le compte système `pulsedeck` ;
 - installe l’application dans `/opt/pulsedeck/hub` ;
 - crée/réutilise `/opt/pulsedeck/venv` ;
-- installe les dépendances Python dans ce venv ;
+- installe les dépendances Python dans ce venv avec un `umask 0022` isolé, afin que l’updater root puisse conserver son `UMask=0027` restrictif sans rendre le package Python installé illisible pour le compte de service `pulsedeck` ;
 - masque les détails pip/build en mode normal et n’affiche que le statut de l’étape ; la sortie détaillée n’apparaît qu’avec `--verbose` ;
 - crée ou conserve `/etc/pulsedeck/pulsedeck.toml` ;
 - prépare `/etc/pulsedeck/secrets/` ;
@@ -100,8 +100,9 @@ Le déployeur du hub :
 - installe/met à jour le lanceur maître persistant `/usr/local/sbin/pulsedeck` ;
 - installe le worker root `/usr/local/libexec/pulsedeck-updater` ainsi que `pulsedeck-updater.service` / `pulsedeck-updater.path` ;
 - active le watcher updater sans donner de privilèges root au processus hub ;
+- vérifie `import pulsedeck_hub.main` sous le compte non privilégié `pulsedeck` avant de démarrer le service ;
 - installe et redémarre `pulsedeck-hub.service` ;
-- valide l’état runtime.
+- n’accepte le déploiement qu’après maintien du service en état actif et réponses successives de `/api/health` ; si cette validation de démarrage échoue, le service est arrêté, les métadonnées installateur précédentes sont restaurées et le déploiement renvoie un échec à l’updater privilégié.
 
 La configuration fonctionnelle des collectors n’est pas demandée par le déployeur. Weather, News et les futurs services se configurent dans PulseDeck Admin.
 
