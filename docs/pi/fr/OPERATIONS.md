@@ -74,6 +74,8 @@ Après le déploiement du handoff privilégié de mise à jour, valider le canal
 
 Cette procédure est uniquement un smoke test du canal dev ; elle ne définit ni rollback ni cache de versions.
 
+Pour la première mise à jour après déploiement du modal Web Admin, confirmer aussi que le bouton d’installation ouvre la confirmation avant la mise en file, affiche les commits actuel et cible, conserve le suivi visible pendant le redémarrage/reconnexion attendu du hub, puis termine sur un état réussi/à jour.
+
 ## Configuration runtime
 
 ```text

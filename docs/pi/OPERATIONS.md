@@ -74,6 +74,8 @@ After deploying the privileged updater handoff, validate the development channel
 
 This procedure is a dev-channel smoke test only; it does not define rollback or version-cache behavior.
 
+For the first update after the Web Admin modal is deployed, also confirm that the install button opens the confirmation dialog before queuing the request, shows current and target commits, keeps the progress dialog visible across the expected hub restart/reconnect, and ends in a successful/up-to-date state.
+
 ## Runtime configuration
 
 ```text
