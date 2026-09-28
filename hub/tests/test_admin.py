@@ -96,6 +96,11 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'id="installUpdateButton"' in ADMIN_HTML
     assert '/api/update/install' in ADMIN_HTML
     assert 'Installer la mise à jour' in ADMIN_HTML
+    assert 'id="updateModal"' in ADMIN_HTML
+    assert 'id="updateModalConfirm"' in ADMIN_HTML
+    assert 'data-update-step="restart"' in ADMIN_HTML
+    assert 'reconnexion automatique' in ADMIN_HTML.lower()
+    assert "confirm('Installer" not in ADMIN_HTML
 
 
 def test_news_section_round_trip(tmp_path: Path) -> None:

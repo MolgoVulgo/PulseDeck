@@ -36,6 +36,7 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 - Services — common collector catalog for implemented and planned services;
 - Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Admin filters;
 - Updates — stable/dev checker state and installation of a verified update for the currently active channel;
+  The install action opens a confirmation/progress modal that keeps the target visible and follows queued, root-service execution, hub restart/reconnection and final verification. A temporary loss of the Web UI during restart is shown as an expected reconnecting state rather than an installation failure; polling resumes automatically until success, failure or the bounded follow-up timeout.
 - Security — local admin password change.
 
 ## Runtime logs

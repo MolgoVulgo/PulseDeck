@@ -36,6 +36,7 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 - Services — catalogue commun des collectors implémentés et prévus ;
 - Logs — journaux runtime en mémoire avec filtre par service ; `Tout` est sélectionné par défaut, puis Hub / MQTT / Weather / News / Admin ;
 - Mises à jour — état du checker stable/dev et installation d’une mise à jour vérifiée pour le canal actuellement actif ;
+  L’action d’installation ouvre un modal de confirmation/suivi qui conserve la cible visible et suit la mise en file, l’exécution du service root, le redémarrage/reconnexion du hub puis la vérification finale. Une perte temporaire de l’interface Web pendant le redémarrage est affichée comme un état de reconnexion attendu et non comme un échec ; le polling reprend automatiquement jusqu’au succès, à l’échec ou au délai borné de suivi.
 - Sécurité — changement du mot de passe administrateur.
 
 ## Logs runtime
