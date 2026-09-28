@@ -75,6 +75,11 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
+    assert 'id="newsSources"' in ADMIN_HTML
+    assert 'id="newsSearchIn"' in ADMIN_HTML
+    assert 'id="newsDomains"' in ADMIN_HTML
+    assert 'id="newsExcludeDomains"' in ADMIN_HTML
+    assert 'id="newsSortBy"' in ADMIN_HTML
     assert 'data-view="services"' in ADMIN_HTML
     assert 'data-view="security"' in ADMIN_HTML
     assert 'Current <span class="hint">minutes</span>' in ADMIN_HTML
@@ -88,8 +93,14 @@ def test_news_section_round_trip(tmp_path: Path) -> None:
         enabled=True,
         mode="everything",
         query="OpenAI",
+        search_in="title",
+        sources="bbc-news",
+        domains="example.com",
+        exclude_domains="blocked.example",
+        from_date="2026-09-27",
+        to_date="2026-09-28",
         lang="en",
-        country="us",
+        sort_by="relevancy",
         api_key_file=tmp_path / "newsapi_api_key",
     )
     update_news_config(path, config)
@@ -97,6 +108,13 @@ def test_news_section_round_trip(tmp_path: Path) -> None:
     assert loaded.news.enabled is True
     assert loaded.news.mode == "everything"
     assert loaded.news.query == "OpenAI"
+    assert loaded.news.search_in == "title"
+    assert loaded.news.sources == "bbc-news"
+    assert loaded.news.domains == "example.com"
+    assert loaded.news.exclude_domains == "blocked.example"
+    assert loaded.news.from_date == "2026-09-27"
+    assert loaded.news.to_date == "2026-09-28"
+    assert loaded.news.sort_by == "relevancy"
     assert loaded.news.api_key_file == tmp_path / "newsapi_api_key"
     assert "[collectors.weather]" in path.read_text(encoding="utf-8")
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pulsedeck-hub"
-version = "0.4.0"
+version = "0.4.1"
 description = "PulseDeck Raspberry Pi data hub"
 requires-python = ">=3.14"
 dependencies = [

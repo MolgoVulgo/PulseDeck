@@ -31,13 +31,13 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 
 - Dashboard — hub, MQTT, system and collector status;
 - Weather — OpenWeather configuration, provider test and hot reload;
-- News — NewsAPI mode/filter configuration, provider test and hot reload;
+- News — NewsAPI endpoint-aware configuration (`top-headlines` vs `everything`), documented provider filters, provider test and hot reload;
 - Services — common collector catalog for implemented and planned services;
 - Security — local admin password change.
 
 ## Transactional collector changes
 
-For Weather and News, Admin validates the submitted configuration and tests the remote provider before enabling a new working configuration. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
+For Weather and News, Admin validates the submitted configuration and tests the remote provider before enabling a new working configuration. News separates provider request fields from PulseDeck runtime fields: `pageSize` maps to the snapshot article count, page is fixed to 1, while collection cadence and HTTP timeout remain local runtime settings. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
 
 ## Runtime paths
 

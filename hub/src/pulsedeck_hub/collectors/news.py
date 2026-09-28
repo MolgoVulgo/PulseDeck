@@ -55,17 +55,34 @@ class NewsAPIClient:
     def _params(self) -> dict[str, object]:
         params: dict[str, object] = {"pageSize": self.config.max_articles, "page": 1}
         if self.config.mode == "top-headlines":
-            if self.config.country:
-                params["country"] = self.config.country
-            if self.config.category:
-                params["category"] = self.config.category
+            if self.config.sources:
+                params["sources"] = self.config.sources
+            else:
+                if self.config.country:
+                    params["country"] = self.config.country
+                if self.config.category:
+                    params["category"] = self.config.category
             if self.config.query:
                 params["q"] = self.config.query
         else:
-            params["q"] = self.config.query
+            if self.config.query:
+                params["q"] = self.config.query
+                if self.config.search_in:
+                    params["searchIn"] = self.config.search_in
+            if self.config.sources:
+                params["sources"] = self.config.sources
+            if self.config.domains:
+                params["domains"] = self.config.domains
+            if self.config.exclude_domains:
+                params["excludeDomains"] = self.config.exclude_domains
+            if self.config.from_date:
+                params["from"] = self.config.from_date
+            if self.config.to_date:
+                params["to"] = self.config.to_date
             if self.config.lang:
                 params["language"] = self.config.lang
-            params["sortBy"] = "publishedAt"
+            if self.config.sort_by:
+                params["sortBy"] = self.config.sort_by
         return params
 
     def fetch(self) -> dict[str, Any]:
@@ -75,7 +92,7 @@ class NewsAPIClient:
             url,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "PulseDeck/0.4.0",
+                "User-Agent": "PulseDeck/0.4.1",
                 "X-Api-Key": self._api_key(),
             },
         )
@@ -164,10 +181,17 @@ def normalize_news(raw: dict[str, Any], config: NewsConfig) -> dict[str, object]
         "ts": int(time.time()),
         "feed": {
             "mode": config.mode,
-            "category": config.category if config.mode == "top-headlines" else None,
             "query": config.query or None,
+            "sources": config.sources or None,
+            "country": config.country if config.mode == "top-headlines" and not config.sources else None,
+            "category": config.category if config.mode == "top-headlines" and not config.sources else None,
+            "search_in": config.search_in if config.mode == "everything" else None,
+            "domains": config.domains if config.mode == "everything" else None,
+            "exclude_domains": config.exclude_domains if config.mode == "everything" else None,
+            "from": config.from_date if config.mode == "everything" else None,
+            "to": config.to_date if config.mode == "everything" else None,
             "language": config.lang if config.mode == "everything" else None,
-            "country": config.country if config.mode == "top-headlines" else None,
+            "sort_by": config.sort_by if config.mode == "everything" else None,
         },
         "articles": articles,
     }

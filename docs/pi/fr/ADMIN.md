@@ -31,13 +31,13 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 
 - Dashboard — état hub, MQTT, système et collectors ;
 - Weather — configuration OpenWeather, test fournisseur et hot reload ;
-- News — configuration NewsAPI, filtres, test fournisseur et hot reload ;
+- News — configuration NewsAPI adaptée à l’endpoint (`top-headlines` ou `everything`), filtres fournisseur documentés, test fournisseur et hot reload ;
 - Services — catalogue commun des collectors implémentés et prévus ;
 - Sécurité — changement du mot de passe administrateur.
 
 ## Changements transactionnels
 
-Pour Weather et News, Admin valide les valeurs et teste le fournisseur distant avant d’activer une nouvelle configuration. Le TOML runtime et les secrets sont écrits atomiquement. Si l’application échoue, PulseDeck tente de restaurer la configuration de travail précédente.
+Pour Weather et News, Admin valide les valeurs et teste le fournisseur distant avant d’activer une nouvelle configuration. News sépare les champs de requête fournisseur des paramètres runtime PulseDeck : `pageSize` correspond au nombre d’articles du snapshot, la page reste fixée à 1, tandis que la cadence de collecte et le timeout HTTP restent des réglages locaux. Le TOML runtime et les secrets sont écrits atomiquement. Si l’application échoue, PulseDeck tente de restaurer la configuration de travail précédente.
 
 ## Chemins runtime
 

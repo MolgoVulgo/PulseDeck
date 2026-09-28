@@ -4,22 +4,20 @@
 
 ## Contrat fournisseur
 
-News V1 utilise **NewsAPI v2** via `newsapi.org`. Les requêtes fournisseur utilisent uniquement HTTPS et PulseDeck envoie la clé API exclusivement dans l’en-tête HTTP :
+News V1 utilise **NewsAPI v2** via `newsapi.org`. Les requêtes fournisseur utilisent uniquement HTTPS. PulseDeck envoie la clé API exclusivement dans l’en-tête HTTP :
 
 ```text
 X-Api-Key: <secret>
 ```
 
-PulseDeck ne place jamais la clé NewsAPI dans la query string.
-
-Endpoints pris en charge :
+La clé n’est jamais placée dans la query string. PulseDeck utilise les endpoints fournisseur suivants :
 
 ```text
 GET https://newsapi.org/v2/top-headlines
 GET https://newsapi.org/v2/everything
 ```
 
-NewsAPI accepte aussi l’authentification par query string et `Authorization`, mais PulseDeck utilise volontairement uniquement `X-Api-Key` afin de garder la clé hors des URL de requête.
+NewsAPI accepte aussi l’authentification par query string et `Authorization`, mais PulseDeck utilise volontairement uniquement `X-Api-Key` afin de garder le secret hors des URL.
 
 ## Configuration
 
@@ -32,10 +30,17 @@ Exemple TOML runtime :
 enabled = false
 provider = "newsapi"
 mode = "top-headlines"
-category = "general"
 query = ""
-lang = "fr"
+sources = ""
 country = "fr"
+category = ""
+search_in = ""
+domains = ""
+exclude_domains = ""
+from = ""
+to = ""
+lang = "fr"
+sort_by = "publishedAt"
 max_articles = 10
 interval = 1800
 request_timeout = 15
@@ -48,44 +53,63 @@ Secret :
 /etc/pulsedeck/secrets/newsapi_api_key
 ```
 
-La cadence par défaut est de 30 minutes. Les quotas dépendent du plan NewsAPI ; PulseDeck expose donc la cadence et la taille du snapshot dans Admin sans supposer un quota particulier.
+`interval` et `request_timeout` sont des paramètres runtime PulseDeck, pas des paramètres NewsAPI. `max_articles` correspond à `pageSize`. PulseDeck conserve volontairement `page=1` car `news/latest` est un snapshot courant destiné à l’affichage, pas un navigateur d’archives.
 
-## Modes
+## `top-headlines`
 
-### `top-headlines`
-
-Utilise `/v2/top-headlines`. PulseDeck peut envoyer :
+PulseDeck prend en charge les paramètres documentés de `/v2/top-headlines` utiles au snapshot courant :
 
 ```text
+q
+sources
 country
 category
-q
 pageSize
 page=1
 ```
 
-Catégories définies par le fournisseur :
+`q` est optionnel. `sources` contient une liste d’identifiants de sources NewsAPI séparés par des virgules. NewsAPI interdit de combiner `sources` avec `country` ou `category` ; PulseDeck valide cette règle et l’Admin omet automatiquement `country` et `category` lorsqu’une ou plusieurs sources sont renseignées.
+
+Catégories prises en charge :
 
 ```text
 business, entertainment, general, health,
 science, sports, technology
 ```
 
-`q` est optionnel. `country` est un code pays optionnel sur deux lettres. PulseDeck n’envoie pas de paramètre de langue dans ce mode car NewsAPI n’en définit pas pour `/v2/top-headlines`.
+`country` est limité aux codes pays actuellement documentés par NewsAPI. `/v2/top-headlines` ne possède pas de paramètre `language`, donc PulseDeck n’en envoie pas dans ce mode.
 
-### `everything`
+## `everything`
 
-Utilise `/v2/everything` et nécessite `q`. PulseDeck envoie :
+PulseDeck prend en charge les filtres documentés de `/v2/everything` :
 
 ```text
 q
+searchIn
+sources
+domains
+excludeDomains
+from
+to
 language
-sortBy=publishedAt
+sortBy
 pageSize
 page=1
 ```
 
-La requête est limitée à 500 caractères par le contrat fournisseur. `language` est un code langue optionnel sur deux lettres. `country` et `category` ne sont pas envoyés dans ce mode.
+`q` accepte la syntaxe de recherche avancée NewsAPI et est limité à 500 caractères. `searchIn` peut limiter la recherche à `title`, `description` et/ou `content`; PulseDeck omet `searchIn` quand `q` est vide.
+
+`sources` accepte jusqu’à 20 identifiants séparés par des virgules. `domains` et `excludeDomains` sont des listes de domaines séparées par des virgules. `from` et `to` acceptent des dates/date-heures ISO 8601. Pour un dashboard live, il est recommandé de les laisser vides ; des valeurs fixes figent volontairement la fenêtre temporelle fournisseur.
+
+`language` est limité aux codes actuellement documentés par NewsAPI. `sortBy` accepte :
+
+```text
+relevancy
+popularity
+publishedAt
+```
+
+La valeur par défaut est `publishedAt`. `country` et `category` ne sont pas envoyés à `/v2/everything`.
 
 ## MQTT
 
@@ -111,7 +135,7 @@ source.name
 
 Le champ NewsAPI `content` n’est volontairement pas republié. `publishedAt` est normalisé en timestamp Unix `published_ts`.
 
-Le payload contient également un objet `feed` décrivant le mode et les filtres pertinents, ainsi que `total_results` lorsque le fournisseur le renvoie.
+Le payload contient aussi un objet `feed` décrivant le mode actif et les filtres pertinents, ainsi que `total_results` lorsque le fournisseur le renvoie.
 
 ## Erreurs
 

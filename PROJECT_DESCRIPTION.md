@@ -121,7 +121,7 @@ Raspberry Pi deployment uses a one-time `scripts/install.sh` bootstrap, a persis
 
 From `patch_0007`, Weather is the first active collector and uses OpenWeather One Call API 4.0. The hub uses `current`, `timeline/1h` and `timeline/1day`, metric units and French provider localization. V1 cadences are 10 minutes for current, 30 minutes for hourly forecasts and 3 hours for daily forecasts. The OpenWeather key is stored separately in `/etc/pulsedeck/secrets/openweather_api_key` and is never placed in versioned configuration. Since `patch_0008`, Weather is configured and tested in PulseDeck Admin, which reloads the collector without a manual service restart.
 
-From `patch_0010-1`, News uses NewsAPI v2. Provider calls are HTTPS-only and the key is sent only in the `X-Api-Key` header, never in the query string. The hub supports `top-headlines` and `everything`, publishes retained QoS 1 snapshots on `news/availability` and `news/latest`, and preserves the last valid News snapshot when the provider fails. The NewsAPI key is stored at `/etc/pulsedeck/secrets/newsapi_api_key`. Configuration, provider testing and enable/disable are handled through PulseDeck Admin.
+From `patch_0010-1`, News uses NewsAPI v2. Provider calls are HTTPS-only and the key is sent only in the `X-Api-Key` header, never in the query string. From `patch_0012`, the Admin/provider contract follows endpoint-specific NewsAPI parameters: `top-headlines` supports `q`, `sources`, `country` and `category` with the documented `sources` exclusivity rule, while `everything` supports `q`, `searchIn`, `sources`, `domains`, `excludeDomains`, `from`, `to`, `language` and `sortBy`. PulseDeck fixes `page=1` for the current display snapshot and maps `max_articles` to `pageSize`. The hub publishes retained QoS 1 snapshots on `news/availability` and `news/latest` and preserves the last valid snapshot after provider failures. The NewsAPI key is stored at `/etc/pulsedeck/secrets/newsapi_api_key`.
 
 Avoid microservices, containers and infrastructure dependencies that are not needed initially.
 
@@ -374,7 +374,7 @@ Possible pages:
 
 ### News
 
-V1 provider: NewsAPI v2. The Raspberry Pi calls `top-headlines` or `everything` over HTTPS with `X-Api-Key` authentication, normalizes display-relevant metadata, and publishes retained `news/latest` plus `news/availability`. Long provider `content` is deliberately not republished so the ESP32 payload stays compact.
+V1 provider: NewsAPI v2. The Raspberry Pi calls `top-headlines` or `everything` over HTTPS with `X-Api-Key` authentication. PulseDeck exposes the endpoint-specific provider filters in Admin, keeps runtime cadence/timeout separate from NewsAPI query fields, fixes pagination to page 1 for the current snapshot, normalizes display-relevant metadata, and publishes retained `news/latest` plus `news/availability`. Long provider `content` is deliberately not republished so the ESP32 payload stays compact.
 
 ### Printer
 

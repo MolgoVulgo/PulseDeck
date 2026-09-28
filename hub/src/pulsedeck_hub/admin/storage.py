@@ -75,17 +75,23 @@ def render_news_section(config: NewsConfig) -> str:
             f"enabled = {'true' if config.enabled else 'false'}",
             'provider = "newsapi"',
             f"mode = {json.dumps(config.mode)}",
-            f"category = {json.dumps(config.category)}",
             f"query = {json.dumps(config.query, ensure_ascii=False)}",
-            f"lang = {json.dumps(config.lang)}",
+            f"sources = {json.dumps(config.sources)}",
             f"country = {json.dumps(config.country)}",
+            f"category = {json.dumps(config.category)}",
+            f"search_in = {json.dumps(config.search_in)}",
+            f"domains = {json.dumps(config.domains)}",
+            f"exclude_domains = {json.dumps(config.exclude_domains)}",
+            f"from = {json.dumps(config.from_date)}",
+            f"to = {json.dumps(config.to_date)}",
+            f"lang = {json.dumps(config.lang)}",
+            f"sort_by = {json.dumps(config.sort_by)}",
             f"max_articles = {config.max_articles}",
             f"interval = {config.interval}",
             f"request_timeout = {config.request_timeout}",
             f"api_key_file = {json.dumps(str(config.api_key_file))}",
         ]
     ) + "\n"
-
 
 def update_weather_config(path: Path, config: WeatherConfig) -> None:
     _replace_section(path, _WEATHER_SECTION, render_weather_section(config))

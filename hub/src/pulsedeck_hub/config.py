@@ -20,6 +20,15 @@ NEWS_CATEGORIES = {
     "health",
 }
 NEWS_MODES = {"top-headlines", "everything"}
+NEWS_LANGUAGES = {"ar", "de", "en", "es", "fr", "he", "it", "nl", "no", "pt", "ru", "sv", "ud", "zh"}
+NEWS_COUNTRIES = {
+    "ae", "ar", "at", "au", "be", "bg", "br", "ca", "ch", "cn", "co", "cu", "cz", "de", "eg",
+    "fr", "gb", "gr", "hk", "hu", "id", "ie", "il", "in", "it", "jp", "kr", "lt", "lv", "ma",
+    "mx", "my", "ng", "nl", "no", "nz", "ph", "pl", "pt", "ro", "rs", "ru", "sa", "se", "sg",
+    "si", "sk", "th", "tr", "tw", "ua", "us", "ve", "za",
+}
+NEWS_SEARCH_FIELDS = {"title", "description", "content"}
+NEWS_SORT_ORDERS = {"relevancy", "popularity", "publishedAt"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,10 +75,17 @@ class NewsConfig:
     enabled: bool = False
     provider: str = "newsapi"
     mode: str = "top-headlines"
-    category: str = "general"
     query: str = ""
-    lang: str = "fr"
+    sources: str = ""
     country: str = "fr"
+    category: str = ""
+    search_in: str = ""
+    domains: str = ""
+    exclude_domains: str = ""
+    from_date: str = ""
+    to_date: str = ""
+    lang: str = "fr"
+    sort_by: str = "publishedAt"
     max_articles: int = 10
     interval: int = 1800
     request_timeout: int = 15
@@ -107,12 +123,46 @@ def _coordinate(value: object, name: str, minimum: float, maximum: float) -> flo
     return result
 
 
-def _optional_two_letter_code(value: object, name: str) -> str:
+def _optional_choice(value: object, name: str, choices: set[str]) -> str:
     if not isinstance(value, str):
         raise ValueError(f"{name} must be a string")
     result = value.strip().lower()
-    if result and (len(result) != 2 or not result.isalpha()):
-        raise ValueError(f"{name} must be empty or a 2-letter code")
+    if result and result not in choices:
+        raise ValueError(f"{name} is unsupported")
+    return result
+
+
+def _csv(value: object, name: str, *, maximum_items: int | None = None) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    if maximum_items is not None and len(items) > maximum_items:
+        raise ValueError(f"{name} must contain at most {maximum_items} comma-separated values")
+    if len(set(items)) != len(items):
+        raise ValueError(f"{name} contains duplicate values")
+    return ",".join(items)
+
+
+def _search_in(value: object) -> str:
+    result = _csv(value, "collectors.news.search_in")
+    if result:
+        fields = result.split(",")
+        if any(field not in NEWS_SEARCH_FIELDS for field in fields):
+            raise ValueError("collectors.news.search_in contains an unsupported field")
+    return result
+
+
+def _optional_iso8601(value: object, name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    result = value.strip()
+    if not result:
+        return ""
+    from datetime import datetime
+    try:
+        datetime.fromisoformat(result.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be ISO 8601") from exc
     return result
 
 
@@ -176,17 +226,39 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
     mode = raw.get("mode", "top-headlines")
     if not isinstance(mode, str) or mode not in NEWS_MODES:
         raise ValueError("collectors.news.mode must be 'top-headlines' or 'everything'")
-    category = raw.get("category", "general")
-    if not isinstance(category, str) or category not in NEWS_CATEGORIES:
-        raise ValueError("collectors.news.category is unsupported")
+
     query = raw.get("query", "")
     if not isinstance(query, str):
         raise ValueError("collectors.news.query must be a string")
     query = query.strip()
     if len(query) > 500:
         raise ValueError("collectors.news.query must be <= 500 characters")
-    if mode == "everything" and not query:
-        raise ValueError("collectors.news.query is required in everything mode")
+
+    sources = _csv(raw.get("sources", ""), "collectors.news.sources")
+    if mode == "everything" and sources and len(sources.split(",")) > 20:
+        raise ValueError("collectors.news.sources must contain at most 20 comma-separated values in everything mode")
+    country = _optional_choice(raw.get("country", "fr"), "collectors.news.country", NEWS_COUNTRIES)
+
+    category_raw = raw.get("category", "")
+    if not isinstance(category_raw, str):
+        raise ValueError("collectors.news.category must be a string")
+    category = category_raw.strip().lower()
+    if category and category not in NEWS_CATEGORIES:
+        raise ValueError("collectors.news.category is unsupported")
+
+    if mode == "top-headlines" and sources and (country or category):
+        raise ValueError("collectors.news.sources cannot be combined with country or category in top-headlines mode")
+
+    search_in = _search_in(raw.get("search_in", ""))
+    domains = _csv(raw.get("domains", ""), "collectors.news.domains")
+    exclude_domains = _csv(raw.get("exclude_domains", ""), "collectors.news.exclude_domains")
+    from_date = _optional_iso8601(raw.get("from", ""), "collectors.news.from")
+    to_date = _optional_iso8601(raw.get("to", ""), "collectors.news.to")
+    lang = _optional_choice(raw.get("lang", "fr"), "collectors.news.lang", NEWS_LANGUAGES)
+
+    sort_by = raw.get("sort_by", "publishedAt")
+    if not isinstance(sort_by, str) or sort_by not in NEWS_SORT_ORDERS:
+        raise ValueError("collectors.news.sort_by is unsupported")
 
     api_key_file = raw.get("api_key_file", str(DEFAULT_NEWSAPI_KEY_PATH))
     if not isinstance(api_key_file, str) or not api_key_file.strip():
@@ -196,10 +268,17 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
         enabled=enabled,
         provider=provider,
         mode=mode,
-        category=category,
         query=query,
-        lang=_optional_two_letter_code(raw.get("lang", "fr"), "collectors.news.lang"),
-        country=_optional_two_letter_code(raw.get("country", "fr"), "collectors.news.country"),
+        sources=sources,
+        country=country,
+        category=category,
+        search_in=search_in,
+        domains=domains,
+        exclude_domains=exclude_domains,
+        from_date=from_date,
+        to_date=to_date,
+        lang=lang,
+        sort_by=sort_by,
         max_articles=_positive_int(raw.get("max_articles", 10), "collectors.news.max_articles", maximum=100),
         interval=_positive_int(raw.get("interval", 1800), "collectors.news.interval", minimum=300, maximum=86400),
         request_timeout=_positive_int(raw.get("request_timeout", 15), "collectors.news.request_timeout", maximum=60),
