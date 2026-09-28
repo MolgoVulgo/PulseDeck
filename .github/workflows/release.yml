@@ -1,0 +1,66 @@
+name: PulseDeck release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build stable release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Validate release version
+        run: python scripts/check_release_version.py --tag "${GITHUB_REF_NAME}"
+
+      - name: Validate release scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/build_release.sh
+          for script in scripts/pulsedeck.sh scripts/setup_pi.sh scripts/bootstrap_pi.sh scripts/deploy_hub.sh scripts/install.sh; do
+            bash -n "$script"
+          done
+
+      - name: Build release assets
+        shell: bash
+        run: bash scripts/build_release.sh "${GITHUB_REF_NAME}" dist
+
+      - name: Refuse mutable/duplicate release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; refusing to replace it." >&2
+            exit 1
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/PulseDeck-${GITHUB_REF_NAME}.tar.gz \
+            dist/PulseDeck-${GITHUB_REF_NAME}.tar.gz.sha256 \
+            dist/PulseDeck-${GITHUB_REF_NAME}.json \
+            --verify-tag \
+            --generate-notes \
+            --title "PulseDeck ${GITHUB_REF_NAME}"
