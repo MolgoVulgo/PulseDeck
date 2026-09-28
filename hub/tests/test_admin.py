@@ -100,6 +100,14 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'id="updateModalConfirm"' in ADMIN_HTML
     assert 'data-update-step="restart"' in ADMIN_HTML
     assert 'reconnexion automatique' in ADMIN_HTML.lower()
+    assert "restartSeen:false" in ADMIN_HTML
+    assert ADMIN_HTML.count("state.updateModal.restartSeen=true") >= 2
+    assert "inst.state==='running'&&m.restartSeen" in ADMIN_HTML
+    assert "setUpdateSteps('done','done','done','active')" in ADMIN_HTML
+    assert "$('updateModalTitle').textContent='Vérification finale'" in ADMIN_HTML
+    restart_verify = ADMIN_HTML.index("if(inst.state==='running'&&m.restartSeen)")
+    generic_running = ADMIN_HTML.index("if(inst.state==='running'){", restart_verify)
+    assert restart_verify < generic_running
     assert "confirm('Installer" not in ADMIN_HTML
 
 
