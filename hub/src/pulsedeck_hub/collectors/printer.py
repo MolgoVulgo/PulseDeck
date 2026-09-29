@@ -43,3 +43,10 @@ class PrinterCollector:
         for adapter in reversed(self._adapters):
             adapter.stop()
         self._adapters.clear()
+
+    def thumbnail_png(self, printer_id: str) -> bytes | None:
+        """Return the current Admin thumbnail for one active printer."""
+        for adapter in self._adapters:
+            if adapter.device.id == printer_id:
+                return adapter.thumbnail_png()
+        return None

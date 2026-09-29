@@ -82,15 +82,15 @@ class HubRuntime:
             self.admin_server.start()
         self.update_checker.trigger()
 
-    def _reload_collectors(self, *, weather: bool = False, news: bool = False) -> None:
+    def _reload_collectors(self, *, weather: bool = False, news: bool = False, printer: bool = False) -> None:
         with self._config_lock:
             new_config = load_config(self.config_path)
             if new_config.mqtt != self.config.mqtt:
                 raise ValueError("MQTT changes require a service restart")
             if new_config.admin != self.config.admin:
                 raise ValueError("Admin listener changes require a service restart")
-            if new_config.printer != self.config.printer:
-                raise ValueError("Printer changes require a service restart")
+            if not printer and new_config.printer != self.config.printer:
+                raise ValueError("Printer changes require reload_printer")
             if not weather and new_config.weather != self.config.weather:
                 raise ValueError("Weather changes require reload_weather")
             if not news and new_config.news != self.config.news:
@@ -100,12 +100,16 @@ class HubRuntime:
                 self.weather_collector.stop()
             if news and self.news_collector is not None:
                 self.news_collector.stop()
+            if printer and self.printer_collector is not None:
+                self.printer_collector.stop()
 
             self.config = new_config
             if weather:
                 self._start_weather()
             if news:
                 self._start_news()
+            if printer:
+                self._start_printer()
 
     def reload_weather(self) -> None:
         """Reload Weather configuration without restarting the hub."""
@@ -114,6 +118,10 @@ class HubRuntime:
     def reload_news(self) -> None:
         """Reload News configuration without restarting the hub."""
         self._reload_collectors(news=True)
+
+    def reload_printer(self) -> None:
+        """Reload Printer configuration without restarting the hub."""
+        self._reload_collectors(printer=True)
 
     def stop(self) -> None:
         if self.admin_server is not None:

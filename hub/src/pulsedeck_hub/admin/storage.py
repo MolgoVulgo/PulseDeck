@@ -8,11 +8,12 @@ from pathlib import Path
 import re
 import tempfile
 
-from ..config import NewsConfig, WeatherConfig
+from ..config import NewsConfig, PrinterConfig, WeatherConfig
 
 
 _WEATHER_SECTION = re.compile(r"(?ms)^\[collectors\.weather\]\n.*?(?=^\[|\Z)")
 _NEWS_SECTION = re.compile(r"(?ms)^\[collectors\.news\]\n.*?(?=^\[|\Z)")
+_PRINTER_SECTION = re.compile(r"(?ms)^\[collectors\.printer\]\n.*?(?=^\[(?!\[collectors\.printer\.devices\]\])|\Z)")
 
 
 def _atomic_write(path: Path, content: str, *, mode: int) -> None:
@@ -94,12 +95,45 @@ def render_news_section(config: NewsConfig) -> str:
         ]
     ) + "\n"
 
+
+def render_printer_section(config: PrinterConfig) -> str:
+    lines = [
+        "[collectors.printer]",
+        f"enabled = {'true' if config.enabled else 'false'}",
+        f"poll_interval = {config.poll_interval}",
+        f"request_timeout = {config.request_timeout}",
+        f"thumbnail_max_base64_bytes = {config.thumbnail_max_base64_bytes}",
+        f"thumbnail_max_png_bytes = {config.thumbnail_max_png_bytes}",
+        f"thumbnail_max_pixels = {config.thumbnail_max_pixels}",
+    ]
+    for device in config.devices:
+        lines.extend(
+            [
+                "",
+                "[[collectors.printer.devices]]",
+                f"id = {json.dumps(device.id)}",
+                f"driver = {json.dumps(device.driver)}",
+                f"host = {json.dumps(device.host)}",
+                f"serial = {json.dumps(device.serial)}",
+                f"access_code_file = {json.dumps(str(device.access_code_file))}",
+                f"enabled = {'true' if device.enabled else 'false'}",
+                f"port = {device.port}",
+                f"reconnect_min_delay = {device.reconnect_min_delay}",
+                f"reconnect_max_delay = {device.reconnect_max_delay}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
 def update_weather_config(path: Path, config: WeatherConfig) -> None:
     _replace_section(path, _WEATHER_SECTION, render_weather_section(config))
 
 
 def update_news_config(path: Path, config: NewsConfig) -> None:
     _replace_section(path, _NEWS_SECTION, render_news_section(config))
+
+
+def update_printer_config(path: Path, config: PrinterConfig) -> None:
+    _replace_section(path, _PRINTER_SECTION, render_printer_section(config))
 
 
 def update_secret(path: Path, value: str) -> None:

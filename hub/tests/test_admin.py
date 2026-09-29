@@ -1,11 +1,19 @@
 from pathlib import Path
 
 from pulsedeck_hub.admin.catalog import build_service_catalog
-from pulsedeck_hub.admin.routes import _retained_messages
+from pulsedeck_hub.admin.routes import _printer_runtime_snapshot, _retained_messages
 from pulsedeck_hub.admin.ui import ADMIN_HTML
 from pulsedeck_hub.admin.security import hash_password, make_session, verify_password, verify_session
-from pulsedeck_hub.admin.storage import render_news_section, render_weather_section, update_news_config, update_secret, update_weather_config
-from pulsedeck_hub.config import NewsConfig, WeatherConfig, load_config
+from pulsedeck_hub.admin.storage import (
+    render_news_section,
+    render_printer_section,
+    render_weather_section,
+    update_news_config,
+    update_printer_config,
+    update_secret,
+    update_weather_config,
+)
+from pulsedeck_hub.config import NewsConfig, PrinterConfig, PrinterDeviceConfig, WeatherConfig, load_config
 
 
 def base_config(path: Path) -> None:
@@ -71,13 +79,32 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     assert by_id["news"]["transport"] == "HTTPS"
     assert by_id["news"]["auth"] == "X-Api-Key"
     assert by_id["pc_gamer"]["provider"] is None
-    assert by_id["printer"]["provider"] is None
+    assert by_id["printer"]["available"] is True
+    assert by_id["printer"]["provider"] == "ELEGOO CC2"
+    assert by_id["printer"]["view"] == "printer"
+    printer_catalog = build_service_catalog(
+        {"state": "online"},
+        True,
+        {"state": "online"},
+        True,
+        "newsapi",
+        {"state": "degraded"},
+        True,
+    )
+    assert {item["id"]: item for item in printer_catalog}["printer"]["state"] == "degraded"
 
 
 def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
+    assert 'data-view="printer"' in ADMIN_HTML
+    assert 'data-view-panel="printer"' in ADMIN_HTML
+    assert 'id="printerDevices"' in ADMIN_HTML
+    assert 'id="printerRuntimeList"' in ADMIN_HTML
+    assert '/api/printer/config' in ADMIN_HTML
+    assert '/api/printer/test' in ADMIN_HTML
+    assert '/api/printer/runtime' in ADMIN_HTML
     assert 'data-view="data"' in ADMIN_HTML
     assert 'data-view-panel="data"' in ADMIN_HTML
     assert 'id="refreshDataButton"' in ADMIN_HTML
@@ -95,6 +122,7 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view-panel="logs"' in ADMIN_HTML
     assert 'id="logService"' in ADMIN_HTML
     assert '<option value="all">Tout</option>' in ADMIN_HTML
+    assert '<option value="printer">Printer</option>' in ADMIN_HTML
     assert '/api/logs?service=' in ADMIN_HTML
     assert 'data-view="security"' in ADMIN_HTML
     assert 'Current <span class="hint">minutes</span>' in ADMIN_HTML
@@ -209,4 +237,79 @@ def test_retained_messages_decode_confirmed_publications() -> None:
     assert [item["suffix"] for item in messages] == ["weather/current", "weather/hourly"]
     assert messages[0]["payload"]["data"]["temperature_c"] == 18.5
     assert messages[1]["payload"] == "not-json"
+
+def test_printer_section_round_trip_preserves_following_sections(tmp_path: Path) -> None:
+    path = tmp_path / "pulsedeck.toml"
+    base_config(path)
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "\n[collectors.printer]\nenabled = false\n\n[[collectors.printer.devices]]\nid = \"old\"\nhost = \"old.local\"\nserial = \"OLD\"\naccess_code_file = \"/tmp/old\"\n\n[collectors.pc_gamer]\nenabled = false\n",
+        encoding="utf-8",
+    )
+    device = PrinterDeviceConfig(
+        id="cc2-main",
+        driver="elegoo_cc2",
+        host="192.168.1.50",
+        serial="ELEGOO123",
+        access_code_file=tmp_path / "cc2-main.code",
+        reconnect_min_delay=3,
+        reconnect_max_delay=20,
+    )
+    config = PrinterConfig(enabled=True, devices=(device,), poll_interval=4, request_timeout=7)
+    update_printer_config(path, config)
+    loaded = load_config(path)
+    assert loaded.printer.enabled is True
+    assert loaded.printer.poll_interval == 4
+    assert loaded.printer.request_timeout == 7
+    assert [item.id for item in loaded.printer.devices] == ["cc2-main"]
+    text = path.read_text(encoding="utf-8")
+    assert text.count("[[collectors.printer.devices]]") == 1
+    assert '[collectors.pc_gamer]\nenabled = false' in text
+    assert "access_code =" not in render_printer_section(config)
+
+
+def test_printer_runtime_snapshot_uses_normalized_retained_messages(tmp_path: Path) -> None:
+    device = PrinterDeviceConfig(
+        id="cc2-main",
+        driver="elegoo_cc2",
+        host="printer.local",
+        serial="ELEGOO123",
+        access_code_file=tmp_path / "code",
+    )
+
+    class MQTT:
+        def retained_snapshot(self, prefix: str):  # type: ignore[no-untyped-def]
+            assert prefix == "printer"
+            return {
+                "printer/cc2-main/availability": {
+                    "topic": "pulsedeck/v1/printer/cc2-main/availability",
+                    "payload": '{"state":"online","last_success":100}',
+                    "published_at": 101,
+                    "qos": 1,
+                },
+                "printer/cc2-main/status": {
+                    "topic": "pulsedeck/v1/printer/cc2-main/status",
+                    "payload": '{"state":"printing","temperatures":{}}',
+                    "published_at": 102,
+                    "qos": 1,
+                },
+                "printer/cc2-main/job": {
+                    "topic": "pulsedeck/v1/printer/cc2-main/job",
+                    "payload": '{"filename":"piece.gcode","current_layer":12,"total_layers":99}',
+                    "published_at": 103,
+                    "qos": 1,
+                },
+            }
+
+    class Config:
+        printer = PrinterConfig(enabled=True, devices=(device,))
+
+    class Runtime:
+        config = Config()
+        mqtt_client = MQTT()
+
+    snapshot = _printer_runtime_snapshot(Runtime())
+    assert snapshot["state"] == "online"
+    assert snapshot["online_devices"] == 1
+    assert snapshot["devices"][0]["job"]["filename"] == "piece.gcode"
 

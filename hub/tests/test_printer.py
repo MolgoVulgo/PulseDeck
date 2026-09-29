@@ -213,3 +213,23 @@ def test_stale_metadata_response_does_not_mark_new_job_enriched(
     assert extract_job_identity(returned)[0] == "next.gcode"
     assert adapter._active_filename == "next.gcode"
     assert adapter._metadata_filename is None
+
+def test_adapter_thumbnail_cache_is_exposed_and_cleared(tmp_path: Path) -> None:
+    from pulsedeck_hub.config import PrinterConfig, PrinterDeviceConfig
+    from pulsedeck_hub.printers.elegoo_cc2 import ElegooCC2Adapter
+
+    device = PrinterDeviceConfig(
+        id="cc2-main",
+        driver="elegoo_cc2",
+        host="printer.local",
+        serial="ELEGOO123",
+        access_code_file=tmp_path / "code",
+    )
+    adapter = ElegooCC2Adapter(device, PrinterConfig(enabled=True, devices=(device,)), _FakeHubMQTT())
+    adapter._thumbnail_png = b"png"
+    adapter._thumbnail_available = True
+    assert adapter.thumbnail_png() == b"png"
+    adapter._clear_thumbnail()
+    assert adapter.thumbnail_png() is None
+    assert adapter._thumbnail_available is False
+

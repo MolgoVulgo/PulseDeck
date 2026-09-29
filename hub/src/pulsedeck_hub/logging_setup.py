@@ -8,7 +8,7 @@ import threading
 from typing import Any
 
 
-LOG_SERVICES = ("hub", "mqtt", "weather", "news", "admin")
+LOG_SERVICES = ("hub", "mqtt", "weather", "news", "printer", "admin")
 _MAX_LOG_ENTRIES = 500
 _LOG_ENTRIES: deque[dict[str, Any]] = deque(maxlen=_MAX_LOG_ENTRIES)
 _LOG_LOCK = threading.RLock()
@@ -22,6 +22,8 @@ def classify_log_service(logger_name: str) -> str:
         return "weather"
     if ".collectors.news" in name:
         return "news"
+    if ".collectors.printer" in name or ".printers." in name or name.startswith("paho.mqtt.printer."):
+        return "printer"
     if ".mqtt." in name or name.endswith(".mqtt"):
         return "mqtt"
     if ".admin." in name or name.endswith(".admin") or name.startswith("uvicorn"):

@@ -11,6 +11,8 @@ def build_service_catalog(
     news_state: dict[str, Any],
     news_enabled: bool,
     news_provider: str = "newsapi",
+    printer_state: dict[str, Any] | None = None,
+    printer_enabled: bool = False,
 ) -> list[dict[str, Any]]:
     """Return stable Admin metadata for implemented and planned collectors."""
 
@@ -51,13 +53,13 @@ def build_service_catalog(
         {
             "id": "printer",
             "label": "Printer",
-            "available": False,
-            "state": "planned",
-            "enabled": False,
-            "provider": None,
-            "transport": None,
-            "auth": None,
-            "view": None,
+            "available": True,
+            "state": (printer_state or {}).get("state", "disabled"),
+            "enabled": printer_enabled,
+            "provider": "ELEGOO CC2",
+            "transport": "MQTT LAN",
+            "auth": "Access code",
+            "view": "printer",
         },
         {
             "id": "mini_server",

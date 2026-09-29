@@ -20,12 +20,17 @@ from ..config import (
     DEFAULT_GNEWS_KEY_PATH,
     DEFAULT_NEWSAPI_KEY_PATH,
     DEFAULT_OPENWEATHER_KEY_PATH,
+    DEFAULT_PRINTER_SECRET_DIR,
     NewsConfig,
+    PrinterConfig,
+    PrinterDeviceConfig,
     WeatherConfig,
     news_config_from_mapping,
+    printer_config_from_mapping,
     weather_config_from_mapping,
 )
 from ..logging_setup import LOG_SERVICES, recent_logs
+from ..printers.elegoo_cc2 import ElegooCC2Client, PrinterError, extract_job_identity, normalize_job, normalize_status
 from ..update import load_update_install_status, queue_update_request
 from .catalog import build_service_catalog
 from .security import (
@@ -39,7 +44,7 @@ from .security import (
     verify_password,
     verify_session,
 )
-from .storage import update_news_config, update_secret, update_weather_config
+from .storage import update_news_config, update_printer_config, update_secret, update_weather_config
 from .ui import ADMIN_HTML
 
 
@@ -189,6 +194,179 @@ def _test_news(candidate: NewsConfig, key: str) -> dict[str, Any]:
     }
 
 
+
+def _printer_device_raw(device: PrinterDeviceConfig) -> dict[str, Any]:
+    return {
+        "id": device.id,
+        "driver": device.driver,
+        "host": device.host,
+        "serial": device.serial,
+        "access_code_file": str(device.access_code_file),
+        "enabled": device.enabled,
+        "port": device.port,
+        "reconnect_min_delay": device.reconnect_min_delay,
+        "reconnect_max_delay": device.reconnect_max_delay,
+    }
+
+
+def _candidate_printer(
+    runtime: Any,
+    body: dict[str, Any],
+) -> tuple[PrinterConfig, dict[str, str | None], dict[Path, str]]:
+    current = runtime.config.printer
+    current_by_id = {device.id: device for device in current.devices}
+    devices_body = body.get("devices")
+    if devices_body is None:
+        devices_body = [_printer_device_raw(device) for device in current.devices]
+    if not isinstance(devices_body, list):
+        raise _json_error(400, "devices must be an array")
+
+    raw_devices: list[dict[str, Any]] = []
+    provided_codes: dict[Path, str] = {}
+    for index, item in enumerate(devices_body):
+        if not isinstance(item, dict):
+            raise _json_error(400, f"devices[{index}] must be an object")
+        device_id = item.get("id")
+        if not isinstance(device_id, str) or not device_id.strip():
+            raise _json_error(400, f"devices[{index}].id must be a non-empty string")
+        normalized_id = device_id.strip()
+        if any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in normalized_id):
+            raise _json_error(400, f"devices[{index}].id contains unsupported characters")
+
+        previous = current_by_id.get(normalized_id)
+        secret_path = previous.access_code_file if previous is not None else DEFAULT_PRINTER_SECRET_DIR / f"{normalized_id}_access_code"
+        provided = item.get("access_code")
+        if provided is not None and not isinstance(provided, str):
+            raise _json_error(400, f"devices[{index}].access_code must be a string or null")
+        if isinstance(provided, str) and provided.strip():
+            provided_codes[secret_path] = provided.strip()
+
+        raw_devices.append(
+            {
+                "id": normalized_id,
+                "driver": item.get("driver", previous.driver if previous else "elegoo_cc2"),
+                "host": item.get("host", previous.host if previous else ""),
+                "serial": item.get("serial", previous.serial if previous else ""),
+                "access_code_file": str(secret_path),
+                "enabled": item.get("enabled", previous.enabled if previous else True),
+                "port": item.get("port", previous.port if previous else 1883),
+                "reconnect_min_delay": item.get(
+                    "reconnect_min_delay",
+                    previous.reconnect_min_delay if previous else 2,
+                ),
+                "reconnect_max_delay": item.get(
+                    "reconnect_max_delay",
+                    previous.reconnect_max_delay if previous else 30,
+                ),
+            }
+        )
+
+    raw = {
+        "enabled": body.get("enabled", current.enabled),
+        "poll_interval": body.get("poll_interval", current.poll_interval),
+        "request_timeout": body.get("request_timeout", current.request_timeout),
+        "thumbnail_max_base64_bytes": current.thumbnail_max_base64_bytes,
+        "thumbnail_max_png_bytes": current.thumbnail_max_png_bytes,
+        "thumbnail_max_pixels": current.thumbnail_max_pixels,
+        "devices": raw_devices,
+    }
+    try:
+        candidate = printer_config_from_mapping(raw)
+    except ValueError as exc:
+        raise _json_error(400, str(exc)) from exc
+
+    access_codes: dict[str, str | None] = {}
+    for device in candidate.devices:
+        code = provided_codes.get(device.access_code_file)
+        if code is None:
+            code = _configured_secret(device.access_code_file)
+        access_codes[device.id] = code
+        if candidate.enabled and device.enabled and not code:
+            raise _json_error(400, f"Access code is required for enabled printer {device.id}")
+    return candidate, access_codes, provided_codes
+
+
+def _probe_printer(device: PrinterDeviceConfig, access_code: str, request_timeout: int) -> dict[str, Any]:
+    client = ElegooCC2Client(device, access_code, request_timeout=request_timeout)
+    client.start()
+    try:
+        result = client.request(1002, {})
+    finally:
+        client.stop()
+    _filename, _current_layer, total_hint = extract_job_identity(result)
+    return {
+        "ok": True,
+        "printer_id": device.id,
+        "status": normalize_status(result, printer_id=device.id),
+        "job": normalize_job(
+            result,
+            printer_id=device.id,
+            total_layers=total_hint,
+            thumbnail_available=False,
+        ),
+    }
+
+
+def _printer_runtime_snapshot(runtime: Any) -> dict[str, Any]:
+    messages = _retained_messages(runtime, "printer")
+    by_suffix = {message["suffix"]: message for message in messages}
+    devices: list[dict[str, Any]] = []
+    enabled_states: list[str] = []
+
+    for device in runtime.config.printer.devices:
+        prefix = f"printer/{device.id}"
+        availability_message = by_suffix.get(f"{prefix}/availability")
+        status_message = by_suffix.get(f"{prefix}/status")
+        job_message = by_suffix.get(f"{prefix}/job")
+        availability = availability_message.get("payload") if availability_message else None
+        status = status_message.get("payload") if status_message else None
+        job = job_message.get("payload") if job_message else None
+
+        if not device.enabled:
+            state = "disabled"
+        elif isinstance(availability, dict) and isinstance(availability.get("state"), str):
+            state = availability["state"]
+        else:
+            state = "starting"
+        if device.enabled:
+            enabled_states.append(state)
+
+        devices.append(
+            {
+                "id": device.id,
+                "driver": device.driver,
+                "host": device.host,
+                "serial": device.serial,
+                "enabled": device.enabled,
+                "state": state,
+                "availability": availability if isinstance(availability, dict) else None,
+                "status": status if isinstance(status, dict) else None,
+                "job": job if isinstance(job, dict) else None,
+            }
+        )
+
+    if not runtime.config.printer.enabled:
+        overall = "disabled"
+    elif not enabled_states:
+        overall = "disabled"
+    elif all(state == "online" for state in enabled_states):
+        overall = "online"
+    elif any(state == "online" for state in enabled_states):
+        overall = "degraded"
+    elif any(state == "starting" for state in enabled_states):
+        overall = "starting"
+    else:
+        overall = "offline"
+
+    return {
+        "state": overall,
+        "enabled": runtime.config.printer.enabled,
+        "configured_devices": len(runtime.config.printer.devices),
+        "enabled_devices": len(enabled_states),
+        "online_devices": sum(state == "online" for state in enabled_states),
+        "devices": devices,
+    }
+
 def _retained_messages(runtime: Any, prefix: str) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for suffix, entry in sorted(runtime.mqtt_client.retained_snapshot(prefix).items()):
@@ -205,6 +383,8 @@ def _retained_messages(runtime: Any, prefix: str) -> list[dict[str, Any]]:
                 "topic": entry.get("topic"),
                 "published_at": entry.get("published_at"),
                 "qos": entry.get("qos"),
+                "binary": bool(entry.get("binary", False)),
+                "size": entry.get("size"),
                 "payload": payload,
             }
         )
@@ -304,6 +484,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
     def status(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
         state = runtime.health.snapshot()
+        printer_state = _printer_runtime_snapshot(runtime)
         return {
             "version": __version__,
             "uptime_seconds": max(0, int(time.time()) - state["started_at"]),
@@ -315,6 +496,12 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             },
             "weather": state["weather"],
             "news": state["news"],
+            "printer": {
+                "state": printer_state["state"],
+                "configured_devices": printer_state["configured_devices"],
+                "enabled_devices": printer_state["enabled_devices"],
+                "online_devices": printer_state["online_devices"],
+            },
             "admin": {"listen": runtime.config.admin.listen, "port": runtime.config.admin.port},
             "system": _system_metrics(),
         }
@@ -359,6 +546,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
     def services(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
         state = runtime.health.snapshot()
+        printer_state = _printer_runtime_snapshot(runtime)
         return {
             "services": build_service_catalog(
                 state["weather"],
@@ -366,6 +554,8 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 state["news"],
                 runtime.config.news.enabled,
                 runtime.config.news.provider,
+                printer_state,
+                runtime.config.printer.enabled,
             ),
         }
 
@@ -389,7 +579,115 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "health": state["news"],
                 "messages": _retained_messages(runtime, "news"),
             },
+            "printer": {
+                "enabled": runtime.config.printer.enabled,
+                "health": _printer_runtime_snapshot(runtime),
+                "messages": _retained_messages(runtime, "printer"),
+            },
         }
+
+    @app.get("/api/printer/config")
+    def printer_config(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        p = runtime.config.printer
+        return {
+            "enabled": p.enabled,
+            "poll_interval": p.poll_interval,
+            "request_timeout": p.request_timeout,
+            "devices": [
+                {
+                    "id": device.id,
+                    "driver": device.driver,
+                    "host": device.host,
+                    "serial": device.serial,
+                    "enabled": device.enabled,
+                    "port": device.port,
+                    "reconnect_min_delay": device.reconnect_min_delay,
+                    "reconnect_max_delay": device.reconnect_max_delay,
+                    "access_code_configured": bool(_configured_secret(device.access_code_file)),
+                }
+                for device in p.devices
+            ],
+        }
+
+    @app.get("/api/printer/runtime")
+    def printer_runtime(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        return _printer_runtime_snapshot(runtime)
+
+    @app.post("/api/printer/test")
+    async def printer_test(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("device"), dict):
+            raise _json_error(400, "device is required")
+        device_body = dict(body["device"])
+        device_body["enabled"] = True
+        candidate, access_codes, _provided = _candidate_printer(
+            runtime,
+            {
+                "enabled": True,
+                "poll_interval": runtime.config.printer.poll_interval,
+                "request_timeout": body.get("request_timeout", runtime.config.printer.request_timeout),
+                "devices": [device_body],
+            },
+        )
+        device = candidate.devices[0]
+        access_code = access_codes.get(device.id)
+        if not access_code:
+            raise _json_error(400, "Access code is required for the connection test")
+        try:
+            result = _probe_printer(device, access_code, candidate.request_timeout)
+            LOG.info("Printer connection test succeeded: %s", device.id)
+            return result
+        except PrinterError as exc:
+            LOG.warning("Printer connection test failed for %s: %s", device.id, exc)
+            raise _json_error(502, str(exc)) from exc
+
+    @app.post("/api/printer/config")
+    async def printer_save(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise _json_error(400, "Invalid body")
+        candidate, _access_codes, provided_codes = _candidate_printer(runtime, body)
+
+        old_config = runtime.config_path.read_text(encoding="utf-8")
+        old_secrets = {path: _configured_secret(path) for path in provided_codes}
+        try:
+            for path, value in provided_codes.items():
+                update_secret(path, value)
+            update_printer_config(runtime.config_path, candidate)
+            runtime.reload_printer()
+            LOG.info("Printer configuration applied: %d device(s)", len(candidate.devices))
+        except Exception as exc:
+            try:
+                runtime.config_path.write_text(old_config, encoding="utf-8")
+                os.chmod(runtime.config_path, 0o660)
+                for path, previous in old_secrets.items():
+                    if previous is None:
+                        try:
+                            path.unlink()
+                        except FileNotFoundError:
+                            pass
+                    else:
+                        update_secret(path, previous)
+                runtime.reload_printer()
+            except Exception:
+                pass
+            raise _json_error(500, f"Configuration not applied: {type(exc).__name__}") from exc
+        return {"ok": True, "runtime": _printer_runtime_snapshot(runtime)}
+
+    @app.get("/api/printer/thumbnail/{printer_id}")
+    def printer_thumbnail(request: Request, printer_id: str) -> Response:
+        _require_auth(request, session_key)
+        if not any(device.id == printer_id for device in runtime.config.printer.devices):
+            raise _json_error(404, "Unknown printer")
+        collector = runtime.printer_collector
+        png = collector.thumbnail_png(printer_id) if collector is not None else None
+        if png is None:
+            raise _json_error(404, "No thumbnail is currently cached")
+        return Response(content=png, media_type="image/png")
 
     @app.get("/api/logs")
     def logs(request: Request, service: str = "all", limit: int = 200) -> dict[str, Any]:

@@ -644,6 +644,8 @@ class ElegooCC2Adapter:
         self._metadata_filename: str | None = None
         self._total_layers: int | None = None
         self._thumbnail_available = False
+        self._thumbnail_png: bytes | None = None
+        self._thumbnail_lock = threading.Lock()
         self._last_success: int | None = None
         self._availability_state: str | None = None
 
@@ -708,8 +710,15 @@ class ElegooCC2Adapter:
         self.mqtt.publish_retained(self._topic("status"), encode_payload(status))
         self.mqtt.publish_retained(self._topic("job"), encode_payload(job))
 
+    def thumbnail_png(self) -> bytes | None:
+        """Return the current validated PNG cached for the Admin view."""
+        with self._thumbnail_lock:
+            return self._thumbnail_png
+
     def _clear_thumbnail(self) -> None:
         self._thumbnail_available = False
+        with self._thumbnail_lock:
+            self._thumbnail_png = None
         self.mqtt.clear_retained(self._topic("thumbnail"))
 
     def _request_thumbnail(self, filename: str) -> tuple[bytes, int, int] | None:
@@ -771,6 +780,8 @@ class ElegooCC2Adapter:
             png, width, height = thumbnail
             if self.mqtt.publish_retained_binary(self._topic("thumbnail"), png, qos=1):
                 self._thumbnail_available = True
+                with self._thumbnail_lock:
+                    self._thumbnail_png = png
                 LOG.info(
                     "Printer %s thumbnail cached: %s (%dx%d, %d bytes)",
                     self.device.id,
