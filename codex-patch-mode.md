@@ -10,8 +10,6 @@ Priorité : utilisateur > `AGENTS.md`/règles locales > présent document > docu
 ## Base et transport
 Dépôt local = source de vérité locale/cible. ZIP ciblé = source du correctif. Drive = transport. Jamais de sync Drive -> dépôt. Récupérer seulement le patch demandé sous `/tmp`. Git reste indépendant.
 
-Si l'utilisateur annonce un patch disponible sans fournir de chemin local, lire `REMOTE` et `PATCH_DIR` depuis `sync-drive.conf`, utiliser `${REMOTE}/${PATCH_DIR}/` comme emplacement distant des patchs, lister uniquement ce répertoire distant pour identifier le patch demandé, puis récupérer uniquement le ZIP ciblé avec `rclone` vers un emplacement temporaire sous `/tmp`. Ne jamais chercher, créer ou exiger un dossier `patch/` local. Une fois le ZIP récupéré sous `/tmp`, poursuivre normalement le présent protocole.
-
 ## Préflight
 Identifier la racine ; inspecter l'archive ; lire `PATCH_MANIFEST.md`, `DELETE_FILES.txt`, `MOVE_FILES.txt` ; relever Git si disponible ; distinguer les changements préexistants. Refuser chemins absolus, `..`, sorties de racine, symlinks/liens dangereux, entrées spéciales, doublons conflictuels, ambiguïtés de casse, secrets et artefacts interdits.
 
@@ -22,6 +20,22 @@ Ordre : DELETE -> MOVE -> créations/remplacements -> permissions -> vérificati
 
 ## Vérification
 Contrôler présence et contenu/hash des fichiers livrés, DELETE/MOVE, permissions utiles et absence de fichiers imprévus. Toute divergence archive/dépôt est un échec d'application.
+
+### Cohérence du payload de déploiement
+Si `scripts/sync_deploy_payload.py` existe dans le dépôt après application, l'exécuter systématiquement avant les validations :
+
+```bash
+python scripts/sync_deploy_payload.py --check
+```
+
+Si le contrôle signale un payload obsolète, exécuter :
+
+```bash
+python scripts/sync_deploy_payload.py --write
+python scripts/sync_deploy_payload.py --check
+```
+
+Cette régénération est l'unique modification dérivée autorisée hors contenu explicite du ZIP : elle peut modifier uniquement la section payload de `scripts/deploy_hub.sh`, même si ce fichier n'était pas présent dans le patch. La signaler comme artefact dérivé dans le rapport et l'inclure dans les contrôles Git/validation. Tout autre fichier modifié par ce mécanisme est un échec.
 
 ## Validation
 Respecter `default`, `targeted`, `explicit_only`, `forbidden_automatic`, `external_or_live`. Ne jamais inventer une commande. Aucune installation/mise à jour automatique de dépendances. Sur échec obligatoire : arrêter, capturer l'erreur utile, ne pas réparer opportunément.

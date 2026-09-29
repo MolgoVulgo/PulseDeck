@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PulseDeck master installer launcher — git-003
+# PulseDeck master installer launcher — git-004
 # Stable channel follows immutable GitHub Releases; dev follows an immutable SHA resolved from branch dev.
 
 set -u
@@ -159,7 +159,7 @@ if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
     raise SystemExit("invalid repository")
 headers = {
     "Accept": "application/vnd.github+json",
-    "User-Agent": "PulseDeck-Installer/git-003",
+    "User-Agent": "PulseDeck-Installer/git-004",
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
@@ -275,12 +275,69 @@ download_file() {
 import sys
 import urllib.request
 url, dest = sys.argv[1:3]
-request = urllib.request.Request(url, headers={"User-Agent": "PulseDeck-Installer/git-003"})
+request = urllib.request.Request(url, headers={"User-Agent": "PulseDeck-Installer/git-004"})
 with urllib.request.urlopen(request, timeout=15) as response, open(dest, "wb") as handle:
     handle.write(response.read())
 PY
   else
     return 1
+  fi
+}
+
+sync_deploy_payload_from_commit() {
+  local archive source_root generator generated cached
+  command_exists python || { fail 'Python is required to synchronize deploy payload'; return 1; }
+  command_exists tar || { fail 'tar is required to synchronize deploy payload'; return 1; }
+
+  archive="${TEMP_DIR}/source-${RESOLVED_COMMIT}.tar.gz"
+  source_root="${TEMP_DIR}/source-${RESOLVED_COMMIT}"
+  mkdir -p "$source_root" || return 1
+
+  info "Verifying deployment payload against ${REPO}@${RESOLVED_COMMIT:0:12}"
+  if ! download_file "https://codeload.github.com/${REPO}/tar.gz/${RESOLVED_COMMIT}" "$archive" || [[ ! -s "$archive" ]]; then
+    fail "Unable to download source archive for deployment verification"
+    return 1
+  fi
+  if ! tar -xzf "$archive" -C "$source_root" --strip-components=1; then
+    fail "Unable to extract source archive for deployment verification"
+    return 1
+  fi
+
+  generator="${source_root}/scripts/sync_deploy_payload.py"
+  generated="${source_root}/scripts/deploy_hub.sh"
+  cached="${CACHE_DIR}/deploy_hub.sh"
+  [[ -s "$generator" && -s "$generated" ]] || {
+    fail "Deployment synchronization files are missing from resolved commit"
+    return 1
+  }
+
+  if python "$generator" --root "$source_root" --check >/dev/null 2>&1; then
+    info "deploy_hub payload matches resolved commit sources"
+  else
+    warn "deploy_hub payload drift detected; rebuilding from resolved commit sources"
+    python "$generator" --root "$source_root" --write || {
+      fail "Unable to rebuild deploy_hub payload from resolved commit sources"
+      return 1
+    }
+  fi
+
+  python "$generator" --root "$source_root" --check || {
+    fail "Rebuilt deploy_hub payload failed consistency verification"
+    return 1
+  }
+  bash -n "$generated" || {
+    fail "Rebuilt deploy_hub.sh failed shell syntax validation"
+    return 1
+  }
+
+  if [[ -f "$cached" ]] && cmp -s "$generated" "$cached"; then
+    info "deploy_hub.sh: synchronized payload already cached"
+  else
+    install -m 0755 "$generated" "$cached" || {
+      fail "Cannot cache synchronized deploy_hub.sh"
+      return 1
+    }
+    ok "deploy_hub.sh: payload synchronized from resolved commit sources"
   fi
 }
 
@@ -311,6 +368,8 @@ if (( OFFLINE == 0 )); then
       ok "${name}: refreshed"
     fi
   done
+
+  sync_deploy_payload_from_commit || exit 1
 
   if (( EUID == 0 && CHECK_ONLY == 0 )); then
     remote_master="${CACHE_DIR}/pulsedeck.sh"

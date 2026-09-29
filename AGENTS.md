@@ -75,15 +75,27 @@ Protégés / publication spéciale :
 - jamais de sync globale Drive -> dépôt ;
 - récupération d'un patch ciblé uniquement vers un emplacement temporaire.
 
-Quand un patch est annoncé sans chemin local, lire `REMOTE` et `PATCH_DIR` depuis `sync-drive.conf`, considérer `${REMOTE}/${PATCH_DIR}/` comme emplacement distant des patchs, lister uniquement ce répertoire distant, puis récupérer uniquement le ZIP ciblé avec `rclone` vers un emplacement temporaire sous `/tmp`. Ne jamais chercher, créer ou exiger un dossier `patch/` local.
-
 ## Validations
-Aucune commande de build, test ou lint n'est documentée au moment de l'initialisation : ne pas en inventer.
+Aucune installation ou mise à jour automatique de dépendances n'est autorisée.
 
-Les critères fonctionnels V1 documentés sont notamment : liaison Pi ↔ ESP32 stable, reprise MQTT, retained messages, cache local, états `fresh/stale/offline`, une application complète, navigation fluide, première animation et stabilité mémoire sur plusieurs heures. Les procédures et commandes permettant de les vérifier restent à définir dans le projet.
+Le payload autonome de `scripts/deploy_hub.sh` est dérivé des sources runtime du dépôt. Après toute modification sous `hub/`, de `config/pulsedeck.example.toml`, des unités `systemd/`, de `scripts/pulsedeck.sh` ou de `scripts/pulsedeck-updater.sh`, contrôler sa cohérence avec :
+
+```bash
+python scripts/sync_deploy_payload.py --check
+```
+
+S'il est obsolète, le régénérer puis recontrôler :
+
+```bash
+python scripts/sync_deploy_payload.py --write
+python scripts/sync_deploy_payload.py --check
+```
+
+Le générateur ne doit modifier que la section payload de `scripts/deploy_hub.sh`. Une release stable doit refuser de se construire si ce contrôle échoue. Le launcher d'update reconstruit également le payload depuis le SHA GitHub résolu avant déploiement afin d'éviter qu'un artefact embarqué ancien soit installé silencieusement.
+
+Les critères fonctionnels V1 documentés sont notamment : liaison Pi ↔ ESP32 stable, reprise MQTT, retained messages, cache local, états `fresh / stale / offline`, une application complète, navigation fluide, première animation et stabilité mémoire sur plusieurs heures. Les procédures et commandes permettant de les vérifier restent à définir dans le projet.
 
 Chaque commande future conserve son scope et son mode (`default`, `targeted`, `explicit_only`, `external_or_live`).
-Ne jamais installer ou mettre à jour automatiquement des dépendances.
 Sur échec obligatoire : arrêter, rapporter, ne pas réparer opportunément.
 
 ## Diagnostics

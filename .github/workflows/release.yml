@@ -31,6 +31,9 @@ jobs:
       - name: Validate release version
         run: python scripts/check_release_version.py --tag "${GITHUB_REF_NAME}"
 
+      - name: Validate deployment payload
+        run: python scripts/sync_deploy_payload.py --check
+
       - name: Validate release scripts
         shell: bash
         run: |

@@ -1,0 +1,52 @@
+name: Deployment payload consistency
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'hub/**'
+      - 'config/pulsedeck.example.toml'
+      - 'systemd/**'
+      - 'scripts/pulsedeck.sh'
+      - 'scripts/pulsedeck-updater.sh'
+      - 'scripts/deploy_hub.sh'
+      - 'scripts/sync_deploy_payload.py'
+      - '.github/workflows/deploy-payload.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'hub/**'
+      - 'config/pulsedeck.example.toml'
+      - 'systemd/**'
+      - 'scripts/pulsedeck.sh'
+      - 'scripts/pulsedeck-updater.sh'
+      - 'scripts/deploy_hub.sh'
+      - 'scripts/sync_deploy_payload.py'
+      - '.github/workflows/deploy-payload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify standalone deploy payload
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Verify payload matches source tree
+        run: python scripts/sync_deploy_payload.py --check
+
+      - name: Validate deployment shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in scripts/pulsedeck.sh scripts/setup_pi.sh scripts/bootstrap_pi.sh scripts/deploy_hub.sh scripts/install.sh scripts/build_release.sh scripts/pulsedeck-updater.sh; do
+            bash -n "$script"
+          done

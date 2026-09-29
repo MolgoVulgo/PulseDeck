@@ -37,6 +37,7 @@ command -v sha256sum >/dev/null 2>&1 || { printf 'sha256sum is required\n' >&2; 
 
 cd "$ROOT"
 python scripts/check_release_version.py --tag "$TAG"
+python scripts/sync_deploy_payload.py --check
 
 if ! git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}" >/dev/null; then
   printf 'Tag does not exist locally: %s\n' "$TAG" >&2
