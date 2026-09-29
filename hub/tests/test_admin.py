@@ -107,6 +107,13 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert '/api/printer/runtime' in ADMIN_HTML
     assert 'printer-serial' not in ADMIN_HTML
     assert 'Le numéro de série est découvert automatiquement' in ADMIN_HTML
+    assert 'id="printerServiceNotice"' in ADMIN_HTML
+    assert 'Service Printer activé</label>' in ADMIN_HTML
+    assert '>Surveillée</label>' in ADMIN_HTML
+    assert 'Activation non enregistrée' in ADMIN_HTML
+    assert 'Les tests de connexion restent disponibles, mais aucune collecte continue n’est lancée.' in ADMIN_HTML
+    assert "toast('warn','CC2 accessible · '+activation.title" in ADMIN_HTML
+    assert "renderPrinterActivationState();validatePrinter(false)" in ADMIN_HTML
     assert 'data-view="data"' in ADMIN_HTML
     assert 'data-view-panel="data"' in ADMIN_HTML
     assert 'id="refreshDataButton"' in ADMIN_HTML
