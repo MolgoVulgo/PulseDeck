@@ -27,3 +27,8 @@ TOPIC_SUFFIXES = {
     "printer_job": "printer/job",
     "printer_thumbnail": "printer/thumbnail",
 }
+
+
+def printer_suffix(printer_id: str, leaf: str) -> str:
+    """Return one multi-printer application suffix below ``printer/<id>``."""
+    return f"printer/{printer_id}/{leaf.lstrip('/')}"

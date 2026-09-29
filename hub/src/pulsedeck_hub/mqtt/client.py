@@ -99,11 +99,18 @@ class HubMQTTClient:
         self.client.loop_start()
 
 
-    def publish_retained(self, suffix: str, payload: str, *, qos: int = 1) -> bool:
-        """Publish a retained application payload below the configured namespace."""
+    def _publish_retained_value(
+        self,
+        suffix: str,
+        payload: str | bytes,
+        *,
+        qos: int,
+        binary: bool,
+    ) -> bool:
         if not self.connected.is_set():
             return False
-        topic_name = f"{self.config.namespace.rstrip('/')}/{suffix.lstrip('/')}"
+        normalized_suffix = suffix.lstrip("/")
+        topic_name = f"{self.config.namespace.rstrip('/')}/{normalized_suffix}"
         info = self.client.publish(topic_name, payload=payload, qos=qos, retain=True)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             LOG.warning("MQTT publish failed for %s: rc=%s", topic_name, info.rc)
@@ -115,14 +122,44 @@ class HubMQTTClient:
             return False
         if not info.is_published():
             return False
-        normalized_suffix = suffix.lstrip("/")
         with self._retained_lock:
             self._retained_publications[normalized_suffix] = {
                 "topic": topic_name,
-                "payload": payload,
+                "payload": f"<binary:{len(payload)} bytes>" if binary else payload,
                 "published_at": int(time.time()),
                 "qos": qos,
+                "binary": binary,
+                "size": len(payload) if binary else len(payload.encode("utf-8")),
             }
+        return True
+
+    def publish_retained(self, suffix: str, payload: str, *, qos: int = 1) -> bool:
+        """Publish a retained UTF-8 application payload below the namespace."""
+        return self._publish_retained_value(suffix, payload, qos=qos, binary=False)
+
+    def publish_retained_binary(self, suffix: str, payload: bytes, *, qos: int = 1) -> bool:
+        """Publish retained binary data without copying bytes into admin snapshots."""
+        return self._publish_retained_value(suffix, payload, qos=qos, binary=True)
+
+    def clear_retained(self, suffix: str, *, qos: int = 1) -> bool:
+        """Delete a retained application topic by publishing the MQTT empty payload."""
+        if not self.connected.is_set():
+            return False
+        normalized_suffix = suffix.lstrip("/")
+        topic_name = f"{self.config.namespace.rstrip('/')}/{normalized_suffix}"
+        info = self.client.publish(topic_name, payload=b"", qos=qos, retain=True)
+        if info.rc != mqtt.MQTT_ERR_SUCCESS:
+            LOG.warning("MQTT retained clear failed for %s: rc=%s", topic_name, info.rc)
+            return False
+        try:
+            info.wait_for_publish(timeout=2.0)
+        except RuntimeError:
+            LOG.warning("MQTT retained clear confirmation timed out for %s", topic_name)
+            return False
+        if not info.is_published():
+            return False
+        with self._retained_lock:
+            self._retained_publications.pop(normalized_suffix, None)
         return True
 
     def retained_snapshot(self, prefix: str | None = None) -> dict[str, dict[str, object]]:

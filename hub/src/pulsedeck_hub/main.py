@@ -11,6 +11,7 @@ import threading
 from . import __version__
 from .admin.app import AdminServer
 from .collectors.news import NewsCollector
+from .collectors.printer import PrinterCollector
 from .collectors.weather import WeatherCollector
 from .config import DEFAULT_CONFIG_PATH, HubConfig, load_config
 from .health.state import HealthState
@@ -43,6 +44,7 @@ class HubRuntime:
         self.mqtt_client = HubMQTTClient(config.mqtt)
         self.weather_collector: WeatherCollector | None = None
         self.news_collector: NewsCollector | None = None
+        self.printer_collector: PrinterCollector | None = None
         self.admin_server: AdminServer | None = None
         self.update_checker = UpdateChecker(__version__)
         self._config_lock = threading.RLock()
@@ -63,10 +65,18 @@ class HubRuntime:
         else:
             self.news_collector = None
 
+    def _start_printer(self) -> None:
+        if self.config.printer.enabled:
+            self.printer_collector = PrinterCollector(self.config.printer, self.mqtt_client)
+            self.printer_collector.start()
+        else:
+            self.printer_collector = None
+
     def start(self) -> None:
         self.mqtt_client.start()
         self._start_weather()
         self._start_news()
+        self._start_printer()
         if self.config.admin.enabled:
             self.admin_server = AdminServer(self)
             self.admin_server.start()
@@ -79,6 +89,8 @@ class HubRuntime:
                 raise ValueError("MQTT changes require a service restart")
             if new_config.admin != self.config.admin:
                 raise ValueError("Admin listener changes require a service restart")
+            if new_config.printer != self.config.printer:
+                raise ValueError("Printer changes require a service restart")
             if not weather and new_config.weather != self.config.weather:
                 raise ValueError("Weather changes require reload_weather")
             if not news and new_config.news != self.config.news:
@@ -106,6 +118,8 @@ class HubRuntime:
     def stop(self) -> None:
         if self.admin_server is not None:
             self.admin_server.stop()
+        if self.printer_collector is not None:
+            self.printer_collector.stop()
         if self.news_collector is not None:
             self.news_collector.stop()
         if self.weather_collector is not None:

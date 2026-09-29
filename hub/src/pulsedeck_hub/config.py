@@ -11,6 +11,7 @@ DEFAULT_CONFIG_PATH = Path("/etc/pulsedeck/pulsedeck.toml")
 DEFAULT_OPENWEATHER_KEY_PATH = Path("/etc/pulsedeck/secrets/openweather_api_key")
 DEFAULT_NEWSAPI_KEY_PATH = Path("/etc/pulsedeck/secrets/newsapi_api_key")
 DEFAULT_GNEWS_KEY_PATH = Path("/etc/pulsedeck/secrets/gnews_api_key")
+DEFAULT_PRINTER_SECRET_DIR = Path("/etc/pulsedeck/secrets/printers")
 NEWS_PROVIDERS = {"newsapi", "gnews"}
 NEWSAPI_CATEGORIES = {
     "general",
@@ -100,11 +101,36 @@ class NewsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PrinterDeviceConfig:
+    id: str
+    driver: str
+    host: str
+    serial: str
+    access_code_file: Path
+    enabled: bool = True
+    port: int = 1883
+    reconnect_min_delay: int = 2
+    reconnect_max_delay: int = 30
+
+
+@dataclass(frozen=True, slots=True)
+class PrinterConfig:
+    enabled: bool = False
+    devices: tuple[PrinterDeviceConfig, ...] = ()
+    poll_interval: int = 5
+    request_timeout: int = 8
+    thumbnail_max_base64_bytes: int = 2_000_000
+    thumbnail_max_png_bytes: int = 1_500_000
+    thumbnail_max_pixels: int = 1_000_000
+
+
+@dataclass(frozen=True, slots=True)
 class HubConfig:
     mqtt: MQTTConfig
     admin: AdminConfig
     weather: WeatherConfig
     news: NewsConfig
+    printer: PrinterConfig
 
 
 def _positive_int(value: object, name: str, *, minimum: int = 1, maximum: int | None = None) -> int:
@@ -323,6 +349,125 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
     )
 
 
+def printer_config_from_mapping(raw: object) -> PrinterConfig:
+    if raw is None:
+        return PrinterConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("[collectors.printer] must be a table")
+
+    enabled = _bool(raw.get("enabled", False), "collectors.printer.enabled")
+    devices_raw = raw.get("devices", [])
+    if not isinstance(devices_raw, list):
+        raise ValueError("collectors.printer.devices must be an array of tables")
+
+    devices: list[PrinterDeviceConfig] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(devices_raw):
+        prefix = f"collectors.printer.devices[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{prefix} must be a table")
+
+        device_id = item.get("id")
+        driver = item.get("driver", "elegoo_cc2")
+        host = item.get("host")
+        serial = item.get("serial")
+        for value, name in (
+            (device_id, "id"),
+            (driver, "driver"),
+            (host, "host"),
+            (serial, "serial"),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{prefix}.{name} must be a non-empty string")
+
+        normalized_id = device_id.strip()
+        if any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in normalized_id):
+            raise ValueError(f"{prefix}.id may contain only letters, digits, '-' and '_'")
+        if normalized_id in seen_ids:
+            raise ValueError(f"duplicate printer id: {normalized_id}")
+        seen_ids.add(normalized_id)
+
+        normalized_driver = driver.strip().lower()
+        if normalized_driver != "elegoo_cc2":
+            raise ValueError(f"{prefix}.driver is unsupported")
+
+        normalized_serial = serial.strip()
+        if any(ch in normalized_serial for ch in "/#+") or any(ch.isspace() for ch in normalized_serial):
+            raise ValueError(f"{prefix}.serial contains characters unsafe for MQTT topics")
+
+        access_code_file = item.get(
+            "access_code_file",
+            str(DEFAULT_PRINTER_SECRET_DIR / f"{normalized_id}_access_code"),
+        )
+        if not isinstance(access_code_file, str) or not access_code_file.strip():
+            raise ValueError(f"{prefix}.access_code_file must be a non-empty string")
+
+        reconnect_min = _positive_int(
+            item.get("reconnect_min_delay", 2),
+            f"{prefix}.reconnect_min_delay",
+            maximum=300,
+        )
+        reconnect_max = _positive_int(
+            item.get("reconnect_max_delay", 30),
+            f"{prefix}.reconnect_max_delay",
+            maximum=600,
+        )
+        if reconnect_min > reconnect_max:
+            raise ValueError(f"{prefix}.reconnect_min_delay must be <= reconnect_max_delay")
+
+        devices.append(
+            PrinterDeviceConfig(
+                id=normalized_id,
+                driver=normalized_driver,
+                host=host.strip(),
+                serial=normalized_serial,
+                access_code_file=Path(access_code_file.strip()),
+                enabled=_bool(item.get("enabled", True), f"{prefix}.enabled"),
+                port=_positive_int(item.get("port", 1883), f"{prefix}.port", maximum=65535),
+                reconnect_min_delay=reconnect_min,
+                reconnect_max_delay=reconnect_max,
+            )
+        )
+
+    if enabled and not any(device.enabled for device in devices):
+        raise ValueError("enabled printer collector requires at least one enabled device")
+
+    return PrinterConfig(
+        enabled=enabled,
+        devices=tuple(devices),
+        poll_interval=_positive_int(
+            raw.get("poll_interval", 5),
+            "collectors.printer.poll_interval",
+            minimum=2,
+            maximum=300,
+        ),
+        request_timeout=_positive_int(
+            raw.get("request_timeout", 8),
+            "collectors.printer.request_timeout",
+            minimum=2,
+            maximum=60,
+        ),
+        thumbnail_max_base64_bytes=_positive_int(
+            raw.get("thumbnail_max_base64_bytes", 2_000_000),
+            "collectors.printer.thumbnail_max_base64_bytes",
+            minimum=1024,
+            maximum=16_000_000,
+        ),
+        thumbnail_max_png_bytes=_positive_int(
+            raw.get("thumbnail_max_png_bytes", 1_500_000),
+            "collectors.printer.thumbnail_max_png_bytes",
+            minimum=1024,
+            maximum=12_000_000,
+        ),
+        thumbnail_max_pixels=_positive_int(
+            raw.get("thumbnail_max_pixels", 1_000_000),
+            "collectors.printer.thumbnail_max_pixels",
+            minimum=4096,
+            maximum=16_000_000,
+        ),
+    )
+
+
 def _admin_config(raw: object) -> AdminConfig:
     if raw is None:
         return AdminConfig()
@@ -379,4 +524,5 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
         admin=_admin_config(raw.get("admin")),
         weather=weather_config_from_mapping(collectors_raw.get("weather")),
         news=news_config_from_mapping(collectors_raw.get("news")),
+        printer=printer_config_from_mapping(collectors_raw.get("printer")),
     )
