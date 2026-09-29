@@ -68,14 +68,15 @@ thumbnail_max_base64_bytes = 2000000
 thumbnail_max_png_bytes = 1500000
 thumbnail_max_pixels = 1000000
 
-# One table per printer. Secrets remain outside the versioned config.
+# One table per printer. Put the printer in LAN mode first; PulseDeck only needs host + access code.
+# The serial number is discovered automatically from the printer and is not configured here.
+# Secrets remain outside the versioned config.
 # [[collectors.printer.devices]]
 # id = "cc2-main"
 # enabled = true
 # driver = "elegoo_cc2"
 # host = "192.168.0.123"
 # port = 1883
-# serial = "ELEGOO123456"
 # access_code_file = "/etc/pulsedeck/secrets/printers/cc2-main_access_code"
 # reconnect_min_delay = 2
 # reconnect_max_delay = 30

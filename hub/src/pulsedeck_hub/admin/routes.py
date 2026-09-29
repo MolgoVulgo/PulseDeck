@@ -200,7 +200,6 @@ def _printer_device_raw(device: PrinterDeviceConfig) -> dict[str, Any]:
         "id": device.id,
         "driver": device.driver,
         "host": device.host,
-        "serial": device.serial,
         "access_code_file": str(device.access_code_file),
         "enabled": device.enabled,
         "port": device.port,
@@ -246,7 +245,6 @@ def _candidate_printer(
                 "id": normalized_id,
                 "driver": item.get("driver", previous.driver if previous else "elegoo_cc2"),
                 "host": item.get("host", previous.host if previous else ""),
-                "serial": item.get("serial", previous.serial if previous else ""),
                 "access_code_file": str(secret_path),
                 "enabled": item.get("enabled", previous.enabled if previous else True),
                 "port": item.get("port", previous.port if previous else 1883),
@@ -291,12 +289,14 @@ def _probe_printer(device: PrinterDeviceConfig, access_code: str, request_timeou
     client.start()
     try:
         result = client.request(1002, {})
+        serial = client.serial_number
     finally:
         client.stop()
     _filename, _current_layer, total_hint = extract_job_identity(result)
     return {
         "ok": True,
         "printer_id": device.id,
+        "serial": serial,
         "status": normalize_status(result, printer_id=device.id),
         "job": normalize_job(
             result,
@@ -336,7 +336,7 @@ def _printer_runtime_snapshot(runtime: Any) -> dict[str, Any]:
                 "id": device.id,
                 "driver": device.driver,
                 "host": device.host,
-                "serial": device.serial,
+                "serial": availability.get("serial") if isinstance(availability, dict) else None,
                 "enabled": device.enabled,
                 "state": state,
                 "availability": availability if isinstance(availability, dict) else None,
@@ -599,7 +599,6 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                     "id": device.id,
                     "driver": device.driver,
                     "host": device.host,
-                    "serial": device.serial,
                     "enabled": device.enabled,
                     "port": device.port,
                     "reconnect_min_delay": device.reconnect_min_delay,

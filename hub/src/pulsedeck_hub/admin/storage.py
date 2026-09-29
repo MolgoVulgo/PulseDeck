@@ -114,7 +114,6 @@ def render_printer_section(config: PrinterConfig) -> str:
                 f"id = {json.dumps(device.id)}",
                 f"driver = {json.dumps(device.driver)}",
                 f"host = {json.dumps(device.host)}",
-                f"serial = {json.dumps(device.serial)}",
                 f"access_code_file = {json.dumps(str(device.access_code_file))}",
                 f"enabled = {'true' if device.enabled else 'false'}",
                 f"port = {device.port}",

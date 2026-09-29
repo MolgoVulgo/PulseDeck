@@ -18,6 +18,9 @@ import struct
 import threading
 import time
 from typing import TYPE_CHECKING, Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import ProxyHandler, Request, build_opener
 import zlib
 
 import paho.mqtt.client as mqtt
@@ -396,12 +399,51 @@ def normalize_job(
     }
 
 
+
+
+def fetch_cc2_serial(host: str, access_code: str, *, timeout: float = 5.0) -> str:
+    """Discover the CC2 serial from its LAN-only HTTP API using the access code."""
+    query = urlencode({"X-Token": access_code})
+    request = Request(
+        f"http://{host}/system/info?{query}",
+        headers={"Accept": "application/json", "User-Agent": "PulseDeck/0.6"},
+        method="GET",
+    )
+    opener = build_opener(ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=timeout) as response:  # noqa: S310 - explicit LAN printer endpoint
+            payload = response.read()
+    except HTTPError as exc:
+        if exc.code == 401:
+            raise PrinterConnectionError("printer rejected the password/access code (HTTP 401)") from exc
+        raise PrinterConnectionError(f"printer HTTP bootstrap failed: HTTP {exc.code}") from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise PrinterConnectionError(
+            "printer LAN API is unreachable; verify the IP/hostname and that LAN mode is enabled"
+        ) from exc
+
+    try:
+        data = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError) as exc:
+        raise PrinterConnectionError("printer /system/info returned invalid JSON") from exc
+    serial = _dict(_dict(data).get("system_info")).get("sn")
+    if not isinstance(serial, str) or not serial.strip():
+        raise PrinterConnectionError("printer /system/info did not return a serial number")
+    serial = serial.strip()
+    if any(ch in serial for ch in "/#+") or any(ch.isspace() for ch in serial):
+        raise PrinterConnectionError("printer returned a serial number unsafe for MQTT topics")
+    return serial
+
+
 class ElegooCC2Client:
     """Small synchronous request/response client over the CC2 local MQTT broker."""
 
     def __init__(self, device: PrinterDeviceConfig, access_code: str, *, request_timeout: int) -> None:
         self.device = device
+        self.access_code = access_code
         self.request_timeout = float(request_timeout)
+        self._serial_number: str | None = None
+        self._mqtt_loop_started = False
         self.client_id = f"1_PC_{secrets.randbelow(90_000_000) + 10_000_000}"
         self.request_id_prefix = f"{self.client_id}_req"
         self._request_counter = 0
@@ -431,6 +473,11 @@ class ElegooCC2Client:
             max_delay=device.reconnect_max_delay,
         )
         self.client.enable_logger(logging.getLogger(f"paho.mqtt.printer.{device.id}"))
+        self._bootstrap_thread = threading.Thread(
+            target=self._bootstrap_loop,
+            name=f"printer-{device.id}-bootstrap",
+            daemon=True,
+        )
         self._ping_thread = threading.Thread(
             target=self._ping_loop,
             name=f"printer-{device.id}-ping",
@@ -438,35 +485,81 @@ class ElegooCC2Client:
         )
 
     @property
+    def serial_number(self) -> str | None:
+        return self._serial_number
+
+    def _require_serial(self) -> str:
+        if self._serial_number is None:
+            raise PrinterConnectionError("printer serial has not been discovered yet")
+        return self._serial_number
+
+    @property
     def request_topic(self) -> str:
-        return f"elegoo/{self.device.serial}/{self.client_id}/api_request"
+        return f"elegoo/{self._require_serial()}/{self.client_id}/api_request"
 
     @property
     def response_topic(self) -> str:
-        return f"elegoo/{self.device.serial}/{self.client_id}/api_response"
+        return f"elegoo/{self._require_serial()}/{self.client_id}/api_response"
 
     @property
     def register_topic(self) -> str:
-        return f"elegoo/{self.device.serial}/api_register"
+        return f"elegoo/{self._require_serial()}/api_register"
 
     @property
     def register_response_topic(self) -> str:
-        return f"elegoo/{self.device.serial}/{self.request_id_prefix}/register_response"
+        return f"elegoo/{self._require_serial()}/{self.request_id_prefix}/register_response"
 
     def start(self) -> None:
-        self.client.connect_async(self.device.host, self.device.port, keepalive=30)
-        self.client.loop_start()
+        self._bootstrap_thread.start()
         self._ping_thread.start()
 
     def stop(self) -> None:
         self._stop.set()
         self._fail_pending("connection stopped")
-        try:
-            self.client.disconnect()
-        finally:
-            self.client.loop_stop()
+        if self._mqtt_loop_started:
+            try:
+                self.client.disconnect()
+            finally:
+                self.client.loop_stop()
+        if self._bootstrap_thread.is_alive():
+            self._bootstrap_thread.join(timeout=1.0)
         if self._ping_thread.is_alive():
             self._ping_thread.join(timeout=1.0)
+
+    def _bootstrap_loop(self) -> None:
+        retry_delay = float(self.device.reconnect_min_delay)
+        while not self._stop.is_set():
+            try:
+                serial = fetch_cc2_serial(
+                    self.device.host,
+                    self.access_code,
+                    timeout=min(max(self.request_timeout, 2.0), 10.0),
+                )
+                self._serial_number = serial
+                self._last_connect_error = None
+                result = self.client.connect_async(self.device.host, self.device.port, keepalive=30)
+                if result != mqtt.MQTT_ERR_SUCCESS:
+                    raise PrinterConnectionError(f"MQTT connect scheduling failed: rc={result}")
+                self.client.loop_start()
+                self._mqtt_loop_started = True
+                LOG.info(
+                    "Printer %s LAN bootstrap ready at %s (serial=%s)",
+                    self.device.id,
+                    self.device.host,
+                    serial,
+                )
+                return
+            except PrinterError as exc:
+                self._last_connect_error = str(exc)
+                self.connected.clear()
+                self.registered.clear()
+                LOG.warning("Printer %s LAN bootstrap failed: %s", self.device.id, exc)
+                if self._stop.wait(retry_delay):
+                    return
+                retry_delay = min(
+                    float(self.device.reconnect_max_delay),
+                    max(retry_delay * 2.0, 1.0),
+                )
 
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:  # noqa: ANN001
         if getattr(reason_code, "is_failure", False):
@@ -477,7 +570,8 @@ class ElegooCC2Client:
         self._last_connect_error = None
         self._last_registration_error = None
         self.registered.clear()
-        result, _mid = client.subscribe(f"elegoo/{self.device.serial}/#", qos=0)
+        serial = self._require_serial()
+        result, _mid = client.subscribe(f"elegoo/{serial}/#", qos=0)
         if result != mqtt.MQTT_ERR_SUCCESS:
             self._last_registration_error = f"subscribe rc={result}"
             self.connected.clear()
@@ -692,6 +786,8 @@ class ElegooCC2Adapter:
         }
         if self._last_success is not None:
             payload["last_success"] = self._last_success
+        if self._client is not None and self._client.serial_number:
+            payload["serial"] = self._client.serial_number
         if reason:
             payload["reason"] = reason
         if self.mqtt.publish_retained(self._topic("availability"), encode_payload(payload)):

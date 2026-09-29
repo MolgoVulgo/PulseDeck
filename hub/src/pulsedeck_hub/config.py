@@ -105,7 +105,6 @@ class PrinterDeviceConfig:
     id: str
     driver: str
     host: str
-    serial: str
     access_code_file: Path
     enabled: bool = True
     port: int = 1883
@@ -370,12 +369,10 @@ def printer_config_from_mapping(raw: object) -> PrinterConfig:
         device_id = item.get("id")
         driver = item.get("driver", "elegoo_cc2")
         host = item.get("host")
-        serial = item.get("serial")
         for value, name in (
             (device_id, "id"),
             (driver, "driver"),
             (host, "host"),
-            (serial, "serial"),
         ):
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{prefix}.{name} must be a non-empty string")
@@ -390,10 +387,6 @@ def printer_config_from_mapping(raw: object) -> PrinterConfig:
         normalized_driver = driver.strip().lower()
         if normalized_driver != "elegoo_cc2":
             raise ValueError(f"{prefix}.driver is unsupported")
-
-        normalized_serial = serial.strip()
-        if any(ch in normalized_serial for ch in "/#+") or any(ch.isspace() for ch in normalized_serial):
-            raise ValueError(f"{prefix}.serial contains characters unsafe for MQTT topics")
 
         access_code_file = item.get(
             "access_code_file",
@@ -420,7 +413,6 @@ def printer_config_from_mapping(raw: object) -> PrinterConfig:
                 id=normalized_id,
                 driver=normalized_driver,
                 host=host.strip(),
-                serial=normalized_serial,
                 access_code_file=Path(access_code_file.strip()),
                 enabled=_bool(item.get("enabled", True), f"{prefix}.enabled"),
                 port=_positive_int(item.get("port", 1883), f"{prefix}.port", maximum=65535),

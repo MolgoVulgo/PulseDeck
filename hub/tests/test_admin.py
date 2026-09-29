@@ -105,6 +105,8 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert '/api/printer/config' in ADMIN_HTML
     assert '/api/printer/test' in ADMIN_HTML
     assert '/api/printer/runtime' in ADMIN_HTML
+    assert 'printer-serial' not in ADMIN_HTML
+    assert 'Le numéro de série est découvert automatiquement' in ADMIN_HTML
     assert 'data-view="data"' in ADMIN_HTML
     assert 'data-view-panel="data"' in ADMIN_HTML
     assert 'id="refreshDataButton"' in ADMIN_HTML
@@ -243,14 +245,13 @@ def test_printer_section_round_trip_preserves_following_sections(tmp_path: Path)
     base_config(path)
     path.write_text(
         path.read_text(encoding="utf-8")
-        + "\n[collectors.printer]\nenabled = false\n\n[[collectors.printer.devices]]\nid = \"old\"\nhost = \"old.local\"\nserial = \"OLD\"\naccess_code_file = \"/tmp/old\"\n\n[collectors.pc_gamer]\nenabled = false\n",
+        + "\n[collectors.printer]\nenabled = false\n\n[[collectors.printer.devices]]\nid = \"old\"\nhost = \"old.local\"\naccess_code_file = \"/tmp/old\"\n\n[collectors.pc_gamer]\nenabled = false\n",
         encoding="utf-8",
     )
     device = PrinterDeviceConfig(
         id="cc2-main",
         driver="elegoo_cc2",
         host="192.168.1.50",
-        serial="ELEGOO123",
         access_code_file=tmp_path / "cc2-main.code",
         reconnect_min_delay=3,
         reconnect_max_delay=20,
@@ -273,7 +274,6 @@ def test_printer_runtime_snapshot_uses_normalized_retained_messages(tmp_path: Pa
         id="cc2-main",
         driver="elegoo_cc2",
         host="printer.local",
-        serial="ELEGOO123",
         access_code_file=tmp_path / "code",
     )
 
@@ -283,7 +283,7 @@ def test_printer_runtime_snapshot_uses_normalized_retained_messages(tmp_path: Pa
             return {
                 "printer/cc2-main/availability": {
                     "topic": "pulsedeck/v1/printer/cc2-main/availability",
-                    "payload": '{"state":"online","last_success":100}',
+                    "payload": '{"state":"online","last_success":100,"serial":"CC2SERIAL123"}',
                     "published_at": 101,
                     "qos": 1,
                 },
@@ -312,4 +312,5 @@ def test_printer_runtime_snapshot_uses_normalized_retained_messages(tmp_path: Pa
     assert snapshot["state"] == "online"
     assert snapshot["online_devices"] == 1
     assert snapshot["devices"][0]["job"]["filename"] == "piece.gcode"
+    assert snapshot["devices"][0]["serial"] == "CC2SERIAL123"
 

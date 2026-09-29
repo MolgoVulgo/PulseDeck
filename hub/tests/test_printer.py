@@ -10,7 +10,10 @@ import pytest
 
 from pulsedeck_hub.config import load_config
 from pulsedeck_hub.printers.elegoo_cc2 import (
+    ElegooCC2Client,
+    PrinterConnectionError,
     PrinterError,
+    fetch_cc2_serial,
     decode_thumbnail,
     extract_job_identity,
     extract_total_layers,
@@ -129,12 +132,69 @@ def test_status_and_job_payloads_are_display_ready() -> None:
     assert job["thumbnail_available"] is True
 
 
+
+def test_fetch_cc2_serial_uses_ip_and_password_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pulsedeck_hub.printers.elegoo_cc2 as cc2
+
+    seen: dict[str, object] = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"system_info":{"sn":"CC2SERIAL123"}}'
+
+    class Opener:
+        def open(self, request, timeout):  # type: ignore[no-untyped-def]
+            seen["url"] = request.full_url
+            seen["timeout"] = timeout
+            return Response()
+
+    monkeypatch.setattr(cc2, "build_opener", lambda *handlers: Opener())
+    assert fetch_cc2_serial("192.168.1.50", "Ab3dEf", timeout=4.0) == "CC2SERIAL123"
+    assert seen["url"] == "http://192.168.1.50/system/info?X-Token=Ab3dEf"
+    assert seen["timeout"] == 4.0
+
+
+def test_fetch_cc2_serial_reports_bad_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pulsedeck_hub.printers.elegoo_cc2 as cc2
+    from urllib.error import HTTPError
+
+    class Opener:
+        def open(self, request, timeout):  # type: ignore[no-untyped-def]
+            raise HTTPError(request.full_url, 401, "Unauthorized", hdrs=None, fp=None)
+
+    monkeypatch.setattr(cc2, "build_opener", lambda *handlers: Opener())
+    with pytest.raises(PrinterConnectionError, match="password/access code"):
+        fetch_cc2_serial("192.168.1.50", "bad", timeout=4.0)
+
+
+def test_client_builds_mqtt_topics_from_discovered_serial(tmp_path: Path) -> None:
+    from pulsedeck_hub.config import PrinterDeviceConfig
+
+    device = PrinterDeviceConfig(
+        id="cc2-main",
+        driver="elegoo_cc2",
+        host="192.168.1.50",
+        access_code_file=tmp_path / "code",
+    )
+    client = ElegooCC2Client(device, "secret", request_timeout=8)
+    with pytest.raises(PrinterConnectionError, match="serial"):
+        _ = client.request_topic
+    client._serial_number = "CC2SERIAL123"
+    assert client.request_topic == f"elegoo/CC2SERIAL123/{client.client_id}/api_request"
+    assert client.register_topic == "elegoo/CC2SERIAL123/api_register"
+
 def test_multi_printer_configuration_loads(tmp_path: Path) -> None:
     secret = tmp_path / "cc2.code"
     secret.write_text("secret", encoding="utf-8")
     path = tmp_path / "pulsedeck.toml"
     path.write_text(
-        f'''[mqtt]\nhost = "192.168.0.250"\n\n[collectors.printer]\nenabled = true\npoll_interval = 5\n\n[[collectors.printer.devices]]\nid = "cc2-main"\ndriver = "elegoo_cc2"\nhost = "192.168.0.123"\nserial = "ELEGOO123456"\naccess_code_file = {json.dumps(str(secret))}\n''',
+        f'''[mqtt]\nhost = "192.168.0.250"\n\n[collectors.printer]\nenabled = true\npoll_interval = 5\n\n[[collectors.printer.devices]]\nid = "cc2-main"\ndriver = "elegoo_cc2"\nhost = "192.168.0.123"\nserial = "LEGACY-IGNORED"\naccess_code_file = {json.dumps(str(secret))}\n''',
         encoding="utf-8",
     )
     config = load_config(path)
@@ -142,12 +202,13 @@ def test_multi_printer_configuration_loads(tmp_path: Path) -> None:
     assert len(config.printer.devices) == 1
     assert config.printer.devices[0].id == "cc2-main"
     assert config.printer.devices[0].port == 1883
+    assert not hasattr(config.printer.devices[0], "serial")
 
 
 def test_duplicate_printer_ids_are_rejected(tmp_path: Path) -> None:
     path = tmp_path / "pulsedeck.toml"
     path.write_text(
-        '''[mqtt]\nhost = "192.168.0.250"\n\n[collectors.printer]\nenabled = true\n\n[[collectors.printer.devices]]\nid = "same"\nhost = "one"\nserial = "A"\naccess_code_file = "/tmp/a"\n\n[[collectors.printer.devices]]\nid = "same"\nhost = "two"\nserial = "B"\naccess_code_file = "/tmp/b"\n''',
+        '''[mqtt]\nhost = "192.168.0.250"\n\n[collectors.printer]\nenabled = true\n\n[[collectors.printer.devices]]\nid = "same"\nhost = "one"\naccess_code_file = "/tmp/a"\n\n[[collectors.printer.devices]]\nid = "same"\nhost = "two"\naccess_code_file = "/tmp/b"\n''',
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="duplicate printer id"):
@@ -172,7 +233,6 @@ def test_job_metadata_is_retried_until_verified(monkeypatch: pytest.MonkeyPatch,
         id="cc2-main",
         driver="elegoo_cc2",
         host="printer.local",
-        serial="ELEGOO123",
         access_code_file=tmp_path / "code",
     )
     adapter = ElegooCC2Adapter(device, PrinterConfig(enabled=True, devices=(device,)), _FakeHubMQTT())
@@ -200,7 +260,6 @@ def test_stale_metadata_response_does_not_mark_new_job_enriched(
         id="cc2-main",
         driver="elegoo_cc2",
         host="printer.local",
-        serial="ELEGOO123",
         access_code_file=tmp_path / "code",
     )
     adapter = ElegooCC2Adapter(device, PrinterConfig(enabled=True, devices=(device,)), _FakeHubMQTT())
@@ -222,7 +281,6 @@ def test_adapter_thumbnail_cache_is_exposed_and_cleared(tmp_path: Path) -> None:
         id="cc2-main",
         driver="elegoo_cc2",
         host="printer.local",
-        serial="ELEGOO123",
         access_code_file=tmp_path / "code",
     )
     adapter = ElegooCC2Adapter(device, PrinterConfig(enabled=True, devices=(device,)), _FakeHubMQTT())
