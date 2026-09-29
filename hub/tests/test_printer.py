@@ -189,6 +189,39 @@ def test_client_builds_mqtt_topics_from_discovered_serial(tmp_path: Path) -> Non
     assert client.request_topic == f"elegoo/CC2SERIAL123/{client.client_id}/api_request"
     assert client.register_topic == "elegoo/CC2SERIAL123/api_register"
 
+def test_bootstrap_accepts_paho_connect_async_none(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import pulsedeck_hub.printers.elegoo_cc2 as cc2
+    from pulsedeck_hub.config import PrinterDeviceConfig
+
+    device = PrinterDeviceConfig(
+        id="cc2-main",
+        driver="elegoo_cc2",
+        host="192.168.1.50",
+        access_code_file=tmp_path / "code",
+    )
+    client = ElegooCC2Client(device, "secret", request_timeout=8)
+    calls: list[tuple[object, ...]] = []
+
+    monkeypatch.setattr(cc2, "fetch_cc2_serial", lambda *args, **kwargs: "CC2SERIAL123")
+    monkeypatch.setattr(
+        client.client,
+        "connect_async",
+        lambda *args, **kwargs: calls.append(("connect_async", *args)) or None,
+    )
+    monkeypatch.setattr(
+        client.client,
+        "loop_start",
+        lambda: calls.append(("loop_start",)) or cc2.mqtt.MQTT_ERR_SUCCESS,
+    )
+
+    client._bootstrap_loop()
+
+    assert client.serial_number == "CC2SERIAL123"
+    assert client._mqtt_loop_started is True
+    assert calls[0][0] == "connect_async"
+    assert calls[1] == ("loop_start",)
+
+
 def test_multi_printer_configuration_loads(tmp_path: Path) -> None:
     secret = tmp_path / "cc2.code"
     secret.write_text("secret", encoding="utf-8")

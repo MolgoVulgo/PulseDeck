@@ -537,10 +537,13 @@ class ElegooCC2Client:
                 )
                 self._serial_number = serial
                 self._last_connect_error = None
-                result = self.client.connect_async(self.device.host, self.device.port, keepalive=30)
-                if result != mqtt.MQTT_ERR_SUCCESS:
-                    raise PrinterConnectionError(f"MQTT connect scheduling failed: rc={result}")
-                self.client.loop_start()
+                # Paho 2.x connect_async() configures the asynchronous connection and
+                # deliberately returns None. Connection success/failure is reported later
+                # through on_connect/on_connect_fail once the network loop is running.
+                self.client.connect_async(self.device.host, self.device.port, keepalive=30)
+                loop_result = self.client.loop_start()
+                if loop_result != mqtt.MQTT_ERR_SUCCESS:
+                    raise PrinterConnectionError(f"MQTT network loop start failed: rc={loop_result}")
                 self._mqtt_loop_started = True
                 LOG.info(
                     "Printer %s LAN bootstrap ready at %s (serial=%s)",
