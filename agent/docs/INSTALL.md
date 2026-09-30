@@ -43,7 +43,7 @@ When executed from a checkout whose current branch is `main` or `dev`, `./instal
 ./install.sh dev
 ```
 
-The wrapper runs `makepkg -Csi`, enables/starts `pulsedeck-agent.service`, then executes `pulsedeck-agent doctor`. Do not run the wrapper or `makepkg` as root.
+The wrapper runs `makepkg -Csi`, prepares the fixed `pulsedeck-agent` system account and state directory, restarts `pulsedeck-agent.service`, then executes `pulsedeck-agent doctor`. Do not run the wrapper or `makepkg` as root.
 
 The package stores:
 
@@ -104,7 +104,7 @@ sudo ./agent/scripts/install.sh --source "$PWD"
 
 If the checkout branch is `main` or `dev`, the standalone installer automatically records that channel unless `--ref` is given explicitly.
 
-The standalone method installs an isolated Python environment under `/opt/pulsedeck-agent`, exposes `/usr/local/bin/pulsedeck-agent`, installs the systemd unit, preserves an existing YAML configuration and starts the service.
+The standalone method installs an isolated Python environment under `/opt/pulsedeck-agent`, exposes `/usr/local/bin/pulsedeck-agent`, creates the fixed `pulsedeck-agent` system account through `systemd-sysusers`, installs the systemd unit, preserves an existing YAML configuration and starts the service.
 
 Normal update:
 
@@ -113,6 +113,12 @@ pulsedeck-agent update
 ```
 
 The updater reuses the channel recorded during installation.
+
+## Service account and local state
+
+The service runs as the fixed system user `pulsedeck-agent`. The state directory is `/var/lib/pulsedeck-agent` with mode `0755`; runtime files such as `snapshot.json` are written as `0644`. Normal users can therefore run `pulsedeck-agent doctor` without `sudo`, while only the service account writes Agent state.
+
+Upgrading from the earlier `DynamicUser=yes` draft automatically discards the old private diagnostic state under `/var/lib/private/pulsedeck-agent` and recreates a fresh state directory. The snapshot is diagnostic state only and is not a history store or an Agent -> Pi payload contract.
 
 ## First configuration
 

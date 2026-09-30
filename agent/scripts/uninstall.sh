@@ -16,6 +16,7 @@ fi
 
 systemctl disable --now pulsedeck-agent.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/pulsedeck-agent.service
+rm -f /usr/lib/sysusers.d/pulsedeck-agent.conf
 rm -f /usr/local/bin/pulsedeck-agent
 rm -rf /usr/local/libexec/pulsedeck-agent
 rm -rf /usr/local/share/pulsedeck-agent

@@ -52,7 +52,7 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
     echo "Run the standalone installer as root (normally with sudo)." >&2
     exit 2
 fi
-for cmd in python3 systemctl; do
+for cmd in python3 systemctl systemd-sysusers; do
     command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required command: $cmd" >&2; exit 2; }
 done
 
@@ -105,7 +105,9 @@ if [[ ! -e /etc/pulsedeck-agent/agent.yml ]]; then
 fi
 
 install -m 0644 "$SOURCE/agent/systemd/pulsedeck-agent.service" /etc/systemd/system/pulsedeck-agent.service
+install -Dm0644 "$SOURCE/agent/systemd/pulsedeck-agent.sysusers" /usr/lib/sysusers.d/pulsedeck-agent.conf
 install -d -m 0755 /usr/local/libexec/pulsedeck-agent
+install -m 0755 "$SOURCE/agent/scripts/prepare-state.sh" /usr/local/libexec/pulsedeck-agent/prepare-state.sh
 install -m 0755 "$SOURCE/agent/scripts/install.sh" /usr/local/libexec/pulsedeck-agent/install.sh
 install -m 0755 "$SOURCE/agent/scripts/uninstall.sh" /usr/local/libexec/pulsedeck-agent/uninstall.sh
 install -m 0755 "$SOURCE/agent/scripts/update.sh" /usr/local/libexec/pulsedeck-agent/update.sh
@@ -120,12 +122,11 @@ printf '%s\n' standalone > /usr/local/share/pulsedeck-agent/install-method
 printf '%s\n' "$REF" > /usr/local/share/pulsedeck-agent/source-ref
 printf '%s\n' "$revision" > /usr/local/share/pulsedeck-agent/source-revision
 
+/usr/local/libexec/pulsedeck-agent/prepare-state.sh
 systemctl daemon-reload
 if [[ $NO_START -eq 0 ]]; then
-    systemctl enable --now pulsedeck-agent.service
-    if [[ $UPGRADE -eq 1 ]]; then
-        systemctl restart pulsedeck-agent.service
-    fi
+    systemctl enable pulsedeck-agent.service
+    systemctl restart pulsedeck-agent.service
 fi
 
 /usr/local/bin/pulsedeck-agent --config /etc/pulsedeck-agent/agent.yml config validate

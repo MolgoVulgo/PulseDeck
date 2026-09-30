@@ -40,6 +40,10 @@ WRAPPER
         "$pkgdir/etc/pulsedeck-agent/agent.yml"
     install -Dm0644 agent/systemd/pulsedeck-agent.service \
         "$pkgdir/usr/lib/systemd/system/pulsedeck-agent.service"
+    install -Dm0644 agent/systemd/pulsedeck-agent.sysusers \
+        "$pkgdir/usr/lib/sysusers.d/pulsedeck-agent.conf"
+    install -Dm0755 agent/scripts/prepare-state.sh \
+        "$pkgdir/usr/libexec/pulsedeck-agent/prepare-state.sh"
     install -Dm0755 agent/scripts/update.sh \
         "$pkgdir/usr/libexec/pulsedeck-agent/update.sh"
 

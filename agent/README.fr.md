@@ -97,6 +97,8 @@ Le canal sélectionné est enregistré avec l'Agent installé. `pulsedeck-agent 
 
 L'installateur standalone refuse explicitement Arch/pacman afin d'éviter de mélanger fichiers gérés par pacman et installation standalone.
 
+Le service systemd s'exécute avec le compte système fixe `pulsedeck-agent`. Son répertoire d'état `/var/lib/pulsedeck-agent` reste modifiable uniquement par le service, tandis que les fichiers diagnostiques comme `snapshot.json` sont lisibles par les utilisateurs normaux afin que `pulsedeck-agent doctor` ne nécessite pas root.
+
 Les deux méthodes lancent automatiquement `pulsedeck-agent doctor` après le démarrage normal du service. La commande peut toujours être relancée manuellement :
 
 ```bash

@@ -5,9 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-DynamicUser=yes
+User=pulsedeck-agent
+Group=pulsedeck-agent
 Environment=PATH=/usr/bin:/usr/local/bin:/usr/local/sbin
-ExecStart=/usr/bin/env pulsedeck-agent run --config /etc/pulsedeck-agent/agent.yml --state-dir /var/lib/pulsedeck-agent
+ExecStart=/usr/bin/env pulsedeck-agent --config /etc/pulsedeck-agent/agent.yml run --state-dir /var/lib/pulsedeck-agent
 Restart=on-failure
 RestartSec=5s
 StateDirectory=pulsedeck-agent

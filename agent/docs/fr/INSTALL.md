@@ -43,7 +43,7 @@ Lorsqu'il est exécuté depuis un checkout dont la branche courante est `main` o
 ./install.sh dev
 ```
 
-Le wrapper exécute `makepkg -Csi`, active/démarre `pulsedeck-agent.service`, puis lance `pulsedeck-agent doctor`. Ne pas exécuter le wrapper ni `makepkg` en root.
+Le wrapper exécute `makepkg -Csi`, prépare le compte système fixe `pulsedeck-agent` et le répertoire d'état, redémarre `pulsedeck-agent.service`, puis lance `pulsedeck-agent doctor`. Ne pas exécuter le wrapper ni `makepkg` en root.
 
 Le paquet enregistre :
 
@@ -104,7 +104,7 @@ sudo ./agent/scripts/install.sh --source "$PWD"
 
 Si la branche du checkout vaut `main` ou `dev`, l'installateur standalone enregistre automatiquement ce canal sauf si `--ref` est fourni explicitement.
 
-La méthode standalone installe un environnement Python isolé sous `/opt/pulsedeck-agent`, expose `/usr/local/bin/pulsedeck-agent`, installe l'unité systemd, préserve une configuration YAML existante et démarre le service.
+La méthode standalone installe un environnement Python isolé sous `/opt/pulsedeck-agent`, expose `/usr/local/bin/pulsedeck-agent`, crée le compte système fixe `pulsedeck-agent` via `systemd-sysusers`, installe l'unité systemd, préserve une configuration YAML existante et démarre le service.
 
 Mise à jour normale :
 
@@ -113,6 +113,12 @@ pulsedeck-agent update
 ```
 
 L'updater réutilise le canal enregistré lors de l'installation.
+
+## Compte de service et état local
+
+Le service s'exécute avec le compte système fixe `pulsedeck-agent`. Le répertoire d'état est `/var/lib/pulsedeck-agent` en mode `0755` ; les fichiers runtime comme `snapshot.json` sont écrits en `0644`. Un utilisateur normal peut donc exécuter `pulsedeck-agent doctor` sans `sudo`, tandis que seul le compte de service écrit l'état Agent.
+
+Lors d'une mise à jour depuis l'ancien jet utilisant `DynamicUser=yes`, l'ancien état diagnostique privé sous `/var/lib/private/pulsedeck-agent` est automatiquement supprimé puis un répertoire d'état propre est recréé. Le snapshot reste uniquement un état diagnostique ; il ne constitue ni un historique ni le contrat de payload Agent -> Pi.
 
 ## Première configuration
 

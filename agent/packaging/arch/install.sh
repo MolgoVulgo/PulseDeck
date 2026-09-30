@@ -52,5 +52,8 @@ done
 cd "$SCRIPT_DIR"
 printf 'PulseDeck Agent channel: %s\n' "$REF"
 PULSEDECK_REF="$REF" makepkg -Csi
-sudo systemctl enable --now pulsedeck-agent.service
+sudo /usr/libexec/pulsedeck-agent/prepare-state.sh
+sudo systemctl daemon-reload
+sudo systemctl enable pulsedeck-agent.service
+sudo systemctl restart pulsedeck-agent.service
 pulsedeck-agent doctor

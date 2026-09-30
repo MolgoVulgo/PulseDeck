@@ -97,6 +97,8 @@ The selected channel is stored with the installed Agent. `pulsedeck-agent update
 
 `install.sh` for standalone installations explicitly refuses Arch/pacman systems so package-managed and standalone files cannot be mixed.
 
+The systemd service runs under the fixed system account `pulsedeck-agent`. Its state directory `/var/lib/pulsedeck-agent` remains writable only by the service while diagnostic files such as `snapshot.json` are readable by normal users so `pulsedeck-agent doctor` does not require root.
+
 Both installation paths run `pulsedeck-agent doctor` automatically after a normal service start. It can always be re-run manually:
 
 ```bash

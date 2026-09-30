@@ -34,6 +34,8 @@ if [[ -n "$agent_bin" ]] && command -v pacman >/dev/null 2>&1 && pacman -Qo "$ag
     git clone --depth 1 --branch "$REF" "$REPO" "$tmp/PulseDeck"
     cd "$tmp/PulseDeck/agent/packaging/arch"
     PULSEDECK_REF="$REF" makepkg -Csi
+    sudo /usr/libexec/pulsedeck-agent/prepare-state.sh
+    sudo systemctl daemon-reload
     sudo systemctl restart pulsedeck-agent.service
     pulsedeck-agent doctor
     echo "PulseDeck Agent Arch package update complete (channel: $REF)."

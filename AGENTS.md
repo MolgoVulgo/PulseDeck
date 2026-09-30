@@ -24,7 +24,7 @@ Ne pas dupliquer ici les détails déjà maintenus dans une documentation canoni
 - PulseDeck Agent collecte uniquement les métriques locales de la machine : CPU, MEMORY et NETWORK obligatoires en V1, GPU optionnel par configuration.
 - Profils V1 verrouillés : mini-serveur = CPU + MEMORY + NETWORK ; PC gamer = CPU + MEMORY + NETWORK + GPU.
 - Configuration Agent V1 : YAML sous `/etc/pulsedeck-agent/agent.yml`; CPU/MEMORY/NETWORK restent obligatoires, seul GPU est activable/désactivable.
-- Service Agent V1 : `pulsedeck-agent.service` sous systemd ; état diagnostique local sous `/var/lib/pulsedeck-agent/`.
+- Service Agent V1 : `pulsedeck-agent.service` sous systemd avec le compte système fixe `pulsedeck-agent` ; état diagnostique local sous `/var/lib/pulsedeck-agent/`, lisible pour `pulsedeck-agent doctor` sans root.
 - Installation Agent : méthodes mutuellement exclusives. Sur Arch/pacman, utiliser uniquement `makepkg` via `agent/packaging/arch/PKGBUILD`. Sur Linux non-Arch, utiliser `agent/scripts/install.sh`, qui doit refuser les hôtes Arch/pacman. Mise à jour normale via `pulsedeck-agent update`.
 - Le transport exact Agent -> Pi et le payload réseau restent `unresolved` tant qu'ils ne sont pas documentés.
 - L'ESP32 est centré sur Wi-Fi, MQTT, NTP local, cache local, navigation et UI LVGL.
@@ -90,7 +90,7 @@ Après modification sous `agent/`, exécuter au minimum :
 ```bash
 PYTHONPATH=agent/src python -m unittest discover -s agent/tests -v
 PYTHONPATH=agent/src python -m pulsedeck_agent --config agent/config/pulsedeck-agent.example.yml config validate
-bash -n agent/scripts/install.sh agent/scripts/update.sh agent/scripts/uninstall.sh
+bash -n agent/scripts/install.sh agent/scripts/update.sh agent/scripts/uninstall.sh agent/scripts/prepare-state.sh
 ```
 
 Ne pas exécuter automatiquement `makepkg -si`, l'installateur root ou le service systemd pendant une validation de source.
