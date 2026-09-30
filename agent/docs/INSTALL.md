@@ -10,23 +10,63 @@ Both supported installation paths provide:
 - `/etc/pulsedeck-agent/agent.yml` YAML configuration;
 - `pulsedeck-agent.service` systemd unit;
 - automatic start at boot;
-- `pulsedeck-agent update` as the normal update command.
+- installed source channel metadata (`main` or `dev`);
+- `pulsedeck-agent doctor` for complete installation verification;
+- `pulsedeck-agent update` for normal updates on the same channel.
 
-The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disabled. The methods are mutually exclusive: Arch Linux/pacman-based systems use the package path, while the standalone installer is reserved for non-Arch Linux systems. `install.sh` refuses Arch/pacman systems.
+The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disabled. The methods are mutually exclusive: Arch Linux/pacman-based systems use the package path, while the standalone installer is reserved for non-Arch Linux systems.
 
 ## Method 1 — Arch Linux / makepkg
 
 Prerequisites: a normal non-root build user, `base-devel`/`makepkg`, Git and sudo configured for pacman operations.
 
-From a PulseDeck source checkout:
+### Stable channel (`main`)
 
 ```bash
-cd agent/packaging/arch
-makepkg -si
-sudo systemctl enable --now pulsedeck-agent.service
+git clone https://github.com/MolgoVulgo/PulseDeck.git
+cd PulseDeck/agent/packaging/arch
+./install.sh
 ```
 
-`PKGBUILD` retrieves the PulseDeck source repository and packages `agent/`. Do not run `makepkg` as root.
+### Development channel (`dev`)
+
+```bash
+git clone --branch dev https://github.com/MolgoVulgo/PulseDeck.git
+cd PulseDeck/agent/packaging/arch
+./install.sh
+```
+
+When executed from a checkout whose current branch is `main` or `dev`, `./install.sh` automatically uses that branch. The channel can also be selected explicitly from either checkout:
+
+```bash
+./install.sh main
+./install.sh dev
+```
+
+The wrapper runs `makepkg -Csi`, enables/starts `pulsedeck-agent.service`, then executes `pulsedeck-agent doctor`. Do not run the wrapper or `makepkg` as root.
+
+The package stores:
+
+```text
+/usr/share/pulsedeck-agent/install-method
+/usr/share/pulsedeck-agent/source-ref
+/usr/share/pulsedeck-agent/source-revision
+```
+
+Check the installed identity at any time:
+
+```bash
+pulsedeck-agent version
+```
+
+Example:
+
+```text
+PulseDeck Agent 0.1.0
+install: arch-package
+channel: dev
+revision: 0123456789abcdef...
+```
 
 Normal update:
 
@@ -34,13 +74,13 @@ Normal update:
 pulsedeck-agent update
 ```
 
-For an Arch package installation, the update helper clones the current PulseDeck source and runs `makepkg -si` as the calling non-root user.
+An Agent installed from `dev` stays on `dev`; an Agent installed from `main` stays on `main`. The update finishes by running `pulsedeck-agent doctor`.
 
 ## Method 2 — standalone installer (non-Arch Linux only)
 
-This method is for Linux systems that are not Arch/pacman-based. On Arch Linux or a pacman-based compatible system, `install.sh` exits without modifying the machine and points to the `makepkg` procedure.
+This method is for Linux systems that are not Arch/pacman-based. On Arch Linux or a pacman-based compatible system, `install.sh` exits without modifying the machine and points to the package procedure.
 
-Remote bootstrap:
+Stable remote bootstrap:
 
 ```bash
 curl -fsSL \
@@ -48,11 +88,21 @@ curl -fsSL \
   | sudo bash
 ```
 
+Development remote bootstrap:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/dev/agent/scripts/install.sh \
+  | sudo bash -s -- --ref dev
+```
+
 From an existing PulseDeck source checkout:
 
 ```bash
 sudo ./agent/scripts/install.sh --source "$PWD"
 ```
+
+If the checkout branch is `main` or `dev`, the standalone installer automatically records that channel unless `--ref` is given explicitly.
 
 The standalone method installs an isolated Python environment under `/opt/pulsedeck-agent`, exposes `/usr/local/bin/pulsedeck-agent`, installs the systemd unit, preserves an existing YAML configuration and starts the service.
 
@@ -62,7 +112,7 @@ Normal update:
 pulsedeck-agent update
 ```
 
-The updater re-runs the installed standalone installer against the current source ref. No repository clone is required on the target.
+The updater reuses the channel recorded during installation.
 
 ## First configuration
 
@@ -106,14 +156,53 @@ runtime:
   sample_interval_s: 1.0
 ```
 
-Validate and restart:
+Validate and restart after a configuration change:
 
 ```bash
 pulsedeck-agent config validate
-pulsedeck-agent check
 sudo systemctl restart pulsedeck-agent.service
-pulsedeck-agent status
+pulsedeck-agent doctor
 ```
+
+## Verify that the installation is healthy
+
+Run:
+
+```bash
+pulsedeck-agent doctor
+```
+
+A healthy mini-server installation should look similar to:
+
+```text
+PulseDeck Agent doctor
+
+Version       : 0.1.0
+Install       : arch-package
+Channel       : dev
+Revision      : 0123456789abcdef...
+Agent ID      : mini-server
+
+Configuration : OK
+CPU           : OK
+Memory        : OK
+Network       : OK (enp1s0)
+GPU           : disabled
+Service       : active
+Autostart     : enabled
+Snapshot      : OK (age 0.4s)
+
+Result: OK
+```
+
+The command returns exit code `0` only when all required checks pass:
+
+```bash
+pulsedeck-agent doctor
+echo $?
+```
+
+If `Result: FAILED` is reported, the failing line identifies the first area to investigate. `pulsedeck-agent status`, `systemctl status pulsedeck-agent.service` and `journalctl -u pulsedeck-agent.service` remain available for narrower troubleshooting.
 
 ## Standalone uninstall
 
@@ -128,5 +217,3 @@ sudo /usr/local/libexec/pulsedeck-agent/uninstall.sh --purge
 ```
 
 Arch installations should be removed with pacman instead of the standalone uninstaller.
-
-If an older standalone Agent was previously installed on an Arch/pacman host, remove that standalone installation first with `/usr/local/libexec/pulsedeck-agent/uninstall.sh` before installing the package with `makepkg -si`.

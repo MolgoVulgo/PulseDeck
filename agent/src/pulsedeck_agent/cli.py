@@ -6,10 +6,15 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 from . import __version__
 from .config import DEFAULT_CONFIG_PATH, ConfigError, load_config
+from .metadata import InstallInfo, load_install_info
 from .runtime import AgentRuntime, DEFAULT_STATE_DIR
+
+
+SERVICE_NAME = "pulsedeck-agent.service"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="YAML configuration path")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("version", help="show Agent version")
+    sub.add_parser("version", help="show Agent version and installed source channel")
     sub.add_parser("check", help="validate configuration and mandatory local collectors")
     sub.add_parser("snapshot", help="print one warmed local diagnostic snapshot as JSON")
 
@@ -27,17 +32,20 @@ def build_parser() -> argparse.ArgumentParser:
     status = sub.add_parser("status", help="show service and last-snapshot status")
     status.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
 
+    doctor = sub.add_parser("doctor", help="verify installation, service, configuration and collectors")
+    doctor.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
+
     config = sub.add_parser("config", help="configuration helpers")
     config.add_argument("action", choices=("path", "validate"))
 
-    sub.add_parser("update", help="update the Agent using its installed method")
+    sub.add_parser("update", help="update the Agent using its installed method and source channel")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "version":
-        print(__version__)
+        _print_version(load_install_info())
         return 0
     if args.command == "update":
         return _update()
@@ -64,10 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check":
         snapshot = runtime.warm_collect(min(config.sample_interval_s, 0.25))
         required_ok = bool(snapshot.get("state", {}).get("ok"))  # type: ignore[union-attr]
-        gpu_ok = True
-        if config.gpu_enabled:
-            gpu = snapshot.get("gpu", {})
-            gpu_ok = bool(isinstance(gpu, dict) and gpu.get("pct", {}).get("valid"))  # type: ignore[union-attr]
+        gpu_ok = _gpu_ok(snapshot, config.gpu_enabled)
         print(f"agent={config.agent_id} network={runtime.network.interface} gpu={'on' if config.gpu_enabled else 'off'}")
         if not required_ok:
             print("mandatory collector check failed", file=sys.stderr)
@@ -88,13 +93,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "status":
         return _status(Path(args.state_dir))
 
+    if args.command == "doctor":
+        return _doctor(config, runtime, Path(args.state_dir))
+
     return 2
+
+
+def _print_version(info: InstallInfo) -> None:
+    print(f"PulseDeck Agent {__version__}")
+    print(f"install: {info.method}")
+    print(f"channel: {info.channel}")
+    print(f"revision: {info.revision}")
 
 
 def _status(state_dir: Path) -> int:
     if shutil.which("systemctl"):
         active = subprocess.run(
-            ["systemctl", "is-active", "pulsedeck-agent.service"],
+            ["systemctl", "is-active", SERVICE_NAME],
             check=False,
             capture_output=True,
             text=True,
@@ -111,6 +126,114 @@ def _status(state_dir: Path) -> int:
         print(f"snapshot: unreadable: {exc}", file=sys.stderr)
         return 1
     return 0
+
+
+def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
+    info = load_install_info()
+    live = runtime.warm_collect(min(runtime.config.sample_interval_s, 0.25))
+
+    cpu_ok = _metric_valid(live, "cpu", "pct")
+    memory_ok = all(_metric_valid(live, "memory", key) for key in ("used_b", "total_b", "pct"))
+    network_ok = all(_metric_valid(live, "network", key) for key in ("rx_bytes", "tx_bytes", "rx_bps", "tx_bps"))
+    gpu_ok = _gpu_ok(live, runtime.config.gpu_enabled)
+
+    active_ok, active_text = _systemctl_check("is-active", "active")
+    enabled_ok, enabled_text = _systemctl_check("is-enabled", "enabled")
+    snapshot_ok, snapshot_text = _state_snapshot_check(
+        state_dir / "snapshot.json",
+        runtime.config.agent_id,
+        runtime.config.sample_interval_s,
+    )
+
+    install_ok = info.method in {"arch-package", "standalone"}
+    channel_ok = info.channel in {"main", "dev"}
+    all_ok = all(
+        (
+            install_ok,
+            channel_ok,
+            cpu_ok,
+            memory_ok,
+            network_ok,
+            gpu_ok,
+            active_ok,
+            enabled_ok,
+            snapshot_ok,
+        )
+    )
+
+    print("PulseDeck Agent doctor")
+    print()
+    print(f"Version       : {__version__}")
+    print(f"Install       : {info.method}")
+    print(f"Channel       : {info.channel}")
+    print(f"Revision      : {info.revision}")
+    print(f"Agent ID      : {runtime.config.agent_id}")
+    print()
+    print("Configuration : OK")
+    print(f"CPU           : {'OK' if cpu_ok else 'FAIL'}")
+    print(f"Memory        : {'OK' if memory_ok else 'FAIL'}")
+    print(f"Network       : {'OK' if network_ok else 'FAIL'} ({runtime.network.interface})")
+    if runtime.config.gpu_enabled:
+        print(f"GPU           : {'OK' if gpu_ok else 'FAIL'}")
+    else:
+        print("GPU           : disabled")
+    print(f"Service       : {active_text}")
+    print(f"Autostart     : {enabled_text}")
+    print(f"Snapshot      : {snapshot_text}")
+    print()
+    print(f"Result: {'OK' if all_ok else 'FAILED'}")
+    return 0 if all_ok else 6
+
+
+def _metric_valid(snapshot: dict[str, object], section: str, key: str) -> bool:
+    section_value = snapshot.get(section)
+    if not isinstance(section_value, dict):
+        return False
+    metric = section_value.get(key)
+    return bool(isinstance(metric, dict) and metric.get("valid"))
+
+
+def _gpu_ok(snapshot: dict[str, object], enabled: bool) -> bool:
+    if not enabled:
+        return True
+    return _metric_valid(snapshot, "gpu", "pct")
+
+
+def _systemctl_check(action: str, wanted: str) -> tuple[bool, str]:
+    if not shutil.which("systemctl"):
+        return False, "unavailable"
+    result = subprocess.run(
+        ["systemctl", action, SERVICE_NAME],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    value = result.stdout.strip() or result.stderr.strip() or "unknown"
+    return result.returncode == 0 and value == wanted, value
+
+
+def _state_snapshot_check(path: Path, agent_id: str, sample_interval_s: float) -> tuple[bool, str]:
+    timeout_s = max(3.0, min(10.0, sample_interval_s * 3.0))
+    deadline = time.monotonic() + timeout_s
+    last_error = f"missing ({path})"
+    while True:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            ts = float(data.get("ts", 0))
+            age_s = max(0.0, time.time() - ts)
+            state_ok = bool(data.get("state", {}).get("ok"))
+            agent_ok = data.get("agent", {}).get("id") == agent_id
+            max_age_s = max(10.0, sample_interval_s * 5.0)
+            if state_ok and agent_ok and age_s <= max_age_s:
+                return True, f"OK (age {age_s:.1f}s)"
+            last_error = f"stale/invalid (age {age_s:.1f}s)"
+        except FileNotFoundError:
+            last_error = f"missing ({path})"
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            last_error = f"unreadable ({exc})"
+        if time.monotonic() >= deadline:
+            return False, last_error
+        time.sleep(0.25)
 
 
 def _update() -> int:

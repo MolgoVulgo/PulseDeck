@@ -2,7 +2,23 @@
 set -euo pipefail
 
 REPO="https://github.com/MolgoVulgo/PulseDeck.git"
-RAW_BASE="https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main"
+
+read_ref() {
+    local path value
+    for path in /usr/share/pulsedeck-agent/source-ref /usr/local/share/pulsedeck-agent/source-ref; do
+        if [[ -r "$path" ]]; then
+            value="$(tr -d '[:space:]' < "$path")"
+            case "$value" in
+                main|dev) printf '%s\n' "$value"; return 0 ;;
+                *) echo "Invalid installed PulseDeck Agent channel in $path: $value" >&2; return 2 ;;
+            esac
+        fi
+    done
+    printf '%s\n' main
+}
+
+REF="$(read_ref)"
+RAW_BASE="https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/$REF"
 
 agent_bin="$(command -v pulsedeck-agent || true)"
 if [[ -n "$agent_bin" ]] && command -v pacman >/dev/null 2>&1 && pacman -Qo "$agent_bin" >/dev/null 2>&1; then
@@ -10,17 +26,17 @@ if [[ -n "$agent_bin" ]] && command -v pacman >/dev/null 2>&1 && pacman -Qo "$ag
         echo "Arch package updates must run as a regular user because makepkg refuses root." >&2
         exit 2
     fi
-    for cmd in makepkg git; do
+    for cmd in makepkg git sudo; do
         command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required command: $cmd" >&2; exit 2; }
     done
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
-    git clone --depth 1 "$REPO" "$tmp/PulseDeck"
+    git clone --depth 1 --branch "$REF" "$REPO" "$tmp/PulseDeck"
     cd "$tmp/PulseDeck/agent/packaging/arch"
-    makepkg -si
+    PULSEDECK_REF="$REF" makepkg -Csi
     sudo systemctl restart pulsedeck-agent.service
-    systemctl is-active --quiet pulsedeck-agent.service
-    echo "PulseDeck Agent Arch package update complete."
+    pulsedeck-agent doctor
+    echo "PulseDeck Agent Arch package update complete (channel: $REF)."
     exit 0
 fi
 
@@ -38,6 +54,6 @@ if [[ ! -x "$installer" ]]; then
 fi
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-    exec sudo "$installer" --upgrade
+    exec sudo "$installer" --ref "$REF" --upgrade
 fi
-exec "$installer" --upgrade
+exec "$installer" --ref "$REF" --upgrade

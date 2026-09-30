@@ -18,6 +18,7 @@ systemctl disable --now pulsedeck-agent.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/pulsedeck-agent.service
 rm -f /usr/local/bin/pulsedeck-agent
 rm -rf /usr/local/libexec/pulsedeck-agent
+rm -rf /usr/local/share/pulsedeck-agent
 rm -rf /opt/pulsedeck-agent
 systemctl daemon-reload
 

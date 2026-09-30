@@ -7,7 +7,14 @@ url='https://github.com/MolgoVulgo/PulseDeck'
 depends=('python' 'python-psutil' 'python-pyyaml' 'systemd')
 makedepends=('git')
 backup=('etc/pulsedeck-agent/agent.yml')
-source=('PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#branch=main')
+
+_pulsedeck_ref="${PULSEDECK_REF:-main}"
+case "$_pulsedeck_ref" in
+    main|dev) ;;
+    *) printf 'Unsupported PULSEDECK_REF: %s\n' "$_pulsedeck_ref" >&2; return 1 ;;
+esac
+
+source=("PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#branch=${_pulsedeck_ref}")
 sha256sums=('SKIP')
 
 pkgver() {
@@ -35,10 +42,22 @@ WRAPPER
         "$pkgdir/usr/lib/systemd/system/pulsedeck-agent.service"
     install -Dm0755 agent/scripts/update.sh \
         "$pkgdir/usr/libexec/pulsedeck-agent/update.sh"
+
+    install -d "$pkgdir/usr/share/pulsedeck-agent"
+    printf '%s\n' 'arch-package' > "$pkgdir/usr/share/pulsedeck-agent/install-method"
+    printf '%s\n' "$_pulsedeck_ref" > "$pkgdir/usr/share/pulsedeck-agent/source-ref"
+    git rev-parse HEAD > "$pkgdir/usr/share/pulsedeck-agent/source-revision"
     install -Dm0644 agent/packaging/arch/PKGBUILD \
         "$pkgdir/usr/share/pulsedeck-agent/arch/PKGBUILD"
+    install -Dm0755 agent/packaging/arch/install.sh \
+        "$pkgdir/usr/share/pulsedeck-agent/arch/install.sh"
+
     install -Dm0644 agent/README.md \
         "$pkgdir/usr/share/doc/pulsedeck-agent/README.md"
     install -Dm0644 agent/README.fr.md \
         "$pkgdir/usr/share/doc/pulsedeck-agent/README.fr.md"
+    install -Dm0644 agent/docs/INSTALL.md \
+        "$pkgdir/usr/share/doc/pulsedeck-agent/INSTALL.md"
+    install -Dm0644 agent/docs/fr/INSTALL.md \
+        "$pkgdir/usr/share/doc/pulsedeck-agent/INSTALL.fr.md"
 }

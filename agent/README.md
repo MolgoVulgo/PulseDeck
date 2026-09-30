@@ -4,7 +4,7 @@
 
 PulseDeck Agent is the machine-local metrics component for monitored PCs and servers. It collects local telemetry and is designed to send it to the Raspberry Pi, which remains the central PulseDeck hub, normalizer and display-oriented MQTT publisher.
 
-`agent-002` is the first executable draft. It implements local collection, YAML configuration, a systemd runtime, Arch `makepkg` packaging, a standalone installer and a common update command. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
+`agent-003` adds an installation channel contract (`main` or `dev`) and a complete post-installation diagnostic command. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
 
 ## V1 modules
 
@@ -41,7 +41,7 @@ Versioned example: [`config/pulsedeck-agent.example.yml`](config/pulsedeck-agent
 
 CPU, MEMORY and NETWORK cannot be disabled in V1. `collectors.network.interface: auto` resolves the default-route interface when possible. GPU is enabled only with `collectors.gpu.enabled: true`.
 
-The first GPU implementation reuses PulseMon's Linux AMD sysfs approach. GPU being optional is a V1 contract; support for additional GPU vendors is not defined by `agent-002`.
+The first GPU implementation reuses PulseMon's Linux AMD sysfs approach. GPU being optional is a V1 contract; support for additional GPU vendors is not defined yet.
 
 ## Commands
 
@@ -52,8 +52,11 @@ pulsedeck-agent config validate
 pulsedeck-agent check
 pulsedeck-agent snapshot
 pulsedeck-agent status
+pulsedeck-agent doctor
 pulsedeck-agent update
 ```
+
+`version` reports the installed method, source channel and source revision. `doctor` is the normal post-installation and post-update verification command. It checks installation metadata, YAML configuration, CPU/MEMORY/NETWORK, optional GPU, systemd active/enabled state and the local snapshot. Exit code `0` means the complete diagnostic passed.
 
 The systemd service runs:
 
@@ -73,13 +76,31 @@ That file and `snapshot` command are diagnostic/internal Agent state, not the fu
 
 Two mutually exclusive installation paths are defined:
 
-1. Arch Linux / pacman-based systems: package build with `makepkg -si` only;
+1. Arch Linux / pacman-based systems: package build through `agent/packaging/arch/install.sh` and `makepkg`;
 2. non-Arch Linux systems: standalone installer `agent/scripts/install.sh` only.
 
-`install.sh` explicitly refuses to run on Arch/pacman-based systems so package-managed and standalone files cannot be mixed. Both paths use the same `agent/` sources and install the same command and systemd service. Updates use one user-facing command:
+On Arch, the preferred command is now:
 
 ```bash
-pulsedeck-agent update
+cd agent/packaging/arch
+./install.sh
+```
+
+The wrapper automatically uses the current Git branch when it is `main` or `dev`; otherwise it defaults to `main`. An explicit channel is also accepted:
+
+```bash
+./install.sh main
+./install.sh dev
+```
+
+The selected channel is stored with the installed Agent. `pulsedeck-agent update` continues on that same channel and `pulsedeck-agent version` shows it.
+
+`install.sh` for standalone installations explicitly refuses Arch/pacman systems so package-managed and standalone files cannot be mixed.
+
+Both installation paths run `pulsedeck-agent doctor` automatically after a normal service start. It can always be re-run manually:
+
+```bash
+pulsedeck-agent doctor
 ```
 
 See [`docs/INSTALL.md`](docs/INSTALL.md).
@@ -100,6 +121,7 @@ agent/
     ├── models/
     ├── cli.py
     ├── config.py
+    ├── metadata.py
     └── runtime.py
 ```
 

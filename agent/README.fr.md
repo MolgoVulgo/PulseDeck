@@ -4,7 +4,7 @@
 
 PulseDeck Agent est le composant de métriques local aux PC et serveurs supervisés. Il collecte la télémétrie de la machine et est destiné à l'envoyer au Raspberry Pi, qui reste le hub PulseDeck central, le normaliseur et le producteur MQTT orienté affichage.
 
-`agent-002` constitue le premier jet exécutable. Il implémente la collecte locale, la configuration YAML, un runtime systemd, le packaging Arch via `makepkg`, un installateur standard et une commande de mise à jour commune. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
+`agent-003` ajoute un contrat de canal d'installation (`main` ou `dev`) et une commande complète de diagnostic après installation. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
 
 ## Modules V1
 
@@ -41,7 +41,7 @@ Exemple versionné : [`config/pulsedeck-agent.example.yml`](config/pulsedeck-age
 
 CPU, MEMORY et NETWORK ne peuvent pas être désactivés en V1. `collectors.network.interface: auto` résout si possible l'interface portant la route par défaut. Le GPU est activé uniquement avec `collectors.gpu.enabled: true`.
 
-Le premier backend GPU reprend l'approche Linux AMD/sysfs de PulseMon. Le caractère optionnel du GPU est un contrat V1 ; la prise en charge d'autres constructeurs GPU n'est pas définie par `agent-002`.
+Le premier backend GPU reprend l'approche Linux AMD/sysfs de PulseMon. Le caractère optionnel du GPU est un contrat V1 ; la prise en charge d'autres constructeurs GPU n'est pas encore définie.
 
 ## Commandes
 
@@ -52,8 +52,11 @@ pulsedeck-agent config validate
 pulsedeck-agent check
 pulsedeck-agent snapshot
 pulsedeck-agent status
+pulsedeck-agent doctor
 pulsedeck-agent update
 ```
+
+`version` affiche la méthode d'installation, le canal source et la révision source. `doctor` est la commande normale de validation après installation et après mise à jour. Elle contrôle les métadonnées d'installation, le YAML, CPU/MEMORY/NETWORK, le GPU optionnel, l'état systemd actif/activé et le snapshot local. Le code retour `0` signifie que le diagnostic complet est valide.
 
 Le service systemd exécute :
 
@@ -73,13 +76,31 @@ Ce fichier et la commande `snapshot` sont un état interne/diagnostique de l'Age
 
 Deux chemins mutuellement exclusifs sont définis :
 
-1. Arch Linux / systèmes basés sur pacman : paquet construit avec `makepkg -si` uniquement ;
+1. Arch Linux / systèmes basés sur pacman : construction du paquet via `agent/packaging/arch/install.sh` et `makepkg` ;
 2. systèmes Linux non-Arch : installateur standalone `agent/scripts/install.sh` uniquement.
 
-`install.sh` refuse explicitement de s’exécuter sur Arch/pacman afin d’éviter de mélanger des fichiers gérés par pacman et une installation standalone. Les deux chemins utilisent les mêmes sources `agent/`, installent la même commande et le même service systemd. La mise à jour utilise une commande utilisateur unique :
+Sur Arch, la commande recommandée devient :
 
 ```bash
-pulsedeck-agent update
+cd agent/packaging/arch
+./install.sh
+```
+
+Le wrapper utilise automatiquement la branche Git courante lorsqu'elle vaut `main` ou `dev`; sinon il utilise `main`. Le canal peut aussi être donné explicitement :
+
+```bash
+./install.sh main
+./install.sh dev
+```
+
+Le canal sélectionné est enregistré avec l'Agent installé. `pulsedeck-agent update` reste ensuite sur ce même canal et `pulsedeck-agent version` l'affiche.
+
+L'installateur standalone refuse explicitement Arch/pacman afin d'éviter de mélanger fichiers gérés par pacman et installation standalone.
+
+Les deux méthodes lancent automatiquement `pulsedeck-agent doctor` après le démarrage normal du service. La commande peut toujours être relancée manuellement :
+
+```bash
+pulsedeck-agent doctor
 ```
 
 Voir [`docs/fr/INSTALL.md`](docs/fr/INSTALL.md).
@@ -100,6 +121,7 @@ agent/
     ├── models/
     ├── cli.py
     ├── config.py
+    ├── metadata.py
     └── runtime.py
 ```
 
