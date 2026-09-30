@@ -33,19 +33,21 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 - Dashboard — état hub, MQTT, système et collectors ;
 - Weather — configuration OpenWeather, test fournisseur et hot reload ;
 - News — choix NewsAPI/GNews, configuration adaptée au fournisseur et à l’endpoint, test fournisseur et hot reload ;
+- Machines — liste configurable des PC/serveurs supervisés ; ajout, modification, test, activation/désactivation ou retrait des cibles PulseDeck Agent et hot reload de la flotte ;
+- Printer — liste multi-imprimantes configurable, tests de connexion et état runtime ;
 - Services — catalogue commun des collectors implémentés et prévus ;
-- Logs — journaux runtime en mémoire avec filtre par service ; `Tout` est sélectionné par défaut, puis Hub / MQTT / Weather / News / Admin ;
+- Logs — journaux runtime en mémoire avec filtre par service ; `Tout` est sélectionné par défaut, puis Hub / MQTT / Weather / News / Machines / Printer / Admin ;
 - Mises à jour — état du checker stable/dev et installation d’une mise à jour vérifiée pour le canal actuellement actif ;
   L’action d’installation ouvre un modal de confirmation/suivi qui conserve la cible visible et suit la mise en file, l’exécution du service root, le redémarrage/reconnexion du hub puis la vérification finale. Une perte temporaire de l’interface Web pendant le redémarrage est affichée comme un état de reconnexion attendu et non comme un échec ; le polling reprend automatiquement jusqu’au succès, à l’échec ou au délai borné de suivi.
 - Sécurité — changement du mot de passe administrateur.
 
 ## Logs runtime
 
-La vue Logs expose jusqu’à 500 entrées récentes du logging Python du processus `pulsedeck-hub`. Les entrées restent uniquement en RAM et disparaissent au redémarrage du hub ; cette fonction n’ajoute donc aucune écriture microSD. Le filtre par défaut est `Tout`, avec des filtres Hub, MQTT, Weather, News et Admin. La vue s’actualise automatiquement toutes les cinq secondes et peut aussi être rafraîchie manuellement. Elle n’exécute pas `journalctl` et n’accorde aucun accès privilégié au journal système depuis le Web.
+La vue Logs expose jusqu’à 500 entrées récentes du logging Python du processus `pulsedeck-hub`. Les entrées restent uniquement en RAM et disparaissent au redémarrage du hub ; cette fonction n’ajoute donc aucune écriture microSD. Le filtre par défaut est `Tout`, avec des filtres Hub, MQTT, Weather, News, Machines, Printer et Admin. La vue s’actualise automatiquement toutes les cinq secondes et peut aussi être rafraîchie manuellement. Elle n’exécute pas `journalctl` et n’accorde aucun accès privilégié au journal système depuis le Web.
 
 ## Changements transactionnels
 
-Pour Weather et News, Admin valide les valeurs et teste le fournisseur distant avant d’activer une nouvelle configuration. Les clés NewsAPI et GNews restent séparées afin qu’un changement de fournisseur n’écrase pas l’autre secret. News sépare les champs de requête fournisseur des paramètres runtime PulseDeck : le nombre d’articles mappe vers `pageSize` pour NewsAPI ou `max` pour GNews, la page reste fixée à 1, tandis que la cadence de collecte et le timeout HTTP restent des réglages locaux. Le TOML runtime et les secrets sont écrits atomiquement. Si l’application échoue, PulseDeck tente de restaurer la configuration de travail précédente.
+Pour Weather et News, Admin valide les valeurs et teste le fournisseur distant avant d’activer une nouvelle configuration. Machines utilise un contrat de liste d’équipements comparable à Printer : chaque cible possède un ID stable, un nom affiché, un host/IP, un port HTTP Agent et un état activé. Une machine peut être testée sans activer la collecte continue ; l’enregistrement de la flotte est atomique, recharge à chaud le collector Machines et restaure le TOML précédent en cas d’échec. Retirer une machine efface ses publications retained `machine/<id>/availability` et `machine/<id>/dashboard`. Les clés NewsAPI et GNews restent séparées afin qu’un changement de fournisseur n’écrase pas l’autre secret. News sépare les champs de requête fournisseur des paramètres runtime PulseDeck : le nombre d’articles mappe vers `pageSize` pour NewsAPI ou `max` pour GNews, la page reste fixée à 1, tandis que la cadence de collecte et le timeout HTTP restent des réglages locaux. Le TOML runtime et les secrets sont écrits atomiquement. Si l’application échoue, PulseDeck tente de restaurer la configuration de travail précédente.
 
 ## Chemins runtime
 

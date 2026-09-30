@@ -9,11 +9,13 @@ from pathlib import Path
 import shutil
 import time
 from typing import Any
+from urllib.error import HTTPError, URLError
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
+from ..collectors.machines import probe_machine
 from ..collectors.news import NewsError, build_news_client, normalize_news
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
 from ..config import (
@@ -21,10 +23,13 @@ from ..config import (
     DEFAULT_NEWSAPI_KEY_PATH,
     DEFAULT_OPENWEATHER_KEY_PATH,
     DEFAULT_PRINTER_SECRET_DIR,
+    MachineDeviceConfig,
+    MachinesConfig,
     NewsConfig,
     PrinterConfig,
     PrinterDeviceConfig,
     WeatherConfig,
+    machines_config_from_mapping,
     news_config_from_mapping,
     printer_config_from_mapping,
     weather_config_from_mapping,
@@ -44,7 +49,7 @@ from .security import (
     verify_password,
     verify_session,
 )
-from .storage import update_news_config, update_printer_config, update_secret, update_weather_config
+from .storage import update_machines_config, update_news_config, update_printer_config, update_secret, update_weather_config
 from .ui import ADMIN_HTML
 
 
@@ -367,6 +372,66 @@ def _printer_runtime_snapshot(runtime: Any) -> dict[str, Any]:
         "devices": devices,
     }
 
+
+def _machine_device_raw(device: MachineDeviceConfig) -> dict[str, Any]:
+    return {
+        "id": device.id,
+        "name": device.name,
+        "host": device.host,
+        "enabled": device.enabled,
+        "port": device.port,
+    }
+
+
+def _candidate_machines(runtime: Any, body: dict[str, Any]) -> MachinesConfig:
+    current = runtime.config.machines
+    devices_body = body.get("devices")
+    if devices_body is None:
+        devices_body = [_machine_device_raw(device) for device in current.devices]
+    raw = {
+        "enabled": body.get("enabled", current.enabled),
+        "poll_interval": body.get("poll_interval", current.poll_interval),
+        "request_timeout": body.get("request_timeout", current.request_timeout),
+        "offline_after_failures": body.get("offline_after_failures", current.offline_after_failures),
+        "max_snapshot_age": body.get("max_snapshot_age", current.max_snapshot_age),
+        "devices": devices_body,
+    }
+    try:
+        return machines_config_from_mapping(raw)
+    except ValueError as exc:
+        raise _json_error(400, str(exc)) from exc
+
+
+def _machines_runtime_snapshot(runtime: Any) -> dict[str, Any]:
+    collector = getattr(runtime, "machines_collector", None)
+    if collector is not None:
+        return collector.status()
+    config = runtime.config.machines
+    devices = [
+        {
+            "id": device.id,
+            "name": device.name,
+            "host": device.host,
+            "port": device.port,
+            "enabled": device.enabled,
+            "transport": "http",
+            "state": "disabled" if not config.enabled or not device.enabled else "starting",
+            "last_success": None,
+            "last_error": None,
+            "consecutive_failures": 0,
+        }
+        for device in config.devices
+    ]
+    enabled_devices = [device for device in config.devices if device.enabled]
+    return {
+        "state": "disabled" if not config.enabled else ("starting" if enabled_devices else "disabled"),
+        "enabled": config.enabled,
+        "configured_devices": len(config.devices),
+        "enabled_devices": len(enabled_devices),
+        "online_devices": 0,
+        "devices": devices,
+    }
+
 def _retained_messages(runtime: Any, prefix: str) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for suffix, entry in sorted(runtime.mqtt_client.retained_snapshot(prefix).items()):
@@ -485,6 +550,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         _require_auth(request, session_key)
         state = runtime.health.snapshot()
         printer_state = _printer_runtime_snapshot(runtime)
+        machines_state = _machines_runtime_snapshot(runtime)
         return {
             "version": __version__,
             "uptime_seconds": max(0, int(time.time()) - state["started_at"]),
@@ -496,6 +562,12 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
             },
             "weather": state["weather"],
             "news": state["news"],
+            "machines": {
+                "state": machines_state["state"],
+                "configured_devices": machines_state["configured_devices"],
+                "enabled_devices": machines_state["enabled_devices"],
+                "online_devices": machines_state["online_devices"],
+            },
             "printer": {
                 "state": printer_state["state"],
                 "configured_devices": printer_state["configured_devices"],
@@ -547,6 +619,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
         _require_auth(request, session_key)
         state = runtime.health.snapshot()
         printer_state = _printer_runtime_snapshot(runtime)
+        machines_state = _machines_runtime_snapshot(runtime)
         return {
             "services": build_service_catalog(
                 state["weather"],
@@ -556,8 +629,8 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 runtime.config.news.provider,
                 printer_state,
                 runtime.config.printer.enabled,
-                runtime.mini_server_collector.status() if runtime.mini_server_collector is not None else None,
-                runtime.config.mini_server.enabled,
+                _machines_runtime_snapshot(runtime),
+                runtime.config.machines.enabled,
             ),
         }
 
@@ -581,17 +654,10 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "health": state["news"],
                 "messages": _retained_messages(runtime, "news"),
             },
-            "mini_server": {
-                "enabled": runtime.config.mini_server.enabled,
-                "status": runtime.mini_server_collector.status() if runtime.mini_server_collector is not None else {
-                    "enabled": False,
-                    "host": runtime.config.mini_server.host,
-                    "port": runtime.config.mini_server.port,
-                    "profile": "mini-server",
-                    "transport": "http",
-                    "state": "disabled",
-                },
-                "messages": _retained_messages(runtime, "server/mini"),
+            "machines": {
+                "enabled": runtime.config.machines.enabled,
+                "health": _machines_runtime_snapshot(runtime),
+                "messages": _retained_messages(runtime, "machine"),
             },
             "printer": {
                 "enabled": runtime.config.printer.enabled,
@@ -599,6 +665,84 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "messages": _retained_messages(runtime, "printer"),
             },
         }
+
+    @app.get("/api/machines/config")
+    def machines_config(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        config = runtime.config.machines
+        return {
+            "enabled": config.enabled,
+            "poll_interval": config.poll_interval,
+            "request_timeout": config.request_timeout,
+            "offline_after_failures": config.offline_after_failures,
+            "max_snapshot_age": config.max_snapshot_age,
+            "devices": [_machine_device_raw(device) for device in config.devices],
+        }
+
+    @app.get("/api/machines/runtime")
+    def machines_runtime(request: Request) -> dict[str, Any]:
+        _require_auth(request, session_key)
+        return _machines_runtime_snapshot(runtime)
+
+    @app.post("/api/machines/test")
+    async def machines_test(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get("device"), dict):
+            raise _json_error(400, "device is required")
+        device_body = dict(body["device"])
+        device_body["enabled"] = True
+        candidate = _candidate_machines(
+            runtime,
+            {
+                "enabled": True,
+                "poll_interval": runtime.config.machines.poll_interval,
+                "request_timeout": body.get("request_timeout", runtime.config.machines.request_timeout),
+                "offline_after_failures": runtime.config.machines.offline_after_failures,
+                "max_snapshot_age": body.get("max_snapshot_age", runtime.config.machines.max_snapshot_age),
+                "devices": [device_body],
+            },
+        )
+        device = candidate.devices[0]
+        try:
+            dashboard = probe_machine(
+                device,
+                request_timeout=candidate.request_timeout,
+                max_snapshot_age=candidate.max_snapshot_age,
+            )
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+            LOG.warning("Machine connection test failed for %s: %s", device.id, exc)
+            raise _json_error(502, str(exc)) from exc
+        LOG.info("Machine connection test succeeded: %s", device.id)
+        return {
+            "ok": True,
+            "machine_id": device.id,
+            "agent": dashboard.get("agent"),
+            "capabilities": dashboard.get("capabilities", []),
+            "ts": dashboard.get("ts"),
+        }
+
+    @app.post("/api/machines/config")
+    async def machines_save(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise _json_error(400, "Invalid body")
+        candidate = _candidate_machines(runtime, body)
+        old_config = runtime.config_path.read_text(encoding="utf-8")
+        try:
+            update_machines_config(runtime.config_path, candidate)
+            runtime.reload_machines()
+            LOG.info("Machines configuration applied: %d device(s)", len(candidate.devices))
+        except Exception as exc:
+            try:
+                runtime.config_path.write_text(old_config, encoding="utf-8")
+                os.chmod(runtime.config_path, 0o660)
+                runtime.reload_machines()
+            except Exception:
+                pass
+            raise _json_error(500, f"Configuration not applied: {type(exc).__name__}") from exc
+        return {"ok": True, "runtime": _machines_runtime_snapshot(runtime)}
 
     @app.get("/api/printer/config")
     def printer_config(request: Request) -> dict[str, Any]:

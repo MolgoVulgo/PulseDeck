@@ -183,7 +183,7 @@ Responsabilités :
 - gestion des clés API ;
 - connexions persistantes ;
 - protocoles propriétaires ;
-- collecte Weather, News, Printer, PC gamer et mini serveur ;
+- collecte Weather, News, Printer et machines supervisées configurables ;
 - normalisation des données ;
 - cache ;
 - publication MQTT ;
@@ -242,19 +242,16 @@ pulsedeck/v1/weather/daily
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
 
-pulsedeck/v1/printer/availability
-pulsedeck/v1/printer/status
-pulsedeck/v1/printer/job
-pulsedeck/v1/printer/thumbnail
+pulsedeck/v1/printer/<id>/availability
+pulsedeck/v1/printer/<id>/status
+pulsedeck/v1/printer/<id>/job
+pulsedeck/v1/printer/<id>/thumbnail
 
-pulsedeck/v1/pc/gamer/availability
-pulsedeck/v1/pc/gamer/dashboard
-
-pulsedeck/v1/server/mini/availability
-pulsedeck/v1/server/mini/dashboard
+pulsedeck/v1/machine/<id>/availability
+pulsedeck/v1/machine/<id>/dashboard
 ```
 
-Le mini-serveur V1 utilise HTTP PulseDeck Agent comme transport source. L’adresse cible du Pi est configurée sous `[collectors.mini_server]` (`host`, `port`) et n’est jamais compilée dans le hub. `192.168.0.1` est uniquement un exemple d’adresse. HTTP Agent utilise par défaut le port TCP `8765`, expose `GET /v1/snapshot` et reste en lecture seule. Le Pi normalise le payload réseau Agent vers le schéma MQTT 1 `server/mini/dashboard` et suit online/offline via `server/mini/availability` ; les deux sont retained QoS 1.
+À partir de `patch_0022`, les PC et serveurs supervisés forment une flotte configurable sous `[collectors.machines]` et des tables répétées `[[collectors.machines.devices]]`. Chaque entrée possède un `id` logique stable, un `name` affiché, un `host`, un `port` et un état activé configurés par l’utilisateur. `192.168.0.1` reste uniquement un exemple de saisie ; aucune adresse de machine supervisée n’est compilée dans le hub. Le Pi interroge chaque PulseDeck Agent activé via HTTP en lecture seule (`GET /v1/snapshot`, port TCP `8765` par défaut), valide fraîcheur/santé, normalise le payload réseau Agent et publie en retained QoS 1 schéma 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. CPU, mémoire et réseau sont les capacités Agent obligatoires ; les données GPU sont normalisées lorsque l’Agent les annonce.
 
 Politique QoS V1 :
 - QoS 1 pour les états, disponibilités et snapshots applicatifs ;
@@ -269,7 +266,7 @@ Les payloads doivent être :
 - adaptés à l'affichage ;
 - accompagnés d'un timestamp.
 
-Le schéma JSON exact reste à définir application par application avant implémentation, à l'exception de Weather (`patch_0007`) et News (`patch_0010-1`) dont les schémas 1 sont fixés côté hub.
+Le schéma JSON exact reste défini application par application avant implémentation. Weather (`patch_0007`), News (`patch_0010-1`) et Machines (`patch_0022`) disposent de contrats schéma 1 fixés côté hub.
 
 Exemple :
 
@@ -301,8 +298,7 @@ Topics de disponibilité retained :
 pulsedeck/v1/system/availability
 pulsedeck/v1/weather/availability
 pulsedeck/v1/news/availability
-pulsedeck/v1/pc/gamer/availability
-pulsedeck/v1/server/mini/availability
+pulsedeck/v1/machine/<id>/availability
 pulsedeck/v1/printer/availability
 ```
 
@@ -425,13 +421,13 @@ Le Pi maintient les informations à jour pendant une impression :
 
 Quand l'utilisateur revient sur l'écran Printer, l'ESP32 dispose déjà de données récentes.
 
-### PC / mini-serveur
+### Machines supervisées
 
-Les métriques machines sont fournies au Pi par des instances PulseDeck Agent. Le même code agent sert les deux machines initiales :
+Les métriques machines sont fournies au Pi par des instances PulseDeck Agent. Le même code Agent sert tous les PC/serveurs supervisés. Les profils de déploiement initiaux restent des exemples utiles plutôt que des slots applicatifs fixes :
 - mini-serveur : CPU + MEMORY + NETWORK ;
 - PC gamer : CPU + MEMORY + NETWORK + GPU.
 
-Le Pi porte l’état applicatif normalisé et la publication MQTT. À partir de `patch_0021`, le collector mini-serveur interroge l’endpoint HTTP Agent configurable, normalise CPU/RAM/réseau, conserve les télémétries optionnelles indisponibles à `null`, puis publie en retained QoS 1 `server/mini/availability` et `server/mini/dashboard`. Les seuils d’échecs consécutifs et d’ancienneté du snapshot sont configurables.
+À partir de `patch_0022`, PulseDeck Admin gère la flotte avec le même modèle de liste d’équipements que Printer : ajouter, modifier, tester, activer/désactiver et retirer une machine sans modifier le code du hub. Le Pi porte l’état applicatif normalisé et la publication MQTT, interroge chaque Agent configuré indépendamment, conserve les télémétries optionnelles indisponibles à `null`, puis publie en retained QoS 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. Cadence de polling, timeout, seuil d’échecs consécutifs et âge maximal du snapshot sont des réglages de flotte. Retirer une machine efface ses topics retained machine.
 
 Les données de dashboard peuvent inclure :
 - CPU ;
@@ -542,9 +538,10 @@ Déplacer progressivement vers le Pi :
 Déployer et valider PulseDeck Agent, puis intégrer les métriques machines via le Raspberry Pi :
 - valider la collecte locale `agent-002`, la configuration YAML, le service systemd et les chemins d’installation/mise à jour sur le mini-serveur ;
 - second déploiement sur le PC gamer avec CPU + MEMORY + NETWORK + GPU ;
-- valider de bout en bout le transport HTTP Agent et le schéma MQTT mini-serveur 1 ;
-- normaliser l’état machine sur le Pi avant publication MQTT ;
-- exposer la disponibilité online/offline et les données dashboard par machine.
+- valider de bout en bout le transport HTTP Agent sur plusieurs machines configurées ;
+- valider le schéma MQTT 1 dynamique `machine/<id>/...`, y compris la télémétrie GPU optionnelle ;
+- gérer ajout/modification/test/activation-désactivation/suppression depuis PulseDeck Admin ;
+- normaliser l’état machine sur le Pi avant publication MQTT et exposer disponibilité online/offline plus dashboard par machine.
 
 ### Phase 7 — UI avancée
 
@@ -565,9 +562,9 @@ Ajouter de nouvelles apps seulement après stabilisation du socle MQTT/UI.
 ## 13. Décisions à prendre au lancement
 
 À définir avant le développement complet :
-- schéma exact des payloads applicatifs hors Weather et News ;
+- schéma exact des payloads applicatifs hors Weather, News et Machines ;
 - politique de cache ;
-- cadence des collectors hors Weather et News ;
+- cadence des collectors futurs/non implémentés qui ne disposent pas encore de leur propre contrat ;
 - version ESP-IDF ;
 - version LVGL 9 ;
 - driver ST7701 ;

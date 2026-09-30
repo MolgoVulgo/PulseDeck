@@ -18,10 +18,6 @@ TOPIC_SUFFIXES = {
     "weather_daily": "weather/daily",
     "news_availability": "news/availability",
     "news_latest": "news/latest",
-    "pc_gamer_availability": "pc/gamer/availability",
-    "pc_gamer_dashboard": "pc/gamer/dashboard",
-    "server_mini_availability": "server/mini/availability",
-    "server_mini_dashboard": "server/mini/dashboard",
     "printer_availability": "printer/availability",
     "printer_status": "printer/status",
     "printer_job": "printer/job",
@@ -32,3 +28,8 @@ TOPIC_SUFFIXES = {
 def printer_suffix(printer_id: str, leaf: str) -> str:
     """Return one multi-printer application suffix below ``printer/<id>``."""
     return f"printer/{printer_id}/{leaf.lstrip('/')}"
+
+
+def machine_suffix(machine_id: str, leaf: str) -> str:
+    """Return a per-machine application suffix below ``machine/<id>``."""
+    return f"machine/{machine_id}/{leaf.lstrip('/')}"

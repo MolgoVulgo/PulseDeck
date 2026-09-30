@@ -92,39 +92,59 @@ def test_gnews_configuration_loads_with_separate_secret(tmp_path: Path) -> None:
     assert cfg.news.nullable == "description,image"
 
 
-def test_mini_server_target_loads_with_configurable_http_transport(tmp_path: Path) -> None:
+def test_machines_load_multiple_configurable_targets(tmp_path: Path) -> None:
     cfg = load_config(
         _write(
             tmp_path,
-            """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = false\nhost = \"192.168.0.1\"\n""",
+            """[collectors.weather]\nenabled = false\n\n[collectors.machines]\nenabled = true\npoll_interval = 3\n\n[[collectors.machines.devices]]\nid = \"mini-server\"\nname = \"Mini serveur\"\nhost = \"192.168.0.1\"\nport = 8765\n\n[[collectors.machines.devices]]\nid = \"gaming-pc\"\nname = \"PC gamer\"\nhost = \"gaming.local\"\nport = 9000\n""",
         )
     )
-    assert cfg.mini_server.enabled is False
-    assert cfg.mini_server.host == "192.168.0.1"
-    assert cfg.mini_server.port == 8765
-    assert cfg.mini_server.poll_interval == 2
-    assert cfg.mini_server.offline_after_failures == 3
+    assert cfg.machines.enabled is True
+    assert cfg.machines.poll_interval == 3
+    assert [device.id for device in cfg.machines.devices] == ["mini-server", "gaming-pc"]
+    assert cfg.machines.devices[0].host == "192.168.0.1"
+    assert cfg.machines.devices[1].host == "gaming.local"
+    assert cfg.machines.devices[1].port == 9000
 
 
-def test_enabled_mini_server_requires_host(tmp_path: Path) -> None:
+def test_enabled_machines_requires_one_enabled_device(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
-        """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = true\n""",
+        """[collectors.weather]\nenabled = false\n\n[collectors.machines]\nenabled = true\n""",
     )
-    with pytest.raises(ValueError, match="mini-server collector requires host"):
+    with pytest.raises(ValueError, match="at least one enabled device"):
         load_config(path)
 
 
-def test_mini_server_host_rejects_url_syntax(tmp_path: Path) -> None:
+def test_machine_host_rejects_url_syntax(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
         """[collectors.weather]
 enabled = false
 
-[collectors.mini_server]
+[collectors.machines]
 enabled = true
+
+[[collectors.machines.devices]]
+id = "mini-server"
+name = "Mini serveur"
 host = "http://192.168.0.1"
 """,
     )
     with pytest.raises(ValueError, match="IP address or hostname"):
         load_config(path)
+
+
+def test_patch21_mini_server_config_migrates_in_memory(tmp_path: Path) -> None:
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = true\nhost = \"10.0.0.42\"\nport = 9999\n""",
+        )
+    )
+    assert cfg.machines.enabled is True
+    assert len(cfg.machines.devices) == 1
+    device = cfg.machines.devices[0]
+    assert device.id == "mini-server"
+    assert device.host == "10.0.0.42"
+    assert device.port == 9999

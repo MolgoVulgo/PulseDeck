@@ -33,19 +33,21 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 - Dashboard — hub, MQTT, system and collector status;
 - Weather — OpenWeather configuration, provider test and hot reload;
 - News — selectable NewsAPI/GNews provider, provider-specific endpoint/filter configuration, provider test and hot reload;
+- Machines — configurable list of monitored PCs/servers; add, edit, test, enable/disable or remove PulseDeck Agent targets and hot reload the fleet;
+- Printer — configurable multi-printer list, connection tests and runtime state;
 - Services — common collector catalog for implemented and planned services;
-- Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Admin filters;
+- Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Machines / Printer / Admin filters;
 - Updates — stable/dev checker state and installation of a verified update for the currently active channel;
   The install action opens a confirmation/progress modal that keeps the target visible and follows queued, root-service execution, hub restart/reconnection and final verification. A temporary loss of the Web UI during restart is shown as an expected reconnecting state rather than an installation failure; polling resumes automatically until success, failure or the bounded follow-up timeout.
 - Security — local admin password change.
 
 ## Runtime logs
 
-The Logs view exposes up to 500 recent Python runtime log entries from the current `pulsedeck-hub` process. Entries are held in RAM only and are lost when the hub restarts, so this feature does not add microSD writes. The default filter is `All`; service-specific filters cover Hub, MQTT, Weather, News and Admin. The view refreshes automatically every five seconds and can also be refreshed manually. It does not execute `journalctl` and does not grant the Web process privileged access to the system journal.
+The Logs view exposes up to 500 recent Python runtime log entries from the current `pulsedeck-hub` process. Entries are held in RAM only and are lost when the hub restarts, so this feature does not add microSD writes. The default filter is `All`; service-specific filters cover Hub, MQTT, Weather, News, Machines, Printer and Admin. The view refreshes automatically every five seconds and can also be refreshed manually. It does not execute `journalctl` and does not grant the Web process privileged access to the system journal.
 
 ## Transactional collector changes
 
-For Weather and News, Admin validates submitted configuration and tests the remote provider before enabling a new working configuration. News separates provider request fields from PulseDeck runtime fields, fixes provider pagination to page 1 for the current snapshot, and keeps collection cadence / HTTP timeout as local runtime settings. NewsAPI and GNews keys are stored independently, so switching provider does not overwrite the other secret. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
+For Weather and News, Admin validates submitted configuration and tests the remote provider before enabling a new working configuration. Machines uses a device-list contract comparable to Printer: each target has a stable ID, display name, host/IP, Agent HTTP port and enabled state. A machine can be connection-tested without enabling continuous collection; saving the fleet is atomic, hot-reloads the Machines collector and rolls back the previous TOML on failure. Removing a machine clears its retained `machine/<id>/availability` and `machine/<id>/dashboard` publications. News separates provider request fields from PulseDeck runtime fields, fixes provider pagination to page 1 for the current snapshot, and keeps collection cadence / HTTP timeout as local runtime settings. NewsAPI and GNews keys are stored independently, so switching provider does not overwrite the other secret. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
 
 ## Runtime paths
 

@@ -13,11 +13,15 @@ def build_service_catalog(
     news_provider: str = "newsapi",
     printer_state: dict[str, Any] | None = None,
     printer_enabled: bool = False,
-    mini_server_state: dict[str, Any] | None = None,
-    mini_server_enabled: bool = False,
+    machines_state: dict[str, Any] | None = None,
+    machines_enabled: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return stable Admin metadata for implemented and planned collectors."""
+    """Return stable Admin metadata for implemented collectors."""
 
+    machines = machines_state or {}
+    configured = int(machines.get("configured_devices", 0) or 0)
+    enabled = int(machines.get("enabled_devices", configured) or 0)
+    online = int(machines.get("online_devices", 0) or 0)
     return [
         {
             "id": "weather",
@@ -42,15 +46,15 @@ def build_service_catalog(
             "view": "news",
         },
         {
-            "id": "pc_gamer",
-            "label": "PC gamer",
-            "available": False,
-            "state": "planned",
-            "enabled": False,
-            "provider": None,
-            "transport": None,
-            "auth": None,
-            "view": None,
+            "id": "machines",
+            "label": "Machines / PC & serveurs",
+            "available": True,
+            "state": machines.get("state", "disabled"),
+            "enabled": machines_enabled,
+            "provider": f"PulseDeck Agent · {online}/{enabled} online" if enabled else "PulseDeck Agent",
+            "transport": "HTTP LAN",
+            "auth": "none (trusted LAN V1)",
+            "view": "machines",
         },
         {
             "id": "printer",
@@ -62,16 +66,5 @@ def build_service_catalog(
             "transport": "MQTT LAN",
             "auth": "Access code",
             "view": "printer",
-        },
-        {
-            "id": "mini_server",
-            "label": "Mini server",
-            "available": True,
-            "state": (mini_server_state or {}).get("state", "disabled"),
-            "enabled": mini_server_enabled,
-            "provider": "PulseDeck Agent",
-            "transport": "HTTP LAN",
-            "auth": "none (trusted LAN V1)",
-            "view": None,
         },
     ]

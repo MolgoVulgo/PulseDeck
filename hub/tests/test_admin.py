@@ -5,15 +5,17 @@ from pulsedeck_hub.admin.routes import _printer_runtime_snapshot, _retained_mess
 from pulsedeck_hub.admin.ui import ADMIN_HTML
 from pulsedeck_hub.admin.security import hash_password, make_session, verify_password, verify_session
 from pulsedeck_hub.admin.storage import (
+    render_machines_section,
     render_news_section,
     render_printer_section,
     render_weather_section,
+    update_machines_config,
     update_news_config,
     update_printer_config,
     update_secret,
     update_weather_config,
 )
-from pulsedeck_hub.config import NewsConfig, PrinterConfig, PrinterDeviceConfig, WeatherConfig, load_config
+from pulsedeck_hub.config import MachineDeviceConfig, MachinesConfig, NewsConfig, PrinterConfig, PrinterDeviceConfig, WeatherConfig, load_config
 
 
 def base_config(path: Path) -> None:
@@ -69,6 +71,7 @@ def test_render_disabled_weather_omits_missing_coordinates() -> None:
 def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     catalog = build_service_catalog({"state": "online"}, True, {"state": "disabled"}, False)
     by_id = {item["id"]: item for item in catalog}
+    assert set(by_id) == {"weather", "news", "machines", "printer"}
     assert by_id["weather"]["available"] is True
     assert by_id["weather"]["state"] == "online"
     assert by_id["news"]["available"] is True
@@ -78,7 +81,9 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     assert {item["id"]: item for item in gnews_catalog}["news"]["provider"] == "GNews"
     assert by_id["news"]["transport"] == "HTTPS"
     assert by_id["news"]["auth"] == "X-Api-Key"
-    assert by_id["pc_gamer"]["provider"] is None
+    assert by_id["machines"]["available"] is True
+    assert by_id["machines"]["view"] == "machines"
+    assert by_id["machines"]["transport"] == "HTTP LAN"
     assert by_id["printer"]["available"] is True
     assert by_id["printer"]["provider"] == "ELEGOO CC2"
     assert by_id["printer"]["view"] == "printer"
@@ -94,10 +99,27 @@ def test_service_catalog_preserves_confirmed_future_contracts() -> None:
     assert {item["id"]: item for item in printer_catalog}["printer"]["state"] == "degraded"
 
 
+def test_service_catalog_reports_machine_fleet_state() -> None:
+    catalog = build_service_catalog(
+        {"state": "online"}, True, {"state": "online"}, True, "newsapi", None, False,
+        {"state": "degraded", "configured_devices": 3, "enabled_devices": 2, "online_devices": 2}, True,
+    )
+    machines = {item["id"]: item for item in catalog}["machines"]
+    assert machines["state"] == "degraded"
+    assert machines["provider"] == "PulseDeck Agent · 2/2 online"
+
+
 def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
+    assert 'data-view="machines"' in ADMIN_HTML
+    assert 'data-view-panel="machines"' in ADMIN_HTML
+    assert 'id="addMachineButton"' in ADMIN_HTML
+    assert 'id="machineDevices"' in ADMIN_HTML
+    assert '/api/machines/config' in ADMIN_HTML
+    assert '/api/machines/test' in ADMIN_HTML
+    assert '/api/machines/runtime' in ADMIN_HTML
     assert 'data-view="printer"' in ADMIN_HTML
     assert 'data-view-panel="printer"' in ADMIN_HTML
     assert 'id="printerDevices"' in ADMIN_HTML
@@ -131,6 +153,7 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view-panel="logs"' in ADMIN_HTML
     assert 'id="logService"' in ADMIN_HTML
     assert '<option value="all">Tout</option>' in ADMIN_HTML
+    assert '<option value="machines">Machines</option>' in ADMIN_HTML
     assert '<option value="printer">Printer</option>' in ADMIN_HTML
     assert '/api/logs?service=' in ADMIN_HTML
     assert 'data-view="security"' in ADMIN_HTML
@@ -247,12 +270,36 @@ def test_retained_messages_decode_confirmed_publications() -> None:
     assert messages[0]["payload"]["data"]["temperature_c"] == 18.5
     assert messages[1]["payload"] == "not-json"
 
+def test_machines_section_round_trip_replaces_legacy_mini_server(tmp_path: Path) -> None:
+    path = tmp_path / "pulsedeck.toml"
+    base_config(path)
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n[collectors.mini_server]\nenabled = true\nhost = \"10.0.0.42\"\n",
+        encoding="utf-8",
+    )
+    config = MachinesConfig(
+        enabled=True,
+        devices=(
+            MachineDeviceConfig(id="mini-server", name="Mini serveur", host="10.0.0.42"),
+            MachineDeviceConfig(id="gaming-pc", name="PC gamer", host="gaming.local", port=9000),
+        ),
+    )
+    update_machines_config(path, config)
+    loaded = load_config(path)
+    assert loaded.machines.enabled is True
+    assert [device.id for device in loaded.machines.devices] == ["mini-server", "gaming-pc"]
+    text = path.read_text(encoding="utf-8")
+    assert "[collectors.mini_server]" not in text
+    assert text.count("[[collectors.machines.devices]]") == 2
+    assert 'host = "10.0.0.42"' in render_machines_section(config)
+
+
 def test_printer_section_round_trip_preserves_following_sections(tmp_path: Path) -> None:
     path = tmp_path / "pulsedeck.toml"
     base_config(path)
     path.write_text(
         path.read_text(encoding="utf-8")
-        + "\n[collectors.printer]\nenabled = false\n\n[[collectors.printer.devices]]\nid = \"old\"\nhost = \"old.local\"\naccess_code_file = \"/tmp/old\"\n\n[collectors.pc_gamer]\nenabled = false\n",
+        + "\n[collectors.printer]\nenabled = false\n\n[[collectors.printer.devices]]\nid = \"old\"\nhost = \"old.local\"\naccess_code_file = \"/tmp/old\"\n\n[collectors.machines]\nenabled = false\n",
         encoding="utf-8",
     )
     device = PrinterDeviceConfig(
@@ -272,7 +319,7 @@ def test_printer_section_round_trip_preserves_following_sections(tmp_path: Path)
     assert [item.id for item in loaded.printer.devices] == ["cc2-main"]
     text = path.read_text(encoding="utf-8")
     assert text.count("[[collectors.printer.devices]]") == 1
-    assert '[collectors.pc_gamer]\nenabled = false' in text
+    assert '[collectors.machines]\nenabled = false' in text
     assert "access_code =" not in render_printer_section(config)
 
 

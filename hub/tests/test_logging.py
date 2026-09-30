@@ -13,6 +13,7 @@ def test_log_service_classification() -> None:
     assert classify_log_service("pulsedeck_hub.mqtt.client") == "mqtt"
     assert classify_log_service("pulsedeck_hub.collectors.weather") == "weather"
     assert classify_log_service("pulsedeck_hub.collectors.news") == "news"
+    assert classify_log_service("pulsedeck_hub.collectors.machines") == "machines"
     assert classify_log_service("pulsedeck_hub.collectors.printer") == "printer"
     assert classify_log_service("pulsedeck_hub.printers.elegoo_cc2") == "printer"
     assert classify_log_service("paho.mqtt.printer.cc2-main") == "printer"

@@ -78,6 +78,14 @@ pulsedeck/v1/weather/daily
 
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
+
+pulsedeck/v1/machine/<id>/availability
+pulsedeck/v1/machine/<id>/dashboard
+
+pulsedeck/v1/printer/<id>/availability
+pulsedeck/v1/printer/<id>/status
+pulsedeck/v1/printer/<id>/job
+pulsedeck/v1/printer/<id>/thumbnail
 ```
 
 ## PulseDeck Agent V1
@@ -105,7 +113,7 @@ V1 metrics:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available.
 
-The same agent codebase is used on both machines. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision, ignores local checkout changes, authenticates sudo once and installs the built package non-interactively with pacman; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. From `patch_0021`, Agent-to-Pi V1 is read-only HTTP (`GET /v1/snapshot`, default port `8765`) with configurable Agent bind and configurable Pi target host/port; monitored-machine IPs are not hardcoded.
+The same agent codebase is used on every monitored machine. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision, ignores local checkout changes, authenticates sudo once and installs the built package non-interactively with pacman; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. From `patch_0021`, Agent-to-Pi V1 is read-only HTTP (`GET /v1/snapshot`, default port `8765`) with configurable Agent bind. From `patch_0022`, the Pi manages a configurable fleet under `[collectors.machines]` / `[[collectors.machines.devices]]`; each machine has its own ID, label, host/IP, port and enabled state, and publishes retained QoS 1 under `machine/<id>/availability` and `machine/<id>/dashboard`. Monitored-machine IPs are never hardcoded.
 
 See [`agent/README.md`](agent/README.md) and [`agent/docs/INSTALL.md`](agent/docs/INSTALL.md).
 
@@ -152,10 +160,12 @@ Admin currently provides:
 - Hub / MQTT / system health;
 - Weather configuration, API test and hot reload;
 - News provider selection (NewsAPI / GNews), provider-aware filters, API test and hot reload;
-- common Services catalog for upcoming collectors;
+- Machines fleet management: add/edit/test/enable-disable/remove monitored PCs and servers, with hot reload;
+- Printer multi-device management and runtime state;
+- common Services catalog for implemented and upcoming collectors;
 - local administrator password management.
 
-Secrets are masked after storage. Weather and News changes are tested before activation and applied transactionally.
+Secrets are masked after storage. Weather and News changes are tested before activation and applied transactionally. Machine-fleet changes are validated, written atomically and hot-reloaded; individual Agent targets can be tested before continuous monitoring is enabled.
 
 ## Raspberry Pi installation
 
@@ -230,9 +240,8 @@ Completed foundation:
 
 Next planned integrations:
 
-- deploy and validate the mini-server Agent HTTP path end to end, then reuse the same transport for the PC gamer;
-- extend the normalized machine MQTT contract to the PC gamer/GPU profile;
-- Printer;
+- deploy and validate the multi-machine Agent HTTP path end to end on the mini-server and PC gamer;
+- validate dynamic machine MQTT topics and GPU telemetry on real hardware;
 - ESP32 application screens, home dashboard, graphs and animations.
 
 ## Documentation

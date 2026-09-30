@@ -101,10 +101,18 @@ class NewsConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class MiniServerConfig:
-    enabled: bool = False
-    host: str = ""
+class MachineDeviceConfig:
+    id: str
+    name: str
+    host: str
+    enabled: bool = True
     port: int = 8765
+
+
+@dataclass(frozen=True, slots=True)
+class MachinesConfig:
+    enabled: bool = False
+    devices: tuple[MachineDeviceConfig, ...] = ()
     poll_interval: int = 2
     request_timeout: int = 2
     offline_after_failures: int = 3
@@ -141,7 +149,7 @@ class HubConfig:
     weather: WeatherConfig
     news: NewsConfig
     printer: PrinterConfig
-    mini_server: MiniServerConfig = MiniServerConfig()
+    machines: MachinesConfig = MachinesConfig()
 
 
 def _positive_int(value: object, name: str, *, minimum: int = 1, maximum: int | None = None) -> int:
@@ -360,41 +368,101 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
     )
 
 
-def mini_server_config_from_mapping(raw: object) -> MiniServerConfig:
-    """Parse the configurable Agent HTTP target for the first monitored server."""
+def _machine_host(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty IP address or hostname")
+    host = value.strip()
+    if len(host) > 255 or any(ch.isspace() for ch in host) or ":" in host or "/" in host:
+        raise ValueError(f"{name} must be an IP address or hostname without scheme/path")
+    return host
+
+
+def _machine_id(value: object, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    machine_id = value.strip().lower()
+    allowed = "abcdefghijklmnopqrstuvwxyz0123456789-_"
+    if len(machine_id) > 63 or machine_id[0] not in allowed[:36] or any(ch not in allowed for ch in machine_id):
+        raise ValueError(f"{name} may contain only lowercase letters, digits, '-' and '_', and must start with a letter or digit")
+    return machine_id
+
+
+def machines_config_from_mapping(raw: object, *, legacy_mini_server: object = None) -> MachinesConfig:
+    """Parse the multi-machine Agent collector, with patch-21 mini-server migration."""
+    if raw is None and legacy_mini_server is not None:
+        if not isinstance(legacy_mini_server, dict):
+            raise ValueError("[collectors.mini_server] must be a table")
+        enabled = _bool(legacy_mini_server.get("enabled", False), "collectors.mini_server.enabled")
+        host_raw = legacy_mini_server.get("host", "")
+        if not isinstance(host_raw, str):
+            raise ValueError("collectors.mini_server.host must be a string")
+        host = host_raw.strip()
+        if enabled and not host:
+            raise ValueError("enabled mini-server collector requires host")
+        if host:
+            host = _machine_host(host, "collectors.mini_server.host")
+        devices = (
+            MachineDeviceConfig(
+                id="mini-server",
+                name="Mini serveur",
+                host=host,
+                enabled=True,
+                port=_positive_int(legacy_mini_server.get("port", 8765), "collectors.mini_server.port", maximum=65535),
+            ),
+        ) if host else ()
+        return MachinesConfig(
+            enabled=enabled,
+            devices=devices,
+            poll_interval=_positive_int(legacy_mini_server.get("poll_interval", 2), "collectors.mini_server.poll_interval", maximum=300),
+            request_timeout=_positive_int(legacy_mini_server.get("request_timeout", 2), "collectors.mini_server.request_timeout", maximum=60),
+            offline_after_failures=_positive_int(legacy_mini_server.get("offline_after_failures", 3), "collectors.mini_server.offline_after_failures", maximum=60),
+            max_snapshot_age=_positive_int(legacy_mini_server.get("max_snapshot_age", 10), "collectors.mini_server.max_snapshot_age", maximum=3600),
+        )
+
     if raw is None:
-        return MiniServerConfig()
+        return MachinesConfig()
     if not isinstance(raw, dict):
-        raise ValueError("[collectors.mini_server] must be a table")
+        raise ValueError("[collectors.machines] must be a table")
 
-    enabled = _bool(raw.get("enabled", False), "collectors.mini_server.enabled")
-    host = raw.get("host", "")
-    if not isinstance(host, str):
-        raise ValueError("collectors.mini_server.host must be a string")
-    host = host.strip()
-    if enabled and not host:
-        raise ValueError("enabled mini-server collector requires host")
-    if host and (len(host) > 255 or any(ch.isspace() for ch in host) or ":" in host or "/" in host):
-        raise ValueError("collectors.mini_server.host must be an IP address or hostname without scheme/path")
+    enabled = _bool(raw.get("enabled", False), "collectors.machines.enabled")
+    devices_raw = raw.get("devices", [])
+    if not isinstance(devices_raw, list):
+        raise ValueError("collectors.machines.devices must be an array of tables")
 
-    return MiniServerConfig(
+    devices: list[MachineDeviceConfig] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(devices_raw):
+        prefix = f"collectors.machines.devices[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{prefix} must be a table")
+        machine_id = _machine_id(item.get("id"), f"{prefix}.id")
+        if machine_id in seen_ids:
+            raise ValueError(f"duplicate machine id: {machine_id}")
+        seen_ids.add(machine_id)
+        name = item.get("name", machine_id)
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 128:
+            raise ValueError(f"{prefix}.name must be a non-empty string up to 128 characters")
+        devices.append(
+            MachineDeviceConfig(
+                id=machine_id,
+                name=name.strip(),
+                host=_machine_host(item.get("host"), f"{prefix}.host"),
+                enabled=_bool(item.get("enabled", True), f"{prefix}.enabled"),
+                port=_positive_int(item.get("port", 8765), f"{prefix}.port", maximum=65535),
+            )
+        )
+
+    if enabled and not any(device.enabled for device in devices):
+        raise ValueError("enabled machines collector requires at least one enabled device")
+
+    return MachinesConfig(
         enabled=enabled,
-        host=host,
-        port=_positive_int(raw.get("port", 8765), "collectors.mini_server.port", maximum=65535),
-        poll_interval=_positive_int(raw.get("poll_interval", 2), "collectors.mini_server.poll_interval", maximum=300),
-        request_timeout=_positive_int(raw.get("request_timeout", 2), "collectors.mini_server.request_timeout", maximum=60),
-        offline_after_failures=_positive_int(
-            raw.get("offline_after_failures", 3),
-            "collectors.mini_server.offline_after_failures",
-            maximum=60,
-        ),
-        max_snapshot_age=_positive_int(
-            raw.get("max_snapshot_age", 10),
-            "collectors.mini_server.max_snapshot_age",
-            maximum=3600,
-        ),
+        devices=tuple(devices),
+        poll_interval=_positive_int(raw.get("poll_interval", 2), "collectors.machines.poll_interval", maximum=300),
+        request_timeout=_positive_int(raw.get("request_timeout", 2), "collectors.machines.request_timeout", maximum=60),
+        offline_after_failures=_positive_int(raw.get("offline_after_failures", 3), "collectors.machines.offline_after_failures", maximum=60),
+        max_snapshot_age=_positive_int(raw.get("max_snapshot_age", 10), "collectors.machines.max_snapshot_age", maximum=3600),
     )
-
 
 def printer_config_from_mapping(raw: object) -> PrinterConfig:
     if raw is None:
@@ -564,6 +632,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
         admin=_admin_config(raw.get("admin")),
         weather=weather_config_from_mapping(collectors_raw.get("weather")),
         news=news_config_from_mapping(collectors_raw.get("news")),
-        mini_server=mini_server_config_from_mapping(collectors_raw.get("mini_server")),
+        machines=machines_config_from_mapping(collectors_raw.get("machines"), legacy_mini_server=collectors_raw.get("mini_server")),
         printer=printer_config_from_mapping(collectors_raw.get("printer")),
     )

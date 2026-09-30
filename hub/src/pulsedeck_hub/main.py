@@ -10,7 +10,7 @@ import threading
 
 from . import __version__
 from .admin.app import AdminServer
-from .collectors.mini_server import MiniServerCollector
+from .collectors.machines import MachinesCollector
 from .collectors.news import NewsCollector
 from .collectors.printer import PrinterCollector
 from .collectors.weather import WeatherCollector
@@ -45,7 +45,7 @@ class HubRuntime:
         self.mqtt_client = HubMQTTClient(config.mqtt)
         self.weather_collector: WeatherCollector | None = None
         self.news_collector: NewsCollector | None = None
-        self.mini_server_collector: MiniServerCollector | None = None
+        self.machines_collector: MachinesCollector | None = None
         self.printer_collector: PrinterCollector | None = None
         self.admin_server: AdminServer | None = None
         self.update_checker = UpdateChecker(__version__)
@@ -67,12 +67,12 @@ class HubRuntime:
         else:
             self.news_collector = None
 
-    def _start_mini_server(self) -> None:
-        if self.config.mini_server.enabled:
-            self.mini_server_collector = MiniServerCollector(self.config.mini_server, self.mqtt_client)
-            self.mini_server_collector.start()
+    def _start_machines(self) -> None:
+        if self.config.machines.enabled:
+            self.machines_collector = MachinesCollector(self.config.machines, self.mqtt_client)
+            self.machines_collector.start()
         else:
-            self.mini_server_collector = None
+            self.machines_collector = None
 
     def _start_printer(self) -> None:
         if self.config.printer.enabled:
@@ -85,22 +85,22 @@ class HubRuntime:
         self.mqtt_client.start()
         self._start_weather()
         self._start_news()
-        self._start_mini_server()
+        self._start_machines()
         self._start_printer()
         if self.config.admin.enabled:
             self.admin_server = AdminServer(self)
             self.admin_server.start()
         self.update_checker.trigger()
 
-    def _reload_collectors(self, *, weather: bool = False, news: bool = False, printer: bool = False) -> None:
+    def _reload_collectors(self, *, weather: bool = False, news: bool = False, printer: bool = False, machines: bool = False) -> None:
         with self._config_lock:
             new_config = load_config(self.config_path)
             if new_config.mqtt != self.config.mqtt:
                 raise ValueError("MQTT changes require a service restart")
             if new_config.admin != self.config.admin:
                 raise ValueError("Admin listener changes require a service restart")
-            if new_config.mini_server != self.config.mini_server:
-                raise ValueError("Mini-server changes require a service restart")
+            if not machines and new_config.machines != self.config.machines:
+                raise ValueError("Machine changes require reload_machines")
             if not printer and new_config.printer != self.config.printer:
                 raise ValueError("Printer changes require reload_printer")
             if not weather and new_config.weather != self.config.weather:
@@ -114,14 +114,24 @@ class HubRuntime:
                 self.news_collector.stop()
             if printer and self.printer_collector is not None:
                 self.printer_collector.stop()
+            if machines and self.machines_collector is not None:
+                self.machines_collector.stop()
 
+            old_machine_ids = {device.id for device in self.config.machines.devices}
             self.config = new_config
+            if machines:
+                new_machine_ids = {device.id for device in new_config.machines.devices}
+                for removed_id in sorted(old_machine_ids - new_machine_ids):
+                    self.mqtt_client.clear_retained(f"machine/{removed_id}/availability")
+                    self.mqtt_client.clear_retained(f"machine/{removed_id}/dashboard")
             if weather:
                 self._start_weather()
             if news:
                 self._start_news()
             if printer:
                 self._start_printer()
+            if machines:
+                self._start_machines()
 
     def reload_weather(self) -> None:
         """Reload Weather configuration without restarting the hub."""
@@ -135,13 +145,17 @@ class HubRuntime:
         """Reload Printer configuration without restarting the hub."""
         self._reload_collectors(printer=True)
 
+    def reload_machines(self) -> None:
+        """Reload monitored-machine configuration without restarting the hub."""
+        self._reload_collectors(machines=True)
+
     def stop(self) -> None:
         if self.admin_server is not None:
             self.admin_server.stop()
         if self.printer_collector is not None:
             self.printer_collector.stop()
-        if self.mini_server_collector is not None:
-            self.mini_server_collector.stop()
+        if self.machines_collector is not None:
+            self.machines_collector.stop()
         if self.news_collector is not None:
             self.news_collector.stop()
         if self.weather_collector is not None:

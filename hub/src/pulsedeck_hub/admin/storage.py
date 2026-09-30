@@ -8,12 +8,14 @@ from pathlib import Path
 import re
 import tempfile
 
-from ..config import NewsConfig, PrinterConfig, WeatherConfig
+from ..config import MachinesConfig, NewsConfig, PrinterConfig, WeatherConfig
 
 
 _WEATHER_SECTION = re.compile(r"(?ms)^\[collectors\.weather\]\n.*?(?=^\[|\Z)")
 _NEWS_SECTION = re.compile(r"(?ms)^\[collectors\.news\]\n.*?(?=^\[|\Z)")
 _PRINTER_SECTION = re.compile(r"(?ms)^\[collectors\.printer\]\n.*?(?=^\[(?!\[collectors\.printer\.devices\]\])|\Z)")
+_MACHINES_SECTION = re.compile(r"(?ms)^\[collectors\.machines\]\n.*?(?=^\[(?!\[collectors\.machines\.devices\]\])|\Z)")
+_LEGACY_MINI_SERVER_SECTION = re.compile(r"(?ms)^\[collectors\.mini_server\]\n.*?(?=^\[|\Z)")
 
 
 def _atomic_write(path: Path, content: str, *, mode: int) -> None:
@@ -96,6 +98,30 @@ def render_news_section(config: NewsConfig) -> str:
     ) + "\n"
 
 
+
+def render_machines_section(config: MachinesConfig) -> str:
+    lines = [
+        "[collectors.machines]",
+        f"enabled = {'true' if config.enabled else 'false'}",
+        f"poll_interval = {config.poll_interval}",
+        f"request_timeout = {config.request_timeout}",
+        f"offline_after_failures = {config.offline_after_failures}",
+        f"max_snapshot_age = {config.max_snapshot_age}",
+    ]
+    for device in config.devices:
+        lines.extend(
+            [
+                "",
+                "[[collectors.machines.devices]]",
+                f"id = {json.dumps(device.id)}",
+                f"name = {json.dumps(device.name, ensure_ascii=False)}",
+                f"host = {json.dumps(device.host)}",
+                f"enabled = {'true' if device.enabled else 'false'}",
+                f"port = {device.port}",
+            ]
+        )
+    return "\n".join(lines) + "\n"
+
 def render_printer_section(config: PrinterConfig) -> str:
     lines = [
         "[collectors.printer]",
@@ -133,6 +159,14 @@ def update_news_config(path: Path, config: NewsConfig) -> None:
 
 def update_printer_config(path: Path, config: PrinterConfig) -> None:
     _replace_section(path, _PRINTER_SECTION, render_printer_section(config))
+
+
+def update_machines_config(path: Path, config: MachinesConfig) -> None:
+    _replace_section(path, _MACHINES_SECTION, render_machines_section(config))
+    text = path.read_text(encoding="utf-8")
+    cleaned = _LEGACY_MINI_SERVER_SECTION.sub("", text).rstrip() + "\n"
+    if cleaned != text:
+        _atomic_write(path, cleaned, mode=0o660)
 
 
 def update_secret(path: Path, value: str) -> None:

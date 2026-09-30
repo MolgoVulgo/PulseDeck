@@ -78,6 +78,14 @@ pulsedeck/v1/weather/daily
 
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
+
+pulsedeck/v1/machine/<id>/availability
+pulsedeck/v1/machine/<id>/dashboard
+
+pulsedeck/v1/printer/<id>/availability
+pulsedeck/v1/printer/<id>/status
+pulsedeck/v1/printer/<id>/job
+pulsedeck/v1/printer/<id>/thumbnail
 ```
 
 ## PulseDeck Agent V1
@@ -105,7 +113,7 @@ Métriques V1 :
 - NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
 - GPU lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible.
 
-Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. La configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch/pacman passe par `makepkg` via un installateur propre et conscient du canal qui épingle la révision Git distante, ignore les changements du checkout local, authentifie sudo une seule fois et installe le paquet produit sans interaction via pacman, l’installateur source standalone reste réservé aux systèmes Linux non-Arch et refuse Arch/pacman, et la mise à jour normale utilise `pulsedeck-agent update` sur le canal installé. À partir de `patch_0021`, Agent → Pi V1 utilise HTTP en lecture seule (`GET /v1/snapshot`, port `8765` par défaut) avec bind Agent configurable et cible host/port configurable côté Pi ; les IP des machines supervisées ne sont pas codées en dur.
+Le même code agent est utilisé sur toutes les machines supervisées. L’activation GPU dépend de la configuration. La configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch/pacman passe par `makepkg` via un installateur propre et conscient du canal qui épingle la révision Git distante, ignore les changements du checkout local, authentifie sudo une seule fois et installe le paquet produit sans interaction via pacman, l’installateur source standalone reste réservé aux systèmes Linux non-Arch et refuse Arch/pacman, et la mise à jour normale utilise `pulsedeck-agent update` sur le canal installé. À partir de `patch_0021`, Agent → Pi V1 utilise HTTP en lecture seule (`GET /v1/snapshot`, port `8765` par défaut) avec bind Agent configurable. À partir de `patch_0022`, le Pi gère une flotte configurable sous `[collectors.machines]` / `[[collectors.machines.devices]]` ; chaque machine possède son ID, son libellé, son host/IP, son port et son état activé, puis publie en retained QoS 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. Les IP des machines supervisées ne sont jamais codées en dur.
 
 Voir [`agent/README.fr.md`](agent/README.fr.md) et [`agent/docs/fr/INSTALL.md`](agent/docs/fr/INSTALL.md).
 
@@ -152,10 +160,12 @@ Admin fournit actuellement :
 - état Hub / MQTT / système ;
 - configuration Weather, test API et hot reload ;
 - sélection du fournisseur News (NewsAPI / GNews), filtres adaptés, test API et hot reload ;
-- catalogue Services commun aux futurs collectors ;
+- gestion de la flotte Machines : ajout/modification/test/activation-désactivation/retrait des PC et serveurs supervisés, avec hot reload ;
+- gestion multi-équipements Printer et état runtime ;
+- catalogue Services commun aux collectors implémentés et futurs ;
 - gestion du mot de passe administrateur local.
 
-Les secrets restent masqués après stockage. Les changements Weather et News sont testés avant activation et appliqués transactionnellement.
+Les secrets restent masqués après stockage. Les changements Weather et News sont testés avant activation et appliqués transactionnellement. Les changements de flotte Machines sont validés, écrits atomiquement puis rechargés à chaud ; chaque cible Agent peut être testée avant d’activer sa supervision continue.
 
 ## Installation Raspberry Pi
 
@@ -230,9 +240,8 @@ Socle déjà réalisé :
 
 Prochaines intégrations prévues :
 
-- déployer et valider de bout en bout le chemin HTTP Agent du mini-serveur, puis réutiliser le même transport pour le PC gamer ;
-- étendre le contrat MQTT machine normalisé au profil PC gamer/GPU ;
-- Printer ;
+- déployer et valider de bout en bout le chemin HTTP multi-machines sur le mini-serveur puis le PC gamer ;
+- valider les topics MQTT dynamiques et la télémétrie GPU sur le matériel réel ;
 - écrans applicatifs ESP32, home dashboard, graphes et animations.
 
 ## Documentation

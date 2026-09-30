@@ -41,16 +41,13 @@ pulsedeck/v1/weather/daily
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
 
-pulsedeck/v1/pc/gamer/availability
-pulsedeck/v1/pc/gamer/dashboard
+pulsedeck/v1/machine/<id>/availability
+pulsedeck/v1/machine/<id>/dashboard
 
-pulsedeck/v1/server/mini/availability
-pulsedeck/v1/server/mini/dashboard
-
-pulsedeck/v1/printer/availability
-pulsedeck/v1/printer/status
-pulsedeck/v1/printer/job
-pulsedeck/v1/printer/thumbnail
+pulsedeck/v1/printer/<id>/availability
+pulsedeck/v1/printer/<id>/status
+pulsedeck/v1/printer/<id>/job
+pulsedeck/v1/printer/<id>/thumbnail
 ```
 
 ## Availability
@@ -61,4 +58,4 @@ The ESP32 derives `fresh`, `stale` and `offline` locally from payload timestamps
 
 ## Snapshot behavior
 
-Weather and News snapshot topics are retained with QoS 1. A provider failure does not erase the last good retained payload; only the source availability changes to `offline` until recovery.
+Weather, News, machine dashboards and printer state snapshots are retained with QoS 1. For machines, `<id>` is the stable logical ID configured in PulseDeck Admin; the Pi polls the corresponding PulseDeck Agent over HTTP and publishes normalized state under that prefix. A source failure does not erase the last good retained dashboard/snapshot; availability changes to `offline` after the source-specific failure threshold.
