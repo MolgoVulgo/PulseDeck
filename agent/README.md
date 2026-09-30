@@ -4,7 +4,7 @@
 
 PulseDeck Agent is the machine-local metrics component for monitored PCs and servers. It collects local telemetry and is designed to send it to the Raspberry Pi, which remains the central PulseDeck hub, normalizer and display-oriented MQTT publisher.
 
-`agent-004` keeps the installation channel contract (`main` or `dev`) and makes the Arch install/update path clean-build by default: local checkout changes cannot affect the package, the selected remote revision is pinned, and post-install health validation is automatic. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
+`agent-004-1` keeps the clean-build channel contract from `agent-004` and hardens the Arch user experience: sudo is authenticated once, the package is built without makepkg-driven installation, pacman installation is non-interactive, and post-install health validation remains automatic. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
 
 ## V1 modules
 
@@ -92,7 +92,7 @@ It automatically uses the current Git branch when it is `main` or `dev`; otherwi
 ./agent/packaging/arch/install.sh dev
 ```
 
-A remote one-command bootstrap is documented in `docs/INSTALL.md`. The installer resolves a concrete Git revision, pins the package build to that revision, installs prerequisites when necessary, restarts the service, and runs `pulsedeck-agent doctor`. The selected channel is stored with the installed Agent. `pulsedeck-agent update` continues on that same channel and uses the same clean-build path.
+A remote one-command bootstrap is documented in `docs/INSTALL.md`. The installer resolves a concrete Git revision, pins the package build to that revision, authenticates sudo once, builds as the normal user, installs the resulting package through non-interactive pacman, restarts the service, and runs `pulsedeck-agent doctor`. The selected channel is stored with the installed Agent. `pulsedeck-agent update` continues on that same channel and uses the same clean-build path.
 
 `install.sh` for standalone installations explicitly refuses Arch/pacman systems so package-managed and standalone files cannot be mixed.
 

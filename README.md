@@ -105,7 +105,7 @@ V1 metrics:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available.
 
-The same agent codebase is used on both machines. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision and ignores local checkout changes; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. The exact Agent-to-Pi transport and wire payload schema remain unresolved.
+The same agent codebase is used on both machines. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision, ignores local checkout changes, authenticates sudo once and installs the built package non-interactively with pacman; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. The exact Agent-to-Pi transport and wire payload schema remain unresolved.
 
 See [`agent/README.md`](agent/README.md) and [`agent/docs/INSTALL.md`](agent/docs/INSTALL.md).
 

@@ -18,7 +18,7 @@ The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disable
 
 ## Method 1 — Arch Linux / makepkg
 
-Run the installer as a normal user, never as root. It asks for `sudo` once for package/system operations. Missing Arch build prerequisites (`base-devel` and Git) are installed automatically through pacman when needed.
+Run the installer as a normal user, never as root. It authenticates `sudo` once near the start and keeps that authorization alive for the duration of the install. Missing Arch build prerequisites (`base-devel` and Git) are installed automatically when needed. The package itself is built without `makepkg -i`, then installed explicitly with `pacman -U --noconfirm`, so there is no second password request and no pacman confirmation question in the normal path.
 
 ### Stable channel (`main`) — one command
 
@@ -51,7 +51,7 @@ When that local script is on `main` or `dev`, it uses the current branch automat
 
 The local checkout is used only to select the channel. The package is always built from a new temporary clone of the remote repository, so a dirty checkout, an old build directory, or a locally edited `PKGBUILD` cannot contaminate the installation. The installer resolves the remote channel to an exact commit and passes that commit to `PKGBUILD`; the built package and its recorded `source-revision` therefore refer to the same source revision.
 
-The installer then prepares the fixed `pulsedeck-agent` service account/state directory, reloads systemd, enables/restarts `pulsedeck-agent.service`, and runs `pulsedeck-agent doctor`. If the final health check fails, the installer prints the service status, recent journal entries, and installed identity automatically before returning a failure code.
+After a successful build, the installer suppresses only the known harmless `libfakeroot internal error: payload not recognized!` line; if makepkg actually fails, its unfiltered stderr is shown. The installer then prepares the fixed `pulsedeck-agent` service account/state directory, reloads systemd, enables/restarts `pulsedeck-agent.service`, and runs `pulsedeck-agent doctor`. If the final health check fails, the installer prints the service status, recent journal entries, and installed identity automatically before returning a failure code.
 
 The package stores:
 

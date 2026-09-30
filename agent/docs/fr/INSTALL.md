@@ -18,7 +18,7 @@ La configuration par défaut active CPU, MEMORY et NETWORK et laisse GPU désact
 
 ## Méthode 1 — Arch Linux / makepkg
 
-Lancer l’installateur avec un utilisateur normal, jamais en root. Il demande `sudo` une seule fois pour les opérations paquet/système. Les prérequis de build Arch manquants (`base-devel` et Git) sont installés automatiquement via pacman si nécessaire.
+Lancer l’installateur avec un utilisateur normal, jamais en root. Il authentifie `sudo` une seule fois au début et maintient cette autorisation pendant toute l’installation. Les prérequis de build Arch manquants (`base-devel` et Git) sont installés automatiquement si nécessaire. Le paquet est construit sans `makepkg -i`, puis installé explicitement avec `pacman -U --noconfirm` : le chemin normal ne provoque donc ni seconde demande de mot de passe ni question de confirmation pacman.
 
 ### Canal stable (`main`) — une commande
 
@@ -51,7 +51,7 @@ Si ce script local se trouve sur `main` ou `dev`, il utilise automatiquement la 
 
 Le checkout local sert uniquement à sélectionner le canal. Le paquet est toujours construit depuis un nouveau clone temporaire du dépôt distant : un checkout local sale, un ancien répertoire de build ou un `PKGBUILD` modifié localement ne peut donc pas contaminer l’installation. L’installateur résout le canal distant vers un commit précis et transmet ce commit au `PKGBUILD` ; le paquet construit et son `source-revision` enregistré correspondent ainsi à la même révision source.
 
-L’installateur prépare ensuite le compte système fixe `pulsedeck-agent` et son répertoire d’état, recharge systemd, active/redémarre `pulsedeck-agent.service`, puis lance `pulsedeck-agent doctor`. Si le contrôle final échoue, l’installateur affiche automatiquement l’état du service, les dernières entrées du journal et l’identité installée avant de retourner un code d’échec.
+Après un build réussi, l’installateur masque uniquement la ligne bénigne connue `libfakeroot internal error: payload not recognized!` ; si makepkg échoue réellement, sa sortie d’erreur non filtrée est affichée. L’installateur prépare ensuite le compte système fixe `pulsedeck-agent` et son répertoire d’état, recharge systemd, active/redémarre `pulsedeck-agent.service`, puis lance `pulsedeck-agent doctor`. Si le contrôle final échoue, l’installateur affiche automatiquement l’état du service, les dernières entrées du journal et l’identité installée avant de retourner un code d’échec.
 
 Le paquet enregistre :
 

@@ -4,7 +4,7 @@
 
 PulseDeck Agent est le composant de métriques local aux PC et serveurs supervisés. Il collecte la télémétrie de la machine et est destiné à l'envoyer au Raspberry Pi, qui reste le hub PulseDeck central, le normaliseur et le producteur MQTT orienté affichage.
 
-`agent-004` conserve le contrat de canal d'installation (`main` ou `dev`) et rend le chemin Arch installation/mise à jour propre par défaut : les changements du checkout local ne peuvent pas influencer le paquet, la révision distante sélectionnée est épinglée et la validation post-installation est automatique. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
+`agent-004-1` conserve le contrat de build propre de `agent-004` et durcit l’expérience Arch : sudo est authentifié une seule fois, le paquet est construit sans installation pilotée par makepkg, l’installation pacman est non interactive et la validation post-installation reste automatique. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
 
 ## Modules V1
 
@@ -92,7 +92,7 @@ Elle utilise automatiquement la branche Git courante lorsqu’elle vaut `main` o
 ./agent/packaging/arch/install.sh dev
 ```
 
-Un bootstrap distant en une commande est documenté dans `docs/fr/INSTALL.md`. L’installateur résout une révision Git précise, épingle le build du paquet sur cette révision, installe les prérequis si nécessaire, redémarre le service puis lance `pulsedeck-agent doctor`. Le canal sélectionné est enregistré avec l’Agent installé. `pulsedeck-agent update` reste sur ce même canal et réutilise le même chemin de build propre.
+Un bootstrap distant en une commande est documenté dans `docs/fr/INSTALL.md`. L’installateur résout une révision Git précise, épingle le build du paquet sur cette révision, authentifie sudo une seule fois, construit avec l’utilisateur normal, installe le paquet produit via pacman non interactif, redémarre le service puis lance `pulsedeck-agent doctor`. Le canal sélectionné est enregistré avec l’Agent installé. `pulsedeck-agent update` reste sur ce même canal et réutilise le même chemin de build propre.
 
 L'installateur standalone refuse explicitement Arch/pacman afin d'éviter de mélanger fichiers gérés par pacman et installation standalone.
 

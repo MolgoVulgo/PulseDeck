@@ -29,8 +29,26 @@ class ServiceContractTests(unittest.TestCase):
         script = (AGENT_ROOT / "packaging" / "arch" / "install.sh").read_text(encoding="utf-8")
         self.assertIn('git clone --quiet --depth 1 --branch "$REF"', script)
         self.assertIn('TMP="$(mktemp -d)"', script)
-        self.assertIn('PULSEDECK_COMMIT="$REVISION" makepkg -Csi --noconfirm', script)
+        self.assertIn('makepkg -Cs --noconfirm', script)
         self.assertNotIn('cd "$SCRIPT_DIR"', script)
+
+
+    def test_arch_installer_uses_single_noninteractive_sudo_session(self) -> None:
+        script = (AGENT_ROOT / "packaging" / "arch" / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("sudo -v", script)
+        self.assertIn("sudo -n true", script)
+        self.assertIn('sudo -n "$@"', script)
+        self.assertIn("pacman -U --noconfirm", script)
+        self.assertIn('PACMAN="$PACMAN_WRAPPER"', script)
+        self.assertIn('exec sudo -n "$PACMAN_BIN" "\\$@"', script)
+        self.assertNotIn("makepkg -Csi", script)
+        self.assertNotIn("makepkg -Csi --noconfirm", script)
+
+    def test_arch_installer_filters_only_known_benign_fakeroot_line_on_success(self) -> None:
+        script = (AGENT_ROOT / "packaging" / "arch" / "install.sh").read_text(encoding="utf-8")
+        self.assertIn("libfakeroot internal error: payload not recognized!", script)
+        self.assertIn('if [[ $MAKEPKG_RC -ne 0 ]]', script)
+        self.assertIn('cat "$MAKEPKG_STDERR" >&2', script)
 
     def test_arch_pkgbuild_can_pin_exact_source_commit(self) -> None:
         pkgbuild = (AGENT_ROOT / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")

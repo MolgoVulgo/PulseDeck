@@ -3,6 +3,8 @@ set -euo pipefail
 
 REPO="https://github.com/MolgoVulgo/PulseDeck.git"
 SERVICE="pulsedeck-agent.service"
+TMP=""
+SUDO_KEEPALIVE_PID=""
 
 usage() {
     cat <<'USAGE'
@@ -19,11 +21,26 @@ fail() {
     exit 2
 }
 
+cleanup() {
+    if [[ -n "$SUDO_KEEPALIVE_PID" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" >/dev/null 2>&1 || true
+        wait "$SUDO_KEEPALIVE_PID" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$TMP" ]]; then
+        rm -rf "$TMP"
+    fi
+}
+trap cleanup EXIT
+
+sudo_run() {
+    sudo -n "$@" || fail "sudo authorization is no longer available; rerun the installer"
+}
+
 show_diagnostics() {
     printf '\n--- PulseDeck Agent service status ---\n' >&2
-    sudo systemctl status "$SERVICE" --no-pager >&2 2>&1 || true
+    sudo -n systemctl status "$SERVICE" --no-pager >&2 2>&1 || true
     printf '\n--- PulseDeck Agent recent journal ---\n' >&2
-    sudo journalctl -u "$SERVICE" -n 40 --no-pager >&2 2>&1 || true
+    sudo -n journalctl -u "$SERVICE" -n 40 --no-pager >&2 2>&1 || true
     printf '\n--- PulseDeck Agent installed identity ---\n' >&2
     pulsedeck-agent version >&2 2>&1 || true
 }
@@ -63,30 +80,33 @@ if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
     fail "run this installer as a regular user; it uses sudo only for system changes"
 fi
 
-for cmd in sudo pacman systemctl mktemp; do
+for cmd in sudo pacman systemctl mktemp sed find; do
     command -v "$cmd" >/dev/null 2>&1 || fail "missing required command: $cmd"
 done
 
-# Ask for sudo once, near the beginning, so makepkg/pacman and service setup do
-# not prompt unpredictably later in the installation.
-sudo -v
+# Authenticate once. Every later privileged operation uses sudo -n; a small
+# keepalive refreshes the same credential while makepkg is running.
+sudo -v || fail "sudo authentication failed"
+(
+    while sleep 30; do
+        sudo -n true >/dev/null 2>&1 || exit 0
+    done
+) &
+SUDO_KEEPALIVE_PID=$!
 
 # The installer is intentionally allowed to satisfy its own Arch build tooling.
 # This is an explicit user-invoked installation path, not an automatic validation.
 if ! command -v makepkg >/dev/null 2>&1; then
-    sudo pacman -S --needed --noconfirm base-devel
+    sudo_run pacman -S --needed --noconfirm base-devel
 fi
 if ! command -v git >/dev/null 2>&1; then
-    sudo pacman -S --needed --noconfirm git
+    sudo_run pacman -S --needed --noconfirm git
 fi
 
 command -v makepkg >/dev/null 2>&1 || fail "makepkg is unavailable after installing base-devel"
 command -v git >/dev/null 2>&1 || fail "git is unavailable after installation"
 
 TMP="$(mktemp -d)"
-cleanup() { rm -rf "$TMP"; }
-trap cleanup EXIT
-
 printf 'PulseDeck Agent channel : %s\n' "$REF"
 printf 'Fetching clean source  : %s\n' "$REPO"
 
@@ -99,19 +119,56 @@ BUILD_DIR="$TMP/PulseDeck/agent/packaging/arch"
 [[ -f "$BUILD_DIR/PKGBUILD" ]] || fail "downloaded source does not contain the Arch PKGBUILD"
 
 printf 'Source revision       : %s\n' "$REVISION"
-printf 'Building clean package...\n'
 cd "$BUILD_DIR"
-PULSEDECK_REF="$REF" PULSEDECK_COMMIT="$REVISION" makepkg -Csi --noconfirm
+
+# Let makepkg resolve package dependencies, but force its pacman calls through
+# the already-authenticated non-interactive sudo session. Package installation
+# itself is deliberately kept outside makepkg.
+PACMAN_BIN="$(command -v pacman)"
+PACMAN_WRAPPER="$TMP/pacman-sudo"
+cat > "$PACMAN_WRAPPER" <<EOF
+#!/usr/bin/env bash
+exec sudo -n "$PACMAN_BIN" "\$@"
+EOF
+chmod 0755 "$PACMAN_WRAPPER"
+
+printf 'Building clean package...\n'
+MAKEPKG_STDERR="$TMP/makepkg.stderr"
+set +e
+PACMAN="$PACMAN_WRAPPER" PULSEDECK_REF="$REF" PULSEDECK_COMMIT="$REVISION" \
+    makepkg -Cs --noconfirm 2>"$MAKEPKG_STDERR"
+MAKEPKG_RC=$?
+set -e
+
+if [[ $MAKEPKG_RC -ne 0 ]]; then
+    [[ ! -s "$MAKEPKG_STDERR" ]] || cat "$MAKEPKG_STDERR" >&2
+    fail "makepkg failed with exit code $MAKEPKG_RC"
+fi
+
+# Current fakeroot versions can emit this exact harmless line after a successful
+# package build. Hide only that line on success; all other stderr remains visible.
+if [[ -s "$MAKEPKG_STDERR" ]]; then
+    sed '/^libfakeroot internal error: payload not recognized!$/d' "$MAKEPKG_STDERR" >&2
+fi
+
+mapfile -t built_packages < <(
+    find "$BUILD_DIR" -maxdepth 1 -type f -name 'pulsedeck-agent-*.pkg.tar.*' ! -name '*.sig' -print
+)
+[[ ${#built_packages[@]} -eq 1 ]] \
+    || fail "expected exactly one built pulsedeck-agent package, found ${#built_packages[@]}"
+
+printf 'Installing package...\n'
+sudo_run pacman -U --noconfirm "${built_packages[0]}"
 
 [[ -x /usr/libexec/pulsedeck-agent/prepare-state.sh ]] \
     || fail "installed package is incomplete: prepare-state.sh is missing"
 [[ -r /usr/lib/sysusers.d/pulsedeck-agent.conf ]] \
     || fail "installed package is incomplete: sysusers definition is missing"
 
-sudo /usr/libexec/pulsedeck-agent/prepare-state.sh
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE" >/dev/null
-sudo systemctl restart "$SERVICE"
+sudo_run /usr/libexec/pulsedeck-agent/prepare-state.sh
+sudo_run systemctl daemon-reload
+sudo_run systemctl enable "$SERVICE" >/dev/null
+sudo_run systemctl restart "$SERVICE"
 
 if ! pulsedeck-agent doctor; then
     show_diagnostics
