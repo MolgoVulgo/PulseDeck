@@ -90,3 +90,23 @@ def test_gnews_configuration_loads_with_separate_secret(tmp_path: Path) -> None:
     assert cfg.news.mode == "search"
     assert cfg.news.api_key_file.name == "gnews_api_key"
     assert cfg.news.nullable == "description,image"
+
+
+def test_mini_server_target_loads_without_defining_transport(tmp_path: Path) -> None:
+    cfg = load_config(
+        _write(
+            tmp_path,
+            """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = false\nhost = \"192.168.0.1\"\n""",
+        )
+    )
+    assert cfg.mini_server.enabled is False
+    assert cfg.mini_server.host == "192.168.0.1"
+
+
+def test_enabled_mini_server_requires_host(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = true\n""",
+    )
+    with pytest.raises(ValueError, match="mini-server collector requires host"):
+        load_config(path)

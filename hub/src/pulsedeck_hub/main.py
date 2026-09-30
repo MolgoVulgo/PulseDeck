@@ -10,6 +10,7 @@ import threading
 
 from . import __version__
 from .admin.app import AdminServer
+from .collectors.mini_server import MiniServerCollector
 from .collectors.news import NewsCollector
 from .collectors.printer import PrinterCollector
 from .collectors.weather import WeatherCollector
@@ -44,6 +45,7 @@ class HubRuntime:
         self.mqtt_client = HubMQTTClient(config.mqtt)
         self.weather_collector: WeatherCollector | None = None
         self.news_collector: NewsCollector | None = None
+        self.mini_server_collector: MiniServerCollector | None = None
         self.printer_collector: PrinterCollector | None = None
         self.admin_server: AdminServer | None = None
         self.update_checker = UpdateChecker(__version__)
@@ -65,6 +67,13 @@ class HubRuntime:
         else:
             self.news_collector = None
 
+    def _start_mini_server(self) -> None:
+        if self.config.mini_server.enabled:
+            self.mini_server_collector = MiniServerCollector(self.config.mini_server)
+            self.mini_server_collector.start()
+        else:
+            self.mini_server_collector = None
+
     def _start_printer(self) -> None:
         if self.config.printer.enabled:
             self.printer_collector = PrinterCollector(self.config.printer, self.mqtt_client)
@@ -76,6 +85,7 @@ class HubRuntime:
         self.mqtt_client.start()
         self._start_weather()
         self._start_news()
+        self._start_mini_server()
         self._start_printer()
         if self.config.admin.enabled:
             self.admin_server = AdminServer(self)
@@ -89,6 +99,8 @@ class HubRuntime:
                 raise ValueError("MQTT changes require a service restart")
             if new_config.admin != self.config.admin:
                 raise ValueError("Admin listener changes require a service restart")
+            if new_config.mini_server != self.config.mini_server:
+                raise ValueError("Mini-server changes require a service restart")
             if not printer and new_config.printer != self.config.printer:
                 raise ValueError("Printer changes require reload_printer")
             if not weather and new_config.weather != self.config.weather:
@@ -128,6 +140,8 @@ class HubRuntime:
             self.admin_server.stop()
         if self.printer_collector is not None:
             self.printer_collector.stop()
+        if self.mini_server_collector is not None:
+            self.mini_server_collector.stop()
         if self.news_collector is not None:
             self.news_collector.stop()
         if self.weather_collector is not None:

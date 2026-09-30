@@ -101,6 +101,12 @@ class NewsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MiniServerConfig:
+    enabled: bool = False
+    host: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class PrinterDeviceConfig:
     id: str
     driver: str
@@ -130,6 +136,7 @@ class HubConfig:
     weather: WeatherConfig
     news: NewsConfig
     printer: PrinterConfig
+    mini_server: MiniServerConfig = MiniServerConfig()
 
 
 def _positive_int(value: object, name: str, *, minimum: int = 1, maximum: int | None = None) -> int:
@@ -348,6 +355,26 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
     )
 
 
+def mini_server_config_from_mapping(raw: object) -> MiniServerConfig:
+    """Parse the Pi-side mini-server target without defining Agent transport."""
+    if raw is None:
+        return MiniServerConfig()
+    if not isinstance(raw, dict):
+        raise ValueError("[collectors.mini_server] must be a table")
+
+    enabled = _bool(raw.get("enabled", False), "collectors.mini_server.enabled")
+    host = raw.get("host", "")
+    if not isinstance(host, str):
+        raise ValueError("collectors.mini_server.host must be a string")
+    host = host.strip()
+    if enabled and not host:
+        raise ValueError("enabled mini-server collector requires host")
+
+    # Transport, authentication, cadence and wire payload are deliberately not
+    # accepted here while the Agent -> Pi contract remains unresolved.
+    return MiniServerConfig(enabled=enabled, host=host)
+
+
 def printer_config_from_mapping(raw: object) -> PrinterConfig:
     if raw is None:
         return PrinterConfig()
@@ -516,5 +543,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> HubConfig:
         admin=_admin_config(raw.get("admin")),
         weather=weather_config_from_mapping(collectors_raw.get("weather")),
         news=news_config_from_mapping(collectors_raw.get("news")),
+        mini_server=mini_server_config_from_mapping(collectors_raw.get("mini_server")),
         printer=printer_config_from_mapping(collectors_raw.get("printer")),
     )

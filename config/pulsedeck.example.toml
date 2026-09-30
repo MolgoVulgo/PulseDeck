@@ -58,7 +58,10 @@ api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
 enabled = false
 
 [collectors.mini_server]
+# First machine selected for PulseDeck Agent monitoring.
+# Keep disabled until the Agent -> Pi transport contract is implemented.
 enabled = false
+host = "192.168.0.1"
 
 [collectors.printer]
 enabled = false
