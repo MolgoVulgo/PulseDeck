@@ -23,6 +23,8 @@ architecture:
     - "scripts/pulsedeck.sh"
     - "scripts/setup_pi.sh"
     - "scripts/deploy_hub.sh"
+    - "agent/src/pulsedeck_agent/__main__.py"
+    - "agent/scripts/install.sh"
   modules:
     - "Raspberry Pi: central collection orchestration, normalization, aggregation, cache and data publication"
     - "PulseDeck Agent: machine-local CPU, memory and network collection with optional GPU collection; sends machine metrics to the Raspberry Pi"
@@ -31,6 +33,8 @@ architecture:
   documentation_dirs:
     - "docs/pi"
     - "docs/pi/fr"
+    - "agent/docs"
+    - "agent/docs/fr"
 
 zones:
   source:
@@ -132,10 +136,13 @@ knowledge:
     - "Agent V1 MEMORY metrics: used bytes, total bytes and utilization percentage."
     - "Agent V1 NETWORK metrics: configured interface, RX/TX throughput and RX/TX byte counters."
     - "Agent V1 GPU metrics when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available."
+    - "From agent-002, Agent runtime configuration is YAML at /etc/pulsedeck-agent/agent.yml."
+    - "From agent-002, systemd supervises pulsedeck-agent.service; local diagnostic state is written under /var/lib/pulsedeck-agent/."
+    - "From agent-002, supported installation paths are Arch makepkg and a standalone source installer; both use the same agent/ source tree."
+    - "From agent-002, the normal user-facing update command is pulsedeck-agent update."
   unresolved:
     - "Exact Agent-to-Pi transport and protocol."
-    - "Exact PulseDeck Agent payload schema."
-    - "PulseDeck Agent runtime configuration format and deployment/service method."
+    - "Exact PulseDeck Agent wire payload schema."
     - "Exact application payload schemas outside Weather and News."
     - "Exact cache policy."
     - "Collector cadences outside Weather and News."
@@ -161,8 +168,14 @@ contracts:
     - "Optional V1 module: GPU, enabled by configuration."
     - "Mini-server profile: CPU + MEMORY + NETWORK."
     - "PC gamer profile: CPU + MEMORY + NETWORK + GPU."
-    - "NETWORK follows an explicitly configured interface and reports RX/TX throughput plus RX/TX byte counters."
+    - "NETWORK follows the YAML-selected interface; interface=auto resolves the default-route interface when possible, and the collector reports RX/TX throughput plus RX/TX byte counters."
     - "Unavailable optional telemetry such as CPU/GPU power or GPU fan data must remain unavailable rather than being synthesized as zero."
+    - "Agent runtime configuration format is YAML at /etc/pulsedeck-agent/agent.yml; CPU, MEMORY and NETWORK are mandatory and GPU alone has an enabled switch."
+    - "Agent service supervision uses systemd via pulsedeck-agent.service."
+    - "Arch-compatible installation uses agent/packaging/arch/PKGBUILD with makepkg; makepkg must run as a regular user."
+    - "Standalone installation uses agent/scripts/install.sh and an isolated runtime under /opt/pulsedeck-agent."
+    - "Both installation paths expose the common command pulsedeck-agent and normal updates use pulsedeck-agent update."
+    - "agent-002 local snapshot.json is diagnostic/internal Agent state and does not define the Agent-to-Pi wire payload."
   weather:
     - "V1 provider: OpenWeather One Call API 4.0."
     - "Collector uses current, timeline/1h and timeline/1day; 1min and 15min remain outside patch_0007."
@@ -204,12 +217,18 @@ contracts:
     - "PROJECT_DESCRIPTION.md is the canonical project description."
     - "English documentation is authoritative; French mirrors are mandatory."
     - "Primary English files: README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md, agent/README.md and docs/pi/*.md."
-    - "French mirrors: README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md, agent/README.fr.md and docs/pi/fr/*.md."
+    - "French mirrors: README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md, agent/README.fr.md, agent/docs/fr/*.md and docs/pi/fr/*.md."
   project_specific:
     - "Do not complicate V1 with MQTT clustering, Kubernetes, a heavy database, many microservices, mandatory cloud services, long-term history or a dynamic ESP32 plugin system without a concrete need."
 
 validation:
   commands:
+    - command: "PYTHONPATH=agent/src python -m unittest discover -s agent/tests -v"
+      scope: "PulseDeck Agent unit tests without installation or network transport"
+      mode: "targeted"
+    - command: "PYTHONPATH=agent/src python -m pulsedeck_agent --config agent/config/pulsedeck-agent.example.yml config validate"
+      scope: "PulseDeck Agent example YAML validation"
+      mode: "targeted"
     - command: "./scripts/pulsedeck.sh --check"
       scope: "complete Raspberry Pi preflight: MQTT foundation then hub runtime"
       mode: "external_or_live"

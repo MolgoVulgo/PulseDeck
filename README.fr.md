@@ -105,9 +105,9 @@ Métriques V1 :
 - NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
 - GPU lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible.
 
-Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. Le transport exact Agent → Pi, le schéma de payload, le format de configuration runtime et la méthode de déploiement restent à définir ; `agent-001` crée uniquement le squelette source et verrouille la frontière fonctionnelle V1.
+Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. À partir de `agent-002`, la configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch compatible passe par `makepkg -si`, un installateur source standard est également fourni et la mise à jour normale utilise `pulsedeck-agent update`. Le transport exact Agent → Pi et le schéma de payload réseau restent non résolus.
 
-Voir [`agent/README.fr.md`](agent/README.fr.md).
+Voir [`agent/README.fr.md`](agent/README.fr.md) et [`agent/docs/fr/INSTALL.md`](agent/docs/fr/INSTALL.md).
 
 ## Weather
 
@@ -186,6 +186,11 @@ L’installateur gère le socle technique. Les clés, filtres et réglages fonct
 ```text
 PulseDeck/
 ├── agent/                  PulseDeck Agent local aux machines
+│   ├── config/
+│   ├── docs/
+│   ├── packaging/arch/
+│   ├── scripts/
+│   ├── systemd/
 │   └── src/pulsedeck_agent/
 ├── config/
 ├── docs/pi/                documentation opérationnelle anglaise
@@ -225,11 +230,13 @@ Socle déjà réalisé :
 
 Prochaines intégrations prévues :
 
-- implémenter PulseDeck Agent d’abord sur le mini-serveur, puis sur le PC gamer ;
+- déployer et valider le premier runtime PulseDeck Agent sur le mini-serveur, puis sur le PC gamer ;
 - connecter les deux agents aux collectors du Raspberry Pi et définir leurs contrats MQTT normalisés ;
 - Printer ;
 - écrans applicatifs ESP32, home dashboard, graphes et animations.
 
 ## Documentation
 
-La documentation principale anglaise se trouve sous [`docs/pi/`](docs/pi/). Les miroirs français sont sous [`docs/pi/fr/`](docs/pi/fr/).
+Documentation Agent : [`agent/README.fr.md`](agent/README.fr.md) et [`agent/docs/fr/INSTALL.md`](agent/docs/fr/INSTALL.md).
+
+La documentation principale anglaise du hub se trouve sous [`docs/pi/`](docs/pi/). Les miroirs français sont sous [`docs/pi/fr/`](docs/pi/fr/).

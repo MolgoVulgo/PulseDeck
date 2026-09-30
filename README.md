@@ -105,9 +105,9 @@ V1 metrics:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available.
 
-The same agent codebase is used on both machines. GPU activation is configuration-driven. The exact Agent-to-Pi transport, payload schema, runtime configuration format and deployment method remain to be defined; `agent-001` creates only the source scaffold and freezes the V1 functional boundary.
+The same agent codebase is used on both machines. GPU activation is configuration-driven. From `agent-002`, runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch-compatible installation is available through `makepkg -si`; a standalone source installer is also available; and normal updates use `pulsedeck-agent update`. The exact Agent-to-Pi transport and wire payload schema remain unresolved.
 
-See [`agent/README.md`](agent/README.md).
+See [`agent/README.md`](agent/README.md) and [`agent/docs/INSTALL.md`](agent/docs/INSTALL.md).
 
 ## Weather
 
@@ -186,6 +186,11 @@ The installer handles the technical foundation. Collector-specific keys, filters
 ```text
 PulseDeck/
 ├── agent/                  machine-local PulseDeck Agent
+│   ├── config/
+│   ├── docs/
+│   ├── packaging/arch/
+│   ├── scripts/
+│   ├── systemd/
 │   └── src/pulsedeck_agent/
 ├── config/
 ├── docs/pi/                English operational docs
@@ -225,7 +230,7 @@ Completed foundation:
 
 Next planned integrations:
 
-- implement PulseDeck Agent first on the mini-server, then on the PC gamer;
+- deploy and validate the first PulseDeck Agent runtime on the mini-server, then on the PC gamer;
 - connect both agents to Raspberry Pi collectors and define their normalized MQTT contracts;
 - Printer;
 - ESP32 application screens, home dashboard, graphs and animations.
@@ -234,6 +239,8 @@ Next planned integrations:
 
 English primary documentation:
 
+- [`agent/README.md`](agent/README.md);
+- [`agent/docs/INSTALL.md`](agent/docs/INSTALL.md);
 - [`docs/pi/`](docs/pi/);
 - [`docs/pi/ADMIN.md`](docs/pi/ADMIN.md);
 - [`docs/pi/WEATHER.md`](docs/pi/WEATHER.md);

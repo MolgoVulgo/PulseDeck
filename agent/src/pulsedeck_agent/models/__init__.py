@@ -1,1 +1,5 @@
-"""Agent model namespace. Exact payload models remain unresolved in agent-001."""
+"""Internal Agent snapshot model. This is not the Agent -> Pi transport schema."""
+
+from .snapshot import AgentIdentity, build_snapshot
+
+__all__ = ["AgentIdentity", "build_snapshot"]

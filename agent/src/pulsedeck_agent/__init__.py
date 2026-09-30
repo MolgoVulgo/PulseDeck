@@ -1,1 +1,3 @@
-"""PulseDeck Agent package scaffold created by agent-001."""
+"""PulseDeck machine-local metrics agent."""
+
+__version__ = "0.1.0"

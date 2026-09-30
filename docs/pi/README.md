@@ -26,7 +26,7 @@ The validated reference host is a Raspberry Pi 3 Model B Plus running Arch Linux
 - Weather — OpenWeather One Call 4.0;
 - News — NewsAPI v2 over HTTPS with `X-Api-Key` authentication.
 
-Planned machine integration uses PulseDeck Agent with CPU + MEMORY + NETWORK on the mini-server and CPU + MEMORY + NETWORK + GPU on the PC gamer. The exact Agent-to-Pi transport remains unresolved. Printer collection is also planned.
+`agent-002` provides the first executable PulseDeck Agent draft: YAML configuration, local CPU + MEMORY + NETWORK collection, optional GPU collection, systemd service, Arch `makepkg` packaging, standalone installation and `pulsedeck-agent update`. Machine integration still requires the Agent-to-Pi transport contract. Printer collection is also planned.
 
 ## Documents
 

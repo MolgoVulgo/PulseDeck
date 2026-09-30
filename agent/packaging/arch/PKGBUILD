@@ -1,0 +1,44 @@
+pkgname=pulsedeck-agent
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc='Machine-local metrics agent for PulseDeck'
+arch=('any')
+url='https://github.com/MolgoVulgo/PulseDeck'
+depends=('python' 'python-psutil' 'python-pyyaml' 'systemd')
+makedepends=('git')
+backup=('etc/pulsedeck-agent/agent.yml')
+source=('PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#branch=main')
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/PulseDeck"
+    printf '0.1.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+package() {
+    cd "$srcdir/PulseDeck"
+
+    install -d "$pkgdir/usr/lib/pulsedeck-agent"
+    cp -a agent/src/pulsedeck_agent "$pkgdir/usr/lib/pulsedeck-agent/"
+
+    install -d "$pkgdir/usr/bin"
+    cat > "$pkgdir/usr/bin/pulsedeck-agent" <<'WRAPPER'
+#!/bin/sh
+export PYTHONPATH="/usr/lib/pulsedeck-agent${PYTHONPATH:+:$PYTHONPATH}"
+exec /usr/bin/python -m pulsedeck_agent "$@"
+WRAPPER
+    chmod 0755 "$pkgdir/usr/bin/pulsedeck-agent"
+
+    install -Dm0644 agent/config/pulsedeck-agent.example.yml \
+        "$pkgdir/etc/pulsedeck-agent/agent.yml"
+    install -Dm0644 agent/systemd/pulsedeck-agent.service \
+        "$pkgdir/usr/lib/systemd/system/pulsedeck-agent.service"
+    install -Dm0755 agent/scripts/update.sh \
+        "$pkgdir/usr/libexec/pulsedeck-agent/update.sh"
+    install -Dm0644 agent/packaging/arch/PKGBUILD \
+        "$pkgdir/usr/share/pulsedeck-agent/arch/PKGBUILD"
+    install -Dm0644 agent/README.md \
+        "$pkgdir/usr/share/doc/pulsedeck-agent/README.md"
+    install -Dm0644 agent/README.fr.md \
+        "$pkgdir/usr/share/doc/pulsedeck-agent/README.fr.md"
+}

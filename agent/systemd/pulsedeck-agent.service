@@ -1,0 +1,27 @@
+[Unit]
+Description=PulseDeck machine metrics agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+Environment=PATH=/usr/bin:/usr/local/bin:/usr/local/sbin
+ExecStart=/usr/bin/env pulsedeck-agent run --config /etc/pulsedeck-agent/agent.yml --state-dir /var/lib/pulsedeck-agent
+Restart=on-failure
+RestartSec=5s
+StateDirectory=pulsedeck-agent
+StateDirectoryMode=0755
+ConfigurationDirectory=pulsedeck-agent
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

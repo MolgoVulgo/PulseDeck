@@ -107,9 +107,9 @@ Locked V1 metric scope:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core clock, memory clock, VRAM used/total and fan telemetry when available.
 
-The network collector must target a configured interface so container/bridge interfaces are not implicitly aggregated. GPU enablement is configuration-driven. The exact Agent-to-Pi transport, exact agent payload schema, runtime configuration format and deployment method remain unresolved in `agent-001`.
+The network collector targets the interface selected by YAML configuration so container/bridge interfaces are not implicitly aggregated; `auto` resolves the default-route interface when possible. GPU enablement is configuration-driven. From `agent-002`, Agent configuration is YAML at `/etc/pulsedeck-agent/agent.yml`, systemd supervises the runtime, Arch-compatible installation uses `makepkg`, the standalone installer uses the same `agent/` sources, and `pulsedeck-agent update` is the common update command. The exact Agent-to-Pi transport and exact wire payload schema remain unresolved.
 
-The first Agent deployment target is the mini-server with CPU + MEMORY + NETWORK. The PC gamer uses the same agent with GPU enabled.
+The first Agent deployment target is the mini-server with CPU + MEMORY + NETWORK. The PC gamer uses the same agent with GPU enabled. `agent-002` maintains a local diagnostic snapshot under `/var/lib/pulsedeck-agent/snapshot.json`; this file is not the future Agent-to-Pi payload contract.
 
 ---
 
@@ -429,7 +429,7 @@ Machine metrics are supplied to the Pi by PulseDeck Agent instances. The same ag
 - mini-server: CPU + MEMORY + NETWORK;
 - PC gamer: CPU + MEMORY + NETWORK + GPU.
 
-The Pi owns the normalized application state and MQTT publication. The Agent-to-Pi transport remains to be defined before implementation.
+The Pi owns the normalized application state and MQTT publication. `agent-002` implements local collection and service/install mechanics only; the Agent-to-Pi transport remains to be defined before network integration.
 
 Dashboard data can include:
 - CPU;
@@ -537,8 +537,8 @@ Move progressively to the Pi:
 
 ### Phase 6 — Machine agents
 
-Implement PulseDeck Agent and integrate machine metrics through the Raspberry Pi:
-- first deployment on the mini-server with CPU + MEMORY + NETWORK;
+Deploy and validate PulseDeck Agent, then integrate machine metrics through the Raspberry Pi:
+- validate `agent-002` local collection, YAML configuration, systemd service and installation/update paths on the mini-server;
 - second deployment on the PC gamer with CPU + MEMORY + NETWORK + GPU;
 - define the Agent-to-Pi transport and payload contract;
 - normalize machine state on the Pi before MQTT publication;
@@ -563,6 +563,7 @@ Add new apps only after the MQTT/UI foundation is stable.
 ## 13. Decisions still required
 
 Define before full implementation:
+- exact Agent-to-Pi transport and wire payload schema;
 - exact payload schemas outside Weather and News;
 - cache policy;
 - collector cadences outside Weather and News;

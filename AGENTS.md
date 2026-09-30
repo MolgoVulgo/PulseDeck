@@ -23,7 +23,10 @@ Ne pas dupliquer ici les détails déjà maintenus dans une documentation canoni
 - Le Pi centralise l'orchestration de la collecte, les accès API/HTTPS/TLS distants, les protocoles propriétaires, la normalisation et la publication MQTT destinée à l'affichage.
 - PulseDeck Agent collecte uniquement les métriques locales de la machine : CPU, MEMORY et NETWORK obligatoires en V1, GPU optionnel par configuration.
 - Profils V1 verrouillés : mini-serveur = CPU + MEMORY + NETWORK ; PC gamer = CPU + MEMORY + NETWORK + GPU.
-- Le transport exact Agent -> Pi reste `unresolved` tant qu'il n'est pas documenté.
+- Configuration Agent V1 : YAML sous `/etc/pulsedeck-agent/agent.yml`; CPU/MEMORY/NETWORK restent obligatoires, seul GPU est activable/désactivable.
+- Service Agent V1 : `pulsedeck-agent.service` sous systemd ; état diagnostique local sous `/var/lib/pulsedeck-agent/`.
+- Installation Agent : `makepkg` via `agent/packaging/arch/PKGBUILD` sur Arch compatible ou `agent/scripts/install.sh` en mode standard ; mise à jour normale via `pulsedeck-agent update`.
+- Le transport exact Agent -> Pi et le payload réseau restent `unresolved` tant qu'ils ne sont pas documentés.
 - L'ESP32 est centré sur Wi-Fi, MQTT, NTP local, cache local, navigation et UI LVGL.
 - Une application ESP32 ne réimplémente pas HTTP, TLS, authentification distante ou protocoles propriétaires.
 - Une nouvelle application doit pouvoir être ajoutée sans modifier les autres.
@@ -63,7 +66,8 @@ Générés :
 - `REPO_INDEX.json` uniquement pour l'index de publication ; hors baseline source.
 
 Runtime / temporaires :
-- `À DÉFINIR` pour l'application. Ne pas inventer de chemins.
+- Hub : conserver les chemins déjà documentés dans `PROJECT_SCHEMA.md`.
+- Agent standalone : `/opt/pulsedeck-agent` pour le venv, `/etc/pulsedeck-agent/agent.yml` pour la configuration et `/var/lib/pulsedeck-agent` pour l'état local.
 - `bootstrap/`, `patch/` et `diagnostics/` sont des zones de transport hors baseline.
 
 Protégés / publication spéciale :
@@ -79,7 +83,17 @@ Protégés / publication spéciale :
 - récupération d'un patch ciblé uniquement vers un emplacement temporaire.
 
 ## Validations
-Aucune installation ou mise à jour automatique de dépendances n'est autorisée.
+Aucune installation ou mise à jour automatique de dépendances n'est autorisée hors exécution volontaire des installateurs PulseDeck.
+
+Après modification sous `agent/`, exécuter au minimum :
+
+```bash
+PYTHONPATH=agent/src python -m unittest discover -s agent/tests -v
+PYTHONPATH=agent/src python -m pulsedeck_agent --config agent/config/pulsedeck-agent.example.yml config validate
+bash -n agent/scripts/install.sh agent/scripts/update.sh agent/scripts/uninstall.sh
+```
+
+Ne pas exécuter automatiquement `makepkg -si`, l'installateur root ou le service systemd pendant une validation de source.
 
 Le payload autonome de `scripts/deploy_hub.sh` est dérivé des sources runtime du dépôt. Après toute modification sous `hub/`, de `config/pulsedeck.example.toml`, des unités `systemd/`, de `scripts/pulsedeck.sh` ou de `scripts/pulsedeck-updater.sh`, contrôler sa cohérence avec :
 

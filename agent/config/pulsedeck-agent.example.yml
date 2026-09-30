@@ -1,0 +1,29 @@
+agent:
+  # "auto" resolves to a stable, lowercase form of the local hostname.
+  id: auto
+  # "auto" resolves to the local hostname as displayed by the OS.
+  name: auto
+
+collectors:
+  # CPU and memory are mandatory in Agent V1.
+  cpu: {}
+  memory: {}
+
+  # NETWORK is mandatory. "auto" selects the default-route interface when possible.
+  network:
+    interface: auto
+
+  # GPU is the only optional V1 module.
+  gpu:
+    enabled: false
+    # Optional PCI BDF, for example "0000:03:00.0".
+    pci_slot: null
+    temperature_labels:
+      - edge
+      - junction
+      - mem
+      - unknown
+
+runtime:
+  # Local collection cadence only. Agent -> Pi transport is not implemented in agent-002.
+  sample_interval_s: 1.0
