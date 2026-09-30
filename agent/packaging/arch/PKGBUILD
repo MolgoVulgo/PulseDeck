@@ -9,12 +9,21 @@ makedepends=('git')
 backup=('etc/pulsedeck-agent/agent.yml')
 
 _pulsedeck_ref="${PULSEDECK_REF:-main}"
+_pulsedeck_commit="${PULSEDECK_COMMIT:-}"
 case "$_pulsedeck_ref" in
     main|dev) ;;
     *) printf 'Unsupported PULSEDECK_REF: %s\n' "$_pulsedeck_ref" >&2; return 1 ;;
 esac
+if [[ -n "$_pulsedeck_commit" && ! "$_pulsedeck_commit" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'Invalid PULSEDECK_COMMIT: %s\n' "$_pulsedeck_commit" >&2
+    return 1
+fi
 
-source=("PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#branch=${_pulsedeck_ref}")
+if [[ -n "$_pulsedeck_commit" ]]; then
+    source=("PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#commit=${_pulsedeck_commit}")
+else
+    source=("PulseDeck::git+https://github.com/MolgoVulgo/PulseDeck.git#branch=${_pulsedeck_ref}")
+fi
 sha256sums=('SKIP')
 
 pkgver() {

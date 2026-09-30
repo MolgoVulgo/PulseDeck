@@ -139,6 +139,7 @@ knowledge:
     - "À partir de agent-002, la configuration runtime Agent est en YAML sous /etc/pulsedeck-agent/agent.yml."
     - "À partir de agent-002, systemd supervise pulsedeck-agent.service ; l’état diagnostique local est écrit sous /var/lib/pulsedeck-agent/."
     - "À partir de agent-002-1, les méthodes d’installation sont mutuellement exclusives : les systèmes Arch/pacman utilisent uniquement makepkg ; l’installateur standalone est réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman ; les deux utilisent les mêmes sources agent/."
+    - "À partir de agent-004, l’installateur Arch construit depuis un checkout temporaire propre du canal distant sélectionné, épingle le build sur le commit Git résolu et ne doit pas dépendre du contenu du working tree local."
     - "À partir de agent-002, la commande normale de mise à jour est pulsedeck-agent update."
   unresolved:
     - "Transport et protocole exacts Agent → Pi."
@@ -172,7 +173,7 @@ contracts:
     - "Les télémétries optionnelles indisponibles, comme la puissance CPU/GPU ou la ventilation GPU, restent indisponibles et ne sont pas synthétisées à zéro."
     - "La configuration runtime Agent est en YAML sous /etc/pulsedeck-agent/agent.yml ; CPU, MEMORY et NETWORK sont obligatoires et seul GPU possède un switch enabled."
     - "La supervision du service Agent utilise systemd via pulsedeck-agent.service."
-    - "L’installation Arch/pacman utilise exclusivement agent/packaging/arch/PKGBUILD avec makepkg ; makepkg doit être exécuté avec un utilisateur normal."
+    - "L’installation Arch/pacman utilise agent/packaging/arch/install.sh comme entrée utilisateur et agent/packaging/arch/PKGBUILD avec makepkg ; makepkg s’exécute avec un utilisateur normal, la source de build provient d’un checkout distant propre et le commit source exact est épinglé avant packaging."
     - "agent/scripts/install.sh est l’installateur standalone réservé aux systèmes Linux non-Arch et doit refuser les hôtes Arch/pacman avant toute modification système."
     - "L’installation standard utilise agent/scripts/install.sh et un runtime isolé sous /opt/pulsedeck-agent."
     - "Les deux méthodes exposent la commande commune pulsedeck-agent et les mises à jour normales utilisent pulsedeck-agent update."

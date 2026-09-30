@@ -139,6 +139,7 @@ knowledge:
     - "From agent-002, Agent runtime configuration is YAML at /etc/pulsedeck-agent/agent.yml."
     - "From agent-002, systemd supervises pulsedeck-agent.service; local diagnostic state is written under /var/lib/pulsedeck-agent/."
     - "From agent-002-1, installation methods are mutually exclusive: Arch/pacman systems use makepkg only; the standalone installer is reserved for non-Arch Linux and refuses Arch/pacman hosts; both use the same agent/ source tree."
+    - "From agent-004, the Arch installer builds from a fresh temporary checkout of the selected remote channel, pins the build to the resolved Git commit, and must not depend on local working-tree contents."
     - "From agent-002, the normal user-facing update command is pulsedeck-agent update."
   unresolved:
     - "Exact Agent-to-Pi transport and protocol."
@@ -172,7 +173,7 @@ contracts:
     - "Unavailable optional telemetry such as CPU/GPU power or GPU fan data must remain unavailable rather than being synthesized as zero."
     - "Agent runtime configuration format is YAML at /etc/pulsedeck-agent/agent.yml; CPU, MEMORY and NETWORK are mandatory and GPU alone has an enabled switch."
     - "Agent service supervision uses systemd via pulsedeck-agent.service."
-    - "Arch/pacman installation uses agent/packaging/arch/PKGBUILD with makepkg exclusively; makepkg must run as a regular user."
+    - "Arch/pacman installation uses agent/packaging/arch/install.sh as the user entry point and agent/packaging/arch/PKGBUILD with makepkg; makepkg runs as a regular user, the build source is a clean remote checkout, and the exact source commit is pinned before packaging."
     - "agent/scripts/install.sh is the standalone installer for non-Arch Linux only and must refuse Arch/pacman hosts before making system changes."
     - "Standalone installation uses agent/scripts/install.sh and an isolated runtime under /opt/pulsedeck-agent."
     - "Both installation paths expose the common command pulsedeck-agent and normal updates use pulsedeck-agent update."

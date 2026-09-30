@@ -26,20 +26,21 @@ if [[ -n "$agent_bin" ]] && command -v pacman >/dev/null 2>&1 && pacman -Qo "$ag
         echo "Arch package updates must run as a regular user because makepkg refuses root." >&2
         exit 2
     fi
-    for cmd in makepkg git sudo; do
+
+    helper="/usr/share/pulsedeck-agent/arch/install.sh"
+    if [[ -x "$helper" ]]; then
+        exec "$helper" "$REF"
+    fi
+
+    # Compatibility fallback for an older/incomplete package: fetch a clean copy
+    # of the selected channel and use its Arch installer. No local checkout is used.
+    for cmd in git mktemp; do
         command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required command: $cmd" >&2; exit 2; }
     done
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
-    git clone --depth 1 --branch "$REF" "$REPO" "$tmp/PulseDeck"
-    cd "$tmp/PulseDeck/agent/packaging/arch"
-    PULSEDECK_REF="$REF" makepkg -Csi
-    sudo /usr/libexec/pulsedeck-agent/prepare-state.sh
-    sudo systemctl daemon-reload
-    sudo systemctl restart pulsedeck-agent.service
-    pulsedeck-agent doctor
-    echo "PulseDeck Agent Arch package update complete (channel: $REF)."
-    exit 0
+    git clone --quiet --depth 1 --branch "$REF" "$REPO" "$tmp/PulseDeck"
+    exec "$tmp/PulseDeck/agent/packaging/arch/install.sh" "$REF"
 fi
 
 installer="/usr/local/libexec/pulsedeck-agent/install.sh"

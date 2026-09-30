@@ -18,32 +18,40 @@ The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disable
 
 ## Method 1 — Arch Linux / makepkg
 
-Prerequisites: a normal non-root build user, `base-devel`/`makepkg`, Git and sudo configured for pacman operations.
+Run the installer as a normal user, never as root. It asks for `sudo` once for package/system operations. Missing Arch build prerequisites (`base-devel` and Git) are installed automatically through pacman when needed.
 
-### Stable channel (`main`)
-
-```bash
-git clone https://github.com/MolgoVulgo/PulseDeck.git
-cd PulseDeck/agent/packaging/arch
-./install.sh
-```
-
-### Development channel (`dev`)
+### Stable channel (`main`) — one command
 
 ```bash
-git clone --branch dev https://github.com/MolgoVulgo/PulseDeck.git
-cd PulseDeck/agent/packaging/arch
-./install.sh
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/main/agent/packaging/arch/install.sh \
+  | bash
 ```
 
-When executed from a checkout whose current branch is `main` or `dev`, `./install.sh` automatically uses that branch. The channel can also be selected explicitly from either checkout:
+### Development channel (`dev`) — one command
 
 ```bash
-./install.sh main
-./install.sh dev
+curl -fsSL \
+  https://raw.githubusercontent.com/MolgoVulgo/PulseDeck/dev/agent/packaging/arch/install.sh \
+  | bash -s -- dev
 ```
 
-The wrapper runs `makepkg -Csi`, prepares the fixed `pulsedeck-agent` system account and state directory, restarts `pulsedeck-agent.service`, then executes `pulsedeck-agent doctor`. Do not run the wrapper or `makepkg` as root.
+From an existing PulseDeck checkout, the equivalent command is simply:
+
+```bash
+./agent/packaging/arch/install.sh
+```
+
+When that local script is on `main` or `dev`, it uses the current branch automatically. You may also select the channel explicitly:
+
+```bash
+./agent/packaging/arch/install.sh main
+./agent/packaging/arch/install.sh dev
+```
+
+The local checkout is used only to select the channel. The package is always built from a new temporary clone of the remote repository, so a dirty checkout, an old build directory, or a locally edited `PKGBUILD` cannot contaminate the installation. The installer resolves the remote channel to an exact commit and passes that commit to `PKGBUILD`; the built package and its recorded `source-revision` therefore refer to the same source revision.
+
+The installer then prepares the fixed `pulsedeck-agent` service account/state directory, reloads systemd, enables/restarts `pulsedeck-agent.service`, and runs `pulsedeck-agent doctor`. If the final health check fails, the installer prints the service status, recent journal entries, and installed identity automatically before returning a failure code.
 
 The package stores:
 
@@ -59,22 +67,13 @@ Check the installed identity at any time:
 pulsedeck-agent version
 ```
 
-Example:
-
-```text
-PulseDeck Agent 0.1.0
-install: arch-package
-channel: dev
-revision: 0123456789abcdef...
-```
-
-Normal update:
+Normal update is one command:
 
 ```bash
 pulsedeck-agent update
 ```
 
-An Agent installed from `dev` stays on `dev`; an Agent installed from `main` stays on `main`. The update finishes by running `pulsedeck-agent doctor`.
+An Agent installed from `dev` stays on `dev`; an Agent installed from `main` stays on `main`. Updates reuse the same clean remote-build path and finish with `pulsedeck-agent doctor`.
 
 ## Method 2 — standalone installer (non-Arch Linux only)
 
@@ -196,6 +195,7 @@ Network       : OK (enp1s0)
 GPU           : disabled
 Service       : active
 Autostart     : enabled
+State dir     : OK (pulsedeck-agent:pulsedeck-agent 0755)
 Snapshot      : OK (age 0.4s)
 
 Result: OK

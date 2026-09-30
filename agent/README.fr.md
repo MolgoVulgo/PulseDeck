@@ -4,7 +4,7 @@
 
 PulseDeck Agent est le composant de métriques local aux PC et serveurs supervisés. Il collecte la télémétrie de la machine et est destiné à l'envoyer au Raspberry Pi, qui reste le hub PulseDeck central, le normaliseur et le producteur MQTT orienté affichage.
 
-`agent-003` ajoute un contrat de canal d'installation (`main` ou `dev`) et une commande complète de diagnostic après installation. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
+`agent-004` conserve le contrat de canal d'installation (`main` ou `dev`) et rend le chemin Arch installation/mise à jour propre par défaut : les changements du checkout local ne peuvent pas influencer le paquet, la révision distante sélectionnée est épinglée et la validation post-installation est automatique. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
 
 ## Modules V1
 
@@ -56,7 +56,7 @@ pulsedeck-agent doctor
 pulsedeck-agent update
 ```
 
-`version` affiche la méthode d'installation, le canal source et la révision source. `doctor` est la commande normale de validation après installation et après mise à jour. Elle contrôle les métadonnées d'installation, le YAML, CPU/MEMORY/NETWORK, le GPU optionnel, l'état systemd actif/activé et le snapshot local. Le code retour `0` signifie que le diagnostic complet est valide.
+`version` affiche la méthode d'installation, le canal source et la révision source. `doctor` est la commande normale de validation après installation et après mise à jour. Elle contrôle les métadonnées d'installation, le YAML, CPU/MEMORY/NETWORK, le GPU optionnel, l'état systemd actif/activé, le propriétaire/mode du répertoire d'état et le snapshot local. Le code retour `0` signifie que le diagnostic complet est valide.
 
 Le service systemd exécute :
 
@@ -79,21 +79,20 @@ Deux chemins mutuellement exclusifs sont définis :
 1. Arch Linux / systèmes basés sur pacman : construction du paquet via `agent/packaging/arch/install.sh` et `makepkg` ;
 2. systèmes Linux non-Arch : installateur standalone `agent/scripts/install.sh` uniquement.
 
-Sur Arch, la commande recommandée devient :
+Sur Arch, l’installateur construit toujours le paquet depuis un checkout distant temporaire et propre du canal sélectionné. L’état d’un checkout local existant, y compris ses modifications non commitées, ne peut donc pas influencer le paquet construit. Depuis un checkout, la commande normale reste :
 
 ```bash
-cd agent/packaging/arch
-./install.sh
+./agent/packaging/arch/install.sh
 ```
 
-Le wrapper utilise automatiquement la branche Git courante lorsqu'elle vaut `main` ou `dev`; sinon il utilise `main`. Le canal peut aussi être donné explicitement :
+Elle utilise automatiquement la branche Git courante lorsqu’elle vaut `main` ou `dev` ; sinon elle utilise `main`. Le canal peut aussi être donné explicitement :
 
 ```bash
-./install.sh main
-./install.sh dev
+./agent/packaging/arch/install.sh main
+./agent/packaging/arch/install.sh dev
 ```
 
-Le canal sélectionné est enregistré avec l'Agent installé. `pulsedeck-agent update` reste ensuite sur ce même canal et `pulsedeck-agent version` l'affiche.
+Un bootstrap distant en une commande est documenté dans `docs/fr/INSTALL.md`. L’installateur résout une révision Git précise, épingle le build du paquet sur cette révision, installe les prérequis si nécessaire, redémarre le service puis lance `pulsedeck-agent doctor`. Le canal sélectionné est enregistré avec l’Agent installé. `pulsedeck-agent update` reste sur ce même canal et réutilise le même chemin de build propre.
 
 L'installateur standalone refuse explicitement Arch/pacman afin d'éviter de mélanger fichiers gérés par pacman et installation standalone.
 

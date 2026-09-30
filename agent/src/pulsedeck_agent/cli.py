@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import grp
 import json
+import os
 from pathlib import Path
+import pwd
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -137,8 +141,9 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
     network_ok = all(_metric_valid(live, "network", key) for key in ("rx_bytes", "tx_bytes", "rx_bps", "tx_bps"))
     gpu_ok = _gpu_ok(live, runtime.config.gpu_enabled)
 
-    active_ok, active_text = _systemctl_check("is-active", "active")
+    active_ok, active_text = _systemctl_check("is-active", "active", wait_s=10.0)
     enabled_ok, enabled_text = _systemctl_check("is-enabled", "enabled")
+    state_dir_ok, state_dir_text = _state_dir_check(state_dir)
     snapshot_ok, snapshot_text = _state_snapshot_check(
         state_dir / "snapshot.json",
         runtime.config.agent_id,
@@ -157,6 +162,7 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
             gpu_ok,
             active_ok,
             enabled_ok,
+            state_dir_ok,
             snapshot_ok,
         )
     )
@@ -179,6 +185,7 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
         print("GPU           : disabled")
     print(f"Service       : {active_text}")
     print(f"Autostart     : {enabled_text}")
+    print(f"State dir     : {state_dir_text}")
     print(f"Snapshot      : {snapshot_text}")
     print()
     print(f"Result: {'OK' if all_ok else 'FAILED'}")
@@ -199,17 +206,50 @@ def _gpu_ok(snapshot: dict[str, object], enabled: bool) -> bool:
     return _metric_valid(snapshot, "gpu", "pct")
 
 
-def _systemctl_check(action: str, wanted: str) -> tuple[bool, str]:
+def _systemctl_check(action: str, wanted: str, wait_s: float = 0.0) -> tuple[bool, str]:
     if not shutil.which("systemctl"):
         return False, "unavailable"
-    result = subprocess.run(
-        ["systemctl", action, SERVICE_NAME],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    value = result.stdout.strip() or result.stderr.strip() or "unknown"
-    return result.returncode == 0 and value == wanted, value
+    deadline = time.monotonic() + max(0.0, wait_s)
+    value = "unknown"
+    while True:
+        result = subprocess.run(
+            ["systemctl", action, SERVICE_NAME],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        value = result.stdout.strip() or result.stderr.strip() or "unknown"
+        if result.returncode == 0 and value == wanted:
+            return True, value
+        if time.monotonic() >= deadline:
+            return False, value
+        time.sleep(0.25)
+
+
+def _state_dir_check(path: Path) -> tuple[bool, str]:
+    try:
+        details = path.stat()
+    except OSError as exc:
+        return False, f"FAIL ({exc})"
+    if not stat.S_ISDIR(details.st_mode):
+        return False, "FAIL (not a directory)"
+
+    mode = stat.S_IMODE(details.st_mode)
+    try:
+        user = pwd.getpwuid(details.st_uid).pw_name
+    except KeyError:
+        user = str(details.st_uid)
+    try:
+        group = grp.getgrgid(details.st_gid).gr_name
+    except KeyError:
+        group = str(details.st_gid)
+
+    owner_ok = user == "pulsedeck-agent" and group == "pulsedeck-agent"
+    mode_ok = mode == 0o755
+    readable_ok = os.access(path, os.R_OK | os.X_OK)
+    if owner_ok and mode_ok and readable_ok:
+        return True, f"OK ({user}:{group} {mode:04o})"
+    return False, f"FAIL ({user}:{group} {mode:04o})"
 
 
 def _state_snapshot_check(path: Path, agent_id: str, sample_interval_s: float) -> tuple[bool, str]:

@@ -25,6 +25,25 @@ class ServiceContractTests(unittest.TestCase):
         definition = (AGENT_ROOT / "systemd" / "pulsedeck-agent.sysusers").read_text(encoding="utf-8")
         self.assertIn('u pulsedeck-agent - "PulseDeck Agent service user"', definition)
 
+    def test_arch_installer_builds_from_clean_remote_checkout(self) -> None:
+        script = (AGENT_ROOT / "packaging" / "arch" / "install.sh").read_text(encoding="utf-8")
+        self.assertIn('git clone --quiet --depth 1 --branch "$REF"', script)
+        self.assertIn('TMP="$(mktemp -d)"', script)
+        self.assertIn('PULSEDECK_COMMIT="$REVISION" makepkg -Csi --noconfirm', script)
+        self.assertNotIn('cd "$SCRIPT_DIR"', script)
+
+    def test_arch_pkgbuild_can_pin_exact_source_commit(self) -> None:
+        pkgbuild = (AGENT_ROOT / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")
+        self.assertIn('_pulsedeck_commit="${PULSEDECK_COMMIT:-}"', pkgbuild)
+        self.assertIn('#commit=${_pulsedeck_commit}', pkgbuild)
+        self.assertIn('#branch=${_pulsedeck_ref}', pkgbuild)
+
+    def test_arch_update_reuses_clean_installer(self) -> None:
+        script = (AGENT_ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
+        self.assertIn('helper="/usr/share/pulsedeck-agent/arch/install.sh"', script)
+        self.assertIn('exec "$helper" "$REF"', script)
+        self.assertNotIn('makepkg -Csi', script)
+
 
 if __name__ == "__main__":
     unittest.main()

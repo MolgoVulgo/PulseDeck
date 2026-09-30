@@ -25,7 +25,7 @@ Ne pas dupliquer ici les détails déjà maintenus dans une documentation canoni
 - Profils V1 verrouillés : mini-serveur = CPU + MEMORY + NETWORK ; PC gamer = CPU + MEMORY + NETWORK + GPU.
 - Configuration Agent V1 : YAML sous `/etc/pulsedeck-agent/agent.yml`; CPU/MEMORY/NETWORK restent obligatoires, seul GPU est activable/désactivable.
 - Service Agent V1 : `pulsedeck-agent.service` sous systemd avec le compte système fixe `pulsedeck-agent` ; état diagnostique local sous `/var/lib/pulsedeck-agent/`, lisible pour `pulsedeck-agent doctor` sans root.
-- Installation Agent : méthodes mutuellement exclusives. Sur Arch/pacman, utiliser uniquement `makepkg` via `agent/packaging/arch/PKGBUILD`. Sur Linux non-Arch, utiliser `agent/scripts/install.sh`, qui doit refuser les hôtes Arch/pacman. Mise à jour normale via `pulsedeck-agent update`.
+- Installation Agent : méthodes mutuellement exclusives. Sur Arch/pacman, l’entrée utilisateur `agent/packaging/arch/install.sh` doit construire via `makepkg` depuis un checkout distant temporaire propre, épinglé à une révision Git précise, sans dépendre de l’état du checkout local ; sur Linux non-Arch, utiliser `agent/scripts/install.sh`, qui doit refuser les hôtes Arch/pacman. Mise à jour normale via `pulsedeck-agent update` sur le même canal.
 - Le transport exact Agent -> Pi et le payload réseau restent `unresolved` tant qu'ils ne sont pas documentés.
 - L'ESP32 est centré sur Wi-Fi, MQTT, NTP local, cache local, navigation et UI LVGL.
 - Une application ESP32 ne réimplémente pas HTTP, TLS, authentification distante ou protocoles propriétaires.

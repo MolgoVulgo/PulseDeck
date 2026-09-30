@@ -4,7 +4,7 @@
 
 PulseDeck Agent is the machine-local metrics component for monitored PCs and servers. It collects local telemetry and is designed to send it to the Raspberry Pi, which remains the central PulseDeck hub, normalizer and display-oriented MQTT publisher.
 
-`agent-003` adds an installation channel contract (`main` or `dev`) and a complete post-installation diagnostic command. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
+`agent-004` keeps the installation channel contract (`main` or `dev`) and makes the Arch install/update path clean-build by default: local checkout changes cannot affect the package, the selected remote revision is pinned, and post-install health validation is automatic. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
 
 ## V1 modules
 
@@ -56,7 +56,7 @@ pulsedeck-agent doctor
 pulsedeck-agent update
 ```
 
-`version` reports the installed method, source channel and source revision. `doctor` is the normal post-installation and post-update verification command. It checks installation metadata, YAML configuration, CPU/MEMORY/NETWORK, optional GPU, systemd active/enabled state and the local snapshot. Exit code `0` means the complete diagnostic passed.
+`version` reports the installed method, source channel and source revision. `doctor` is the normal post-installation and post-update verification command. It checks installation metadata, YAML configuration, CPU/MEMORY/NETWORK, optional GPU, systemd active/enabled state, state-directory ownership/mode and the local snapshot. Exit code `0` means the complete diagnostic passed.
 
 The systemd service runs:
 
@@ -79,21 +79,20 @@ Two mutually exclusive installation paths are defined:
 1. Arch Linux / pacman-based systems: package build through `agent/packaging/arch/install.sh` and `makepkg`;
 2. non-Arch Linux systems: standalone installer `agent/scripts/install.sh` only.
 
-On Arch, the preferred command is now:
+On Arch, the installer always builds from a fresh temporary checkout of the selected remote channel. The state of an existing local checkout, including uncommitted changes, cannot affect the package being built. From a checkout, the normal command remains:
 
 ```bash
-cd agent/packaging/arch
-./install.sh
+./agent/packaging/arch/install.sh
 ```
 
-The wrapper automatically uses the current Git branch when it is `main` or `dev`; otherwise it defaults to `main`. An explicit channel is also accepted:
+It automatically uses the current Git branch when it is `main` or `dev`; otherwise it defaults to `main`. An explicit channel is also accepted:
 
 ```bash
-./install.sh main
-./install.sh dev
+./agent/packaging/arch/install.sh main
+./agent/packaging/arch/install.sh dev
 ```
 
-The selected channel is stored with the installed Agent. `pulsedeck-agent update` continues on that same channel and `pulsedeck-agent version` shows it.
+A remote one-command bootstrap is documented in `docs/INSTALL.md`. The installer resolves a concrete Git revision, pins the package build to that revision, installs prerequisites when necessary, restarts the service, and runs `pulsedeck-agent doctor`. The selected channel is stored with the installed Agent. `pulsedeck-agent update` continues on that same channel and uses the same clean-build path.
 
 `install.sh` for standalone installations explicitly refuses Arch/pacman systems so package-managed and standalone files cannot be mixed.
 
