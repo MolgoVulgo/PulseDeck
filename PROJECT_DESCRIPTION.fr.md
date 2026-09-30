@@ -48,11 +48,14 @@ Objectifs principaux :
 ## 3. Architecture cible
 
 ```text
+PC gamer ──PulseDeck Agent──┐
+Mini-serveur ─PulseDeck Agent─┼───────────┐
+                              │           ▼
                         Raspberry Pi
                 ┌──────────────────────────┐
 Internet ──────►│ Weather collector        │
                 │ News collector           │
-PC ────────────►│ PC metrics collector     │
+Agents ────────►│ Métriques machines       │
 Printer ───────►│ Printer collector/bridge │
 LAN ───────────►│ Network collectors       │
                 │                          │
@@ -77,7 +80,36 @@ LAN ───────────►│ Network collectors       │
                 └──────────────────────────┘
 ```
 
-Principe fondamental : le Pi collecte et normalise les données ; l'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur.
+Principe fondamental : le Pi reste le collecteur/normaliseur central et le producteur MQTT ; les agents locaux ne collectent que les métriques de leur machine. L'ESP32 affiche, anime, met en cache et gère l'interaction utilisateur.
+
+
+### PulseDeck Agent V1
+
+Les métriques locales des PC/serveurs sont collectées par un même code PulseDeck Agent. L’agent ne remplace pas le hub Raspberry Pi : il collecte les métriques de sa machine et les transmet au Pi ; le Pi reste responsable de l’orchestration des sources, de la normalisation et de la publication MQTT destinée à l’affichage.
+
+Modules V1 verrouillés :
+
+```text
+obligatoires  CPU + MEMORY + NETWORK
+optionnel     GPU
+```
+
+Profils de déploiement initiaux :
+
+```text
+mini-serveur  = CPU + MEMORY + NETWORK
+PC gamer      = CPU + MEMORY + NETWORK + GPU
+```
+
+Périmètre des métriques V1 verrouillé :
+- CPU : utilisation, température et puissance si disponible ;
+- MEMORY : octets utilisés, octets totaux et pourcentage d’utilisation ;
+- NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
+- GPU lorsqu’il est activé : utilisation, température, puissance, fréquence core, fréquence mémoire, VRAM utilisée/totale et ventilation si disponible.
+
+Le collector réseau doit cibler une interface configurée afin de ne pas agréger implicitement les interfaces de conteneurs/bridges. L’activation GPU dépend de la configuration. Le transport exact Agent → Pi, le schéma exact des payloads agent, le format de configuration runtime et la méthode de déploiement restent `unresolved` dans `agent-001`.
+
+La première cible de déploiement de l’Agent est le mini-serveur avec CPU + MEMORY + NETWORK. Le PC gamer utilise le même agent avec GPU activé.
 
 ---
 
@@ -391,16 +423,22 @@ Le Pi maintient les informations à jour pendant une impression :
 
 Quand l'utilisateur revient sur l'écran Printer, l'ESP32 dispose déjà de données récentes.
 
-### PC
+### PC / mini-serveur
 
-Dashboard :
+Les métriques machines sont fournies au Pi par des instances PulseDeck Agent. Le même code agent sert les deux machines initiales :
+- mini-serveur : CPU + MEMORY + NETWORK ;
+- PC gamer : CPU + MEMORY + NETWORK + GPU.
+
+Le Pi porte l’état applicatif normalisé et la publication MQTT. Le transport Agent → Pi reste à définir avant implémentation.
+
+Les données de dashboard peuvent inclure :
 - CPU ;
-- GPU ;
 - RAM ;
-- températures ;
-- fréquences ;
-- puissance ;
 - réseau ;
+- GPU lorsqu’il est activé ;
+- températures ;
+- fréquences lorsqu’elles s’appliquent ;
+- puissance lorsqu’elle est disponible ;
 - historique court.
 
 ### Network
@@ -497,12 +535,14 @@ Déplacer progressivement vers le Pi :
 - thumbnail ;
 - statut MQTT normalisé.
 
-### Phase 6 — PC
+### Phase 6 — Agents machines
 
-Intégrer les métriques PC :
-- publication MQTT directe ou collecte par le Pi ;
-- dashboard ;
-- disponibilité online/offline.
+Implémenter PulseDeck Agent et intégrer les métriques machines via le Raspberry Pi :
+- premier déploiement sur le mini-serveur avec CPU + MEMORY + NETWORK ;
+- second déploiement sur le PC gamer avec CPU + MEMORY + NETWORK + GPU ;
+- définir le transport Agent → Pi et le contrat de payload ;
+- normaliser l’état machine sur le Pi avant publication MQTT ;
+- exposer la disponibilité online/offline et les données dashboard par machine.
 
 ### Phase 7 — UI avancée
 

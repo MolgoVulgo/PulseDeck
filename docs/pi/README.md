@@ -6,7 +6,7 @@ This directory documents the Raspberry Pi implementation. `PROJECT_DESCRIPTION.m
 
 ## Role
 
-The Raspberry Pi centralizes remote API access, collection, normalization, source health and MQTT publication. The ESP32 receives display-ready data and stays focused on UI, local cache, NTP, navigation and LVGL rendering.
+The Raspberry Pi centralizes remote API access, collection orchestration, normalization, source health and MQTT publication. Machine-local PC/server metrics are supplied by PulseDeck Agent instances; the Pi remains the central hub and owns normalized display-oriented state. The ESP32 receives display-ready data and stays focused on UI, local cache, NTP, navigation and LVGL rendering.
 
 ## Reference platform
 
@@ -26,7 +26,7 @@ The validated reference host is a Raspberry Pi 3 Model B Plus running Arch Linux
 - Weather — OpenWeather One Call 4.0;
 - News — NewsAPI v2 over HTTPS with `X-Api-Key` authentication.
 
-Planned collectors: PC gamer, mini server and printer.
+Planned machine integration uses PulseDeck Agent with CPU + MEMORY + NETWORK on the mini-server and CPU + MEMORY + NETWORK + GPU on the PC gamer. The exact Agent-to-Pi transport remains unresolved. Printer collection is also planned.
 
 ## Documents
 

@@ -24,7 +24,8 @@ architecture:
     - "scripts/setup_pi.sh"
     - "scripts/deploy_hub.sh"
   modules:
-    - "Raspberry Pi : collecte, normalisation, agrégation, cache et publication des données"
+    - "Raspberry Pi : orchestration centrale de la collecte, normalisation, agrégation, cache et publication des données"
+    - "PulseDeck Agent : collecte locale CPU, mémoire et réseau avec GPU optionnel ; transmet les métriques machine au Raspberry Pi"
     - "MQTT : bus principal entre le backend et l'ESP32"
     - "ESP32-S3 : Wi-Fi, MQTT, NTP local, cache local, état des données et interface LVGL"
   documentation_dirs:
@@ -44,6 +45,7 @@ zones:
     - "sync-drive.conf"
     - "sync-drive.filter"
     - "hub/"
+    - "agent/"
     - "config/"
     - "docs/pi/"
     - "scripts/"
@@ -122,7 +124,17 @@ knowledge:
     - "News V1 publie retained/QoS 1 sur news/availability et news/latest avec schema 1 ; le champ fournisseur content n’est pas republié."
     - "Les secrets News sont séparés : /etc/pulsedeck/secrets/newsapi_api_key et /etc/pulsedeck/secrets/gnews_api_key ; PulseDeck Admin ne renvoie aucune clé en clair."
     - "À partir de patch_0010-1, la documentation du projet et opérationnelle est bilingue : anglais prioritaire dans README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md et docs/pi/*.md ; miroirs français dans README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md et docs/pi/fr/*.md."
+    - "PulseDeck Agent V1 utilise un même code pour le mini-serveur et le PC gamer."
+    - "Modules obligatoires PulseDeck Agent V1 : CPU, MEMORY et NETWORK ; GPU est optionnel et activé par configuration."
+    - "Profils Agent initiaux : mini-serveur = CPU + MEMORY + NETWORK ; PC gamer = CPU + MEMORY + NETWORK + GPU."
+    - "Métriques CPU Agent V1 : utilisation, température et puissance si disponible."
+    - "Métriques MEMORY Agent V1 : octets utilisés, octets totaux et pourcentage d’utilisation."
+    - "Métriques NETWORK Agent V1 : interface configurée, débits RX/TX et compteurs d’octets RX/TX."
+    - "Métriques GPU Agent V1 lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible."
   unresolved:
+    - "Transport et protocole exacts Agent → Pi."
+    - "Schéma exact des payloads PulseDeck Agent."
+    - "Format de configuration runtime et méthode de déploiement/service de PulseDeck Agent."
     - "Schémas exacts des payloads applicatifs hors Weather et News."
     - "Politique exacte de cache."
     - "Cadences des collectors hors Weather et News."
@@ -136,10 +148,20 @@ knowledge:
 
 contracts:
   architecture:
+    - "Le Pi reste l’orchestrateur central de collecte, le normaliseur et le producteur MQTT destiné à l’affichage ; les instances Agent locales ne remplacent pas le hub Pi."
+    - "PulseDeck Agent collecte uniquement les métriques locales de sa machine et les transmet au Pi ; le transport Agent → Pi exact reste unresolved."
     - "Le Pi centralise la collecte, les protocoles distants et la normalisation ; l'ESP32 est centré sur l'interface."
     - "MQTT est le bus principal entre le Pi et l'ESP32."
     - "Une nouvelle application ne recrée pas sa propre pile réseau distante et doit pouvoir être ajoutée sans modifier les autres applications."
     - "Les gros traitements restent côté Pi lorsqu'ils y sont plus adaptés."
+  agent:
+    - "Un même code PulseDeck Agent sert toutes les machines supervisées en V1."
+    - "Modules V1 obligatoires : CPU, MEMORY, NETWORK."
+    - "Module V1 optionnel : GPU, activé par configuration."
+    - "Profil mini-serveur : CPU + MEMORY + NETWORK."
+    - "Profil PC gamer : CPU + MEMORY + NETWORK + GPU."
+    - "NETWORK suit une interface explicitement configurée et publie débits RX/TX et compteurs d’octets RX/TX."
+    - "Les télémétries optionnelles indisponibles, comme la puissance CPU/GPU ou la ventilation GPU, restent indisponibles et ne sont pas synthétisées à zéro."
   weather:
     - "Provider V1 : OpenWeather One Call API 4.0."
     - "Le collector utilise current, timeline/1h et timeline/1day ; les timelines 1min et 15min restent hors patch_0007."
@@ -180,7 +202,7 @@ contracts:
   documentation:
     - "PROJECT_DESCRIPTION.md est la source canonique de description du projet."
     - "La documentation du projet, utilisateur et opérationnelle est maintenue en anglais et en français ; l’anglais est prioritaire et fait référence en cas de divergence."
-    - "README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md et docs/pi/*.md portent les versions anglaises principales ; README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md et docs/pi/fr/*.md portent les miroirs français."
+    - "README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md, agent/README.md et docs/pi/*.md portent les versions anglaises principales ; README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md, agent/README.fr.md et docs/pi/fr/*.md portent les miroirs français."
   project_specific:
     - "Ne pas complexifier la V1 avec cluster MQTT, Kubernetes, base de données lourde, nombreux microservices, cloud obligatoire, historique long terme ou système de plugins dynamique sur ESP32 sans besoin concret."
 

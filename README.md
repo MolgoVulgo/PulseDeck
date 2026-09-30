@@ -4,16 +4,18 @@
 
 PulseDeck is a modular home information display built around a **Raspberry Pi**, **MQTT** and an **ESP32-S3 480 × 480** display.
 
-The Raspberry Pi centralizes remote API access, data collection and normalization. It publishes simple, versioned, display-ready snapshots over MQTT. The ESP32 stays focused on Wi-Fi/MQTT/NTP, local cache, freshness state, navigation, LVGL 9 rendering and animation.
+The Raspberry Pi remains the central hub for remote API access, collection orchestration, normalization and display-oriented MQTT publication. Machine-local PC/server metrics are collected by PulseDeck Agent instances and sent to the Pi. The ESP32 stays focused on Wi-Fi/MQTT/NTP, local cache, freshness state, navigation, LVGL 9 rendering and animation.
 
 ## Architecture
 
 ```text
+PC gamer ──PulseDeck Agent──┐
+Mini-server ─PulseDeck Agent──┼───────────┐
+                              │           ▼
                          Raspberry Pi
                 ┌──────────────────────────┐
 Internet ──────►│ Weather / News           │
-PC ────────────►│ PC metrics               │
-Server ────────►│ Mini-server metrics      │
+Agents ────────►│ machine metrics          │
 Printer ───────►│ Printer state            │
                 │                          │
                 │    pulsedeck-hub         │
@@ -77,6 +79,35 @@ pulsedeck/v1/weather/daily
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
 ```
+
+## PulseDeck Agent V1
+
+PulseDeck Agent is the machine-local metrics component used by monitored PCs and servers. It does not replace the Raspberry Pi hub: the agent collects local machine metrics and sends them to the Pi, while the Pi remains responsible for normalization and display-oriented MQTT publication.
+
+The V1 module contract is locked as follows:
+
+```text
+mandatory  CPU + MEMORY + NETWORK
+optional   GPU
+```
+
+Initial profiles:
+
+```text
+mini-server  = CPU + MEMORY + NETWORK
+PC gamer     = CPU + MEMORY + NETWORK + GPU
+```
+
+V1 metrics:
+
+- CPU: usage, temperature and power when available;
+- MEMORY: used bytes, total bytes and utilization percentage;
+- NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
+- GPU when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available.
+
+The same agent codebase is used on both machines. GPU activation is configuration-driven. The exact Agent-to-Pi transport, payload schema, runtime configuration format and deployment method remain to be defined; `agent-001` creates only the source scaffold and freezes the V1 functional boundary.
+
+See [`agent/README.md`](agent/README.md).
 
 ## Weather
 
@@ -154,6 +185,8 @@ The installer handles the technical foundation. Collector-specific keys, filters
 
 ```text
 PulseDeck/
+├── agent/                  machine-local PulseDeck Agent
+│   └── src/pulsedeck_agent/
 ├── config/
 ├── docs/pi/                English operational docs
 │   └── fr/                 French mirrors
@@ -173,6 +206,7 @@ PulseDeck/
 ## Architecture principles
 
 - Remote APIs, HTTPS, credentials and provider-specific protocols stay on the Raspberry Pi.
+- PulseDeck Agent collects only machine-local metrics; the Raspberry Pi remains the central normalization and MQTT publication point.
 - MQTT remains a simple local bus between the backend and the display.
 - The ESP32 keeps autonomous NTP, UI and last-valid-data cache.
 - A Pi/MQTT outage must not make the local interface unusable.
@@ -191,9 +225,9 @@ Completed foundation:
 
 Next planned integrations:
 
-- PC gamer;
+- implement PulseDeck Agent first on the mini-server, then on the PC gamer;
+- connect both agents to Raspberry Pi collectors and define their normalized MQTT contracts;
 - Printer;
-- mini server;
 - ESP32 application screens, home dashboard, graphs and animations.
 
 ## Documentation

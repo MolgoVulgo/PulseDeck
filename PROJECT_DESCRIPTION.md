@@ -48,11 +48,14 @@ Main goals:
 ## 3. Target architecture
 
 ```text
+PC gamer ──PulseDeck Agent──┐
+Mini-server ─PulseDeck Agent──┼───────────┐
+                              │           ▼
                         Raspberry Pi
                 ┌──────────────────────────┐
 Internet ──────►│ Weather collector        │
                 │ News collector           │
-PC ────────────►│ PC metrics collector     │
+Agents ────────►│ Machine metrics          │
 Printer ───────►│ Printer collector/bridge │
 LAN ───────────►│ Network collectors       │
                 │                          │
@@ -77,7 +80,36 @@ LAN ───────────►│ Network collectors       │
                 └──────────────────────────┘
 ```
 
-Core principle: the Pi collects and normalizes data; the ESP32 renders, animates, caches and manages user interaction.
+Core principle: the Pi remains the central collector/normalizer and MQTT publisher; machine-local agents only collect their host metrics. The ESP32 renders, animates, caches and manages user interaction.
+
+
+### PulseDeck Agent V1
+
+Machine-local PC/server metrics are collected by a common PulseDeck Agent codebase. The agent is not a replacement for the Raspberry Pi hub: it collects local metrics and sends them to the Pi; the Pi remains responsible for source orchestration, normalization and display-oriented MQTT publication.
+
+Locked V1 modules:
+
+```text
+mandatory  CPU + MEMORY + NETWORK
+optional   GPU
+```
+
+Initial deployment profiles:
+
+```text
+mini-server  = CPU + MEMORY + NETWORK
+PC gamer     = CPU + MEMORY + NETWORK + GPU
+```
+
+Locked V1 metric scope:
+- CPU: usage, temperature and power when available;
+- MEMORY: used bytes, total bytes and utilization percentage;
+- NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
+- GPU when enabled: usage, temperature, power, core clock, memory clock, VRAM used/total and fan telemetry when available.
+
+The network collector must target a configured interface so container/bridge interfaces are not implicitly aggregated. GPU enablement is configuration-driven. The exact Agent-to-Pi transport, exact agent payload schema, runtime configuration format and deployment method remain unresolved in `agent-001`.
+
+The first Agent deployment target is the mini-server with CPU + MEMORY + NETWORK. The PC gamer uses the same agent with GPU enabled.
 
 ---
 
@@ -391,16 +423,22 @@ The Pi keeps print information current during a job:
 
 When the user returns to the Printer screen, recent data is already available to the ESP32.
 
-### PC
+### PC / mini-server
 
-Dashboard:
+Machine metrics are supplied to the Pi by PulseDeck Agent instances. The same agent codebase serves both initial machines:
+- mini-server: CPU + MEMORY + NETWORK;
+- PC gamer: CPU + MEMORY + NETWORK + GPU.
+
+The Pi owns the normalized application state and MQTT publication. The Agent-to-Pi transport remains to be defined before implementation.
+
+Dashboard data can include:
 - CPU;
-- GPU;
 - RAM;
-- temperatures;
-- clocks;
-- power;
 - network;
+- GPU when enabled;
+- temperatures;
+- clocks where applicable;
+- power where available;
 - short history.
 
 ### Network
@@ -497,12 +535,14 @@ Move progressively to the Pi:
 - thumbnail;
 - normalized MQTT status.
 
-### Phase 6 — PC
+### Phase 6 — Machine agents
 
-Integrate PC metrics:
-- direct MQTT publication or Pi collection;
-- dashboard;
-- online/offline availability.
+Implement PulseDeck Agent and integrate machine metrics through the Raspberry Pi:
+- first deployment on the mini-server with CPU + MEMORY + NETWORK;
+- second deployment on the PC gamer with CPU + MEMORY + NETWORK + GPU;
+- define the Agent-to-Pi transport and payload contract;
+- normalize machine state on the Pi before MQTT publication;
+- expose per-machine online/offline availability and dashboard data.
 
 ### Phase 7 — Advanced UI
 

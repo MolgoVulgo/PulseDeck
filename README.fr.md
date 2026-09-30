@@ -4,16 +4,18 @@
 
 PulseDeck est une plateforme d’affichage domestique modulaire construite autour d’un **Raspberry Pi**, de **MQTT** et d’un écran **ESP32-S3 480 × 480**.
 
-Le Raspberry Pi centralise les accès API distants, la collecte et la normalisation. Il publie via MQTT des snapshots simples, versionnés et prêts à afficher. L’ESP32 reste centré sur Wi-Fi/MQTT/NTP, le cache local, la fraîcheur des données, la navigation, LVGL 9 et les animations.
+Le Raspberry Pi reste le hub central pour les accès API distants, l’orchestration de la collecte, la normalisation et la publication MQTT prête à afficher. Les métriques locales des PC/serveurs sont collectées par des instances PulseDeck Agent puis envoyées au Pi. L’ESP32 reste centré sur Wi-Fi/MQTT/NTP, le cache local, la fraîcheur des données, la navigation, LVGL 9 et les animations.
 
 ## Architecture
 
 ```text
+PC gamer ──PulseDeck Agent──┐
+Mini-serveur ─PulseDeck Agent─┼───────────┐
+                              │           ▼
                          Raspberry Pi
                 ┌──────────────────────────┐
 Internet ──────►│ Weather / News           │
-PC ────────────►│ métriques PC             │
-Server ────────►│ métriques mini-serveur   │
+Agents ────────►│ métriques machines       │
 Printer ───────►│ état imprimante          │
                 │                          │
                 │    pulsedeck-hub         │
@@ -77,6 +79,35 @@ pulsedeck/v1/weather/daily
 pulsedeck/v1/news/availability
 pulsedeck/v1/news/latest
 ```
+
+## PulseDeck Agent V1
+
+PulseDeck Agent est le composant de métriques local aux PC et serveurs supervisés. Il ne remplace pas le hub Raspberry Pi : l’agent collecte les métriques de sa machine et les transmet au Pi, qui reste responsable de la normalisation et de la publication MQTT destinée à l’affichage.
+
+Le contrat des modules V1 est verrouillé ainsi :
+
+```text
+obligatoires  CPU + MEMORY + NETWORK
+optionnel     GPU
+```
+
+Profils initiaux :
+
+```text
+mini-serveur  = CPU + MEMORY + NETWORK
+PC gamer      = CPU + MEMORY + NETWORK + GPU
+```
+
+Métriques V1 :
+
+- CPU : utilisation, température et puissance si disponible ;
+- MEMORY : octets utilisés, octets totaux et pourcentage d’utilisation ;
+- NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
+- GPU lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible.
+
+Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. Le transport exact Agent → Pi, le schéma de payload, le format de configuration runtime et la méthode de déploiement restent à définir ; `agent-001` crée uniquement le squelette source et verrouille la frontière fonctionnelle V1.
+
+Voir [`agent/README.fr.md`](agent/README.fr.md).
 
 ## Weather
 
@@ -154,6 +185,8 @@ L’installateur gère le socle technique. Les clés, filtres et réglages fonct
 
 ```text
 PulseDeck/
+├── agent/                  PulseDeck Agent local aux machines
+│   └── src/pulsedeck_agent/
 ├── config/
 ├── docs/pi/                documentation opérationnelle anglaise
 │   └── fr/                 miroirs français
@@ -173,6 +206,7 @@ PulseDeck/
 ## Principes d’architecture
 
 - Les API distantes, HTTPS, identifiants et protocoles fournisseur restent sur le Raspberry Pi.
+- PulseDeck Agent collecte uniquement les métriques locales d’une machine ; le Raspberry Pi reste le point central de normalisation et de publication MQTT.
 - MQTT reste un bus local simple entre backend et écran.
 - L’ESP32 conserve son NTP autonome, son UI et le cache des dernières données valides.
 - Une panne Pi/MQTT ne doit pas rendre l’interface locale inutilisable.
@@ -191,9 +225,9 @@ Socle déjà réalisé :
 
 Prochaines intégrations prévues :
 
-- PC gamer ;
+- implémenter PulseDeck Agent d’abord sur le mini-serveur, puis sur le PC gamer ;
+- connecter les deux agents aux collectors du Raspberry Pi et définir leurs contrats MQTT normalisés ;
 - Printer ;
-- mini-serveur ;
 - écrans applicatifs ESP32, home dashboard, graphes et animations.
 
 ## Documentation

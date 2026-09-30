@@ -10,7 +10,7 @@
 Le dépôt local est la source de vérité locale pour Codex. Drive est publication/transport uniquement.
 
 ## Architecture active
-Le Raspberry Pi porte la collecte, les protocoles distants, la normalisation et la publication des données. MQTT est le bus principal. L'ESP32 porte l'interface, le cache local, les états de fraîcheur, la navigation, le rendu et l'interaction.
+Le Raspberry Pi porte l'orchestration centrale de la collecte, les protocoles distants, la normalisation et la publication des données. Les instances PulseDeck Agent collectent uniquement les métriques locales de leurs machines et les transmettent au Pi. MQTT est le bus principal vers l'ESP32, qui porte l'interface, le cache local, les états de fraîcheur, la navigation, le rendu et l'interaction.
 
 Documentation canonique :
 - `PROJECT_DESCRIPTION.md` — source canonique détaillée du projet.
@@ -20,7 +20,10 @@ Ne pas dupliquer ici les détails déjà maintenus dans une documentation canoni
 
 ## Contrats critiques
 ### Frontières d'architecture
-- Le Pi centralise la collecte, les accès API/HTTPS/TLS distants, les protocoles propriétaires et la normalisation.
+- Le Pi centralise l'orchestration de la collecte, les accès API/HTTPS/TLS distants, les protocoles propriétaires, la normalisation et la publication MQTT destinée à l'affichage.
+- PulseDeck Agent collecte uniquement les métriques locales de la machine : CPU, MEMORY et NETWORK obligatoires en V1, GPU optionnel par configuration.
+- Profils V1 verrouillés : mini-serveur = CPU + MEMORY + NETWORK ; PC gamer = CPU + MEMORY + NETWORK + GPU.
+- Le transport exact Agent -> Pi reste `unresolved` tant qu'il n'est pas documenté.
 - L'ESP32 est centré sur Wi-Fi, MQTT, NTP local, cache local, navigation et UI LVGL.
 - Une application ESP32 ne réimplémente pas HTTP, TLS, authentification distante ou protocoles propriétaires.
 - Une nouvelle application doit pouvoir être ajoutée sans modifier les autres.
@@ -54,7 +57,7 @@ Seuls les contrats documentés ou explicitement confirmés sont normatifs. Une h
 ## Zones du dépôt
 Sources :
 - fichiers applicatifs réellement créés dans le dépôt ;
-- `PROJECT_DESCRIPTION.md`, `PROJECT_SCHEMA.md`, `AGENTS.md`, `codex-patch-mode.md`, `sync-drive.sh`, `sync-drive.conf`, `sync-drive.filter`.
+- `PROJECT_DESCRIPTION.md`, `PROJECT_SCHEMA.md`, `AGENTS.md`, `codex-patch-mode.md`, `sync-drive.sh`, `sync-drive.conf`, `sync-drive.filter`, `agent/`.
 
 Générés :
 - `REPO_INDEX.json` uniquement pour l'index de publication ; hors baseline source.

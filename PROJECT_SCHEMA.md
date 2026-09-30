@@ -24,7 +24,8 @@ architecture:
     - "scripts/setup_pi.sh"
     - "scripts/deploy_hub.sh"
   modules:
-    - "Raspberry Pi: collection, normalization, aggregation, cache and data publication"
+    - "Raspberry Pi: central collection orchestration, normalization, aggregation, cache and data publication"
+    - "PulseDeck Agent: machine-local CPU, memory and network collection with optional GPU collection; sends machine metrics to the Raspberry Pi"
     - "MQTT: primary data bus between backend and ESP32"
     - "ESP32-S3: Wi-Fi, MQTT, local NTP, local cache, freshness state and LVGL UI"
   documentation_dirs:
@@ -45,6 +46,7 @@ zones:
     - "sync-drive.conf"
     - "sync-drive.filter"
     - "hub/"
+    - "agent/"
     - "config/"
     - "docs/pi/"
     - "scripts/"
@@ -123,7 +125,17 @@ knowledge:
     - "News V1 publishes retained QoS 1 schema 1 on news/availability and news/latest; provider content is not republished."
     - "News provider secrets are separate: /etc/pulsedeck/secrets/newsapi_api_key and /etc/pulsedeck/secrets/gnews_api_key; PulseDeck Admin never returns either in clear text."
     - "From patch_0010-1, documentation is bilingual: English primary files in README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md and docs/pi/*.md; French mirrors in *.fr.md and docs/pi/fr/*.md."
+    - "PulseDeck Agent V1 uses one common codebase for the mini-server and PC gamer."
+    - "PulseDeck Agent V1 mandatory modules: CPU, MEMORY and NETWORK; GPU is optional and configuration-driven."
+    - "Initial Agent profiles: mini-server = CPU + MEMORY + NETWORK; PC gamer = CPU + MEMORY + NETWORK + GPU."
+    - "Agent V1 CPU metrics: usage, temperature and power when available."
+    - "Agent V1 MEMORY metrics: used bytes, total bytes and utilization percentage."
+    - "Agent V1 NETWORK metrics: configured interface, RX/TX throughput and RX/TX byte counters."
+    - "Agent V1 GPU metrics when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available."
   unresolved:
+    - "Exact Agent-to-Pi transport and protocol."
+    - "Exact PulseDeck Agent payload schema."
+    - "PulseDeck Agent runtime configuration format and deployment/service method."
     - "Exact application payload schemas outside Weather and News."
     - "Exact cache policy."
     - "Collector cadences outside Weather and News."
@@ -137,10 +149,20 @@ knowledge:
 
 contracts:
   architecture:
+    - "The Pi remains the central collection orchestrator, normalizer and display-oriented MQTT publisher; machine-local Agent instances do not replace the Pi hub."
+    - "PulseDeck Agent collects only machine-local metrics and sends them to the Pi; exact Agent-to-Pi transport remains unresolved."
     - "The Pi centralizes collection, remote protocols and normalization; the ESP32 focuses on the interface."
     - "MQTT is the primary bus between Pi and ESP32."
     - "A new application does not recreate its own remote network stack and should be addable without modifying other applications."
     - "Heavy processing stays on the Pi when it is better suited there."
+  agent:
+    - "One common PulseDeck Agent codebase serves all monitored machines in V1."
+    - "Mandatory V1 modules: CPU, MEMORY, NETWORK."
+    - "Optional V1 module: GPU, enabled by configuration."
+    - "Mini-server profile: CPU + MEMORY + NETWORK."
+    - "PC gamer profile: CPU + MEMORY + NETWORK + GPU."
+    - "NETWORK follows an explicitly configured interface and reports RX/TX throughput plus RX/TX byte counters."
+    - "Unavailable optional telemetry such as CPU/GPU power or GPU fan data must remain unavailable rather than being synthesized as zero."
   weather:
     - "V1 provider: OpenWeather One Call API 4.0."
     - "Collector uses current, timeline/1h and timeline/1day; 1min and 15min remain outside patch_0007."
@@ -181,8 +203,8 @@ contracts:
   documentation:
     - "PROJECT_DESCRIPTION.md is the canonical project description."
     - "English documentation is authoritative; French mirrors are mandatory."
-    - "Primary English files: README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md and docs/pi/*.md."
-    - "French mirrors: README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md and docs/pi/fr/*.md."
+    - "Primary English files: README.md, PROJECT_DESCRIPTION.md, PROJECT_SCHEMA.md, agent/README.md and docs/pi/*.md."
+    - "French mirrors: README.fr.md, PROJECT_DESCRIPTION.fr.md, PROJECT_SCHEMA.fr.md, agent/README.fr.md and docs/pi/fr/*.md."
   project_specific:
     - "Do not complicate V1 with MQTT clustering, Kubernetes, a heavy database, many microservices, mandatory cloud services, long-term history or a dynamic ESP32 plugin system without a concrete need."
 
