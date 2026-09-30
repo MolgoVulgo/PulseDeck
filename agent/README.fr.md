@@ -56,7 +56,7 @@ pulsedeck-agent doctor
 pulsedeck-agent update
 ```
 
-`version` affiche la méthode d'installation, le canal source et la révision source. `doctor` est la commande normale de validation après installation et après mise à jour. Elle contrôle les métadonnées d'installation, le YAML, CPU/MEMORY/NETWORK, le GPU optionnel, l'état systemd actif/activé, le propriétaire/mode du répertoire d'état et le snapshot local. Le code retour `0` signifie que le diagnostic complet est valide.
+`version` affiche la méthode d'installation, le canal source et la révision source. `doctor` est la commande normale de validation après installation et après mise à jour. Elle contrôle les métadonnées d'installation, le YAML, CPU/MEMORY/NETWORK, le GPU optionnel, l'état systemd actif/activé, le propriétaire/mode du répertoire d'état et le snapshot local. Lorsque le transport HTTP est activé, elle teste aussi localement `/v1/health` et `/v1/snapshot` et valide le schéma réseau, l'identité Agent, les capacités obligatoires, la santé et la fraîcheur du snapshot. Le code retour `0` signifie que le diagnostic complet est valide.
 
 Le service systemd exécute :
 
@@ -129,10 +129,10 @@ agent/
 
 ## Transport Agent -> Pi
 
-La V1 utilise HTTP en lecture seule sur le LAN de confiance. Configurer `transport.enabled`, `transport.listen` et `transport.port` dans `/etc/pulsedeck-agent/agent.yml`. L’adresse de la machine supervisée est configurée côté Pi ; elle n’est intégrée ni au code Agent ni au code hub. L’endpoint ne doit pas être exposé directement à Internet.
+La V1 utilise HTTP en lecture seule sur le LAN de confiance. Configurer `transport.enabled`, `transport.listen` et `transport.port` dans `/etc/pulsedeck-agent/agent.yml`. L’Agent expose `GET /v1/health` pour les contrôles locaux/opérationnels et `GET /v1/snapshot` pour le Pi. Avec `listen: 0.0.0.0`, `pulsedeck-agent doctor` teste le service via `127.0.0.1` ; l’adresse wildcard n’est jamais utilisée comme destination de connexion. L’adresse de la machine supervisée est configurée côté Pi ; elle n’est intégrée ni au code Agent ni au code hub. L’endpoint ne doit pas être exposé directement à Internet.
 
 ## Toujours non résolu
 
 - responsabilité et rétention de l'historique.
 
-La valeur locale `sample_interval_s` contrôle uniquement l’échantillonnage local ; la cadence d’interrogation du Pi est configurée indépendamment sous `[collectors.mini_server]`.
+La valeur locale `sample_interval_s` contrôle uniquement l’échantillonnage local ; la cadence d’interrogation du Pi est configurée indépendamment sous `[collectors.machines]`.

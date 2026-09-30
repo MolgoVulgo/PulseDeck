@@ -11,9 +11,12 @@ import stat
 import subprocess
 import sys
 import time
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 from . import __version__
-from .config import DEFAULT_CONFIG_PATH, ConfigError, load_config
+from .config import DEFAULT_CONFIG_PATH, AgentConfig, ConfigError, load_config
+from .http_server import HEALTH_PATH, PROTOCOL_NAME, SNAPSHOT_PATH, WIRE_SCHEMA
 from .metadata import InstallInfo, load_install_info
 from .runtime import AgentRuntime, DEFAULT_STATE_DIR
 
@@ -132,7 +135,7 @@ def _status(state_dir: Path) -> int:
     return 0
 
 
-def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
+def _doctor(config: AgentConfig, runtime: AgentRuntime, state_dir: Path) -> int:
     info = load_install_info()
     live = runtime.warm_collect(min(runtime.config.sample_interval_s, 0.25))
 
@@ -149,6 +152,15 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
         runtime.config.agent_id,
         runtime.config.sample_interval_s,
     )
+    if config.transport_enabled and not active_ok:
+        transport_ok, transport_text = False, "FAIL (service not active)"
+    else:
+        transport_ok, transport_text = _transport_check(
+            config,
+            runtime.config.agent_id,
+            runtime.config.sample_interval_s,
+            wait_s=10.0,
+        )
 
     install_ok = info.method in {"arch-package", "standalone"}
     channel_ok = info.channel in {"main", "dev"}
@@ -164,6 +176,7 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
             enabled_ok,
             state_dir_ok,
             snapshot_ok,
+            transport_ok,
         )
     )
 
@@ -187,6 +200,7 @@ def _doctor(config: object, runtime: AgentRuntime, state_dir: Path) -> int:
     print(f"Autostart     : {enabled_text}")
     print(f"State dir     : {state_dir_text}")
     print(f"Snapshot      : {snapshot_text}")
+    print(f"Transport     : {transport_text}")
     print()
     print(f"Result: {'OK' if all_ok else 'FAILED'}")
     return 0 if all_ok else 6
@@ -274,6 +288,75 @@ def _state_snapshot_check(path: Path, agent_id: str, sample_interval_s: float) -
         if time.monotonic() >= deadline:
             return False, last_error
         time.sleep(0.25)
+
+
+def _transport_check(
+    config: AgentConfig,
+    agent_id: str,
+    sample_interval_s: float,
+    wait_s: float = 0.0,
+) -> tuple[bool, str]:
+    if not config.transport_enabled:
+        return True, "disabled"
+
+    host = "127.0.0.1" if config.transport_listen == "0.0.0.0" else config.transport_listen
+    base_url = f"http://{host}:{config.transport_port}"
+    deadline = time.monotonic() + max(0.0, wait_s)
+    last_error = "unreachable"
+
+    while True:
+        try:
+            health = _http_json(f"{base_url}{HEALTH_PATH}")
+            if health.get("schema") != WIRE_SCHEMA or health.get("state") != "online":
+                last_error = "invalid /v1/health response"
+            else:
+                payload = _http_json(f"{base_url}{SNAPSHOT_PATH}")
+                snapshot = payload.get("snapshot")
+                if payload.get("schema") != WIRE_SCHEMA or payload.get("protocol") != PROTOCOL_NAME:
+                    last_error = "invalid /v1/snapshot envelope"
+                elif not isinstance(snapshot, dict):
+                    last_error = "invalid /v1/snapshot payload"
+                else:
+                    try:
+                        ts = float(snapshot.get("ts", 0))
+                    except (TypeError, ValueError):
+                        ts = 0.0
+                    age_s = max(0.0, time.time() - ts)
+                    state = snapshot.get("state")
+                    agent = snapshot.get("agent")
+                    capabilities = snapshot.get("capabilities")
+                    snapshot_schema_ok = snapshot.get("schema") == 1
+                    state_ok = isinstance(state, dict) and bool(state.get("ok"))
+                    agent_ok = isinstance(agent, dict) and agent.get("id") == agent_id
+                    capabilities_ok = (
+                        isinstance(capabilities, list)
+                        and {"cpu", "memory", "network"}.issubset(
+                            item for item in capabilities if isinstance(item, str)
+                        )
+                    )
+                    max_age_s = max(10.0, sample_interval_s * 5.0)
+                    if snapshot_schema_ok and state_ok and agent_ok and capabilities_ok and age_s <= max_age_s:
+                        return True, f"OK ({host}:{config.transport_port}; health + snapshot age {age_s:.1f}s)"
+                    last_error = f"stale/invalid /v1/snapshot (age {age_s:.1f}s)"
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, HTTPError, URLError) as exc:
+            last_error = str(exc)
+
+        if time.monotonic() >= deadline:
+            return False, f"FAIL ({host}:{config.transport_port}; {last_error})"
+        time.sleep(0.25)
+
+
+def _http_json(url: str) -> dict[str, object]:
+    with urlopen(url, timeout=2.0) as response:
+        if response.status != 200:
+            raise OSError(f"HTTP {response.status}")
+        content_type = response.headers.get_content_type()
+        if content_type != "application/json":
+            raise OSError(f"unexpected content type {content_type}")
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("response is not a JSON object")
+    return payload
 
 
 def _update() -> int:

@@ -56,6 +56,15 @@ class ServiceContractTests(unittest.TestCase):
         self.assertIn('#commit=${_pulsedeck_commit}', pkgbuild)
         self.assertIn('#branch=${_pulsedeck_ref}', pkgbuild)
 
+    def test_agent_packaging_keeps_transport_module_with_runtime(self) -> None:
+        pkgbuild = (AGENT_ROOT / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")
+        pyproject = (AGENT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        standalone = (AGENT_ROOT / "scripts" / "install.sh").read_text(encoding="utf-8")
+        self.assertTrue((AGENT_ROOT / "src" / "pulsedeck_agent" / "http_server.py").is_file())
+        self.assertIn("cp -a agent/src/pulsedeck_agent", pkgbuild)
+        self.assertIn('where = ["src"]', pyproject)
+        self.assertIn('pip install --disable-pip-version-check --upgrade --force-reinstall "$SOURCE/agent"', standalone)
+
     def test_arch_update_reuses_clean_installer(self) -> None:
         script = (AGENT_ROOT / "scripts" / "update.sh").read_text(encoding="utf-8")
         self.assertIn('helper="/usr/share/pulsedeck-agent/arch/install.sh"', script)

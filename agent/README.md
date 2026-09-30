@@ -56,7 +56,7 @@ pulsedeck-agent doctor
 pulsedeck-agent update
 ```
 
-`version` reports the installed method, source channel and source revision. `doctor` is the normal post-installation and post-update verification command. It checks installation metadata, YAML configuration, CPU/MEMORY/NETWORK, optional GPU, systemd active/enabled state, state-directory ownership/mode and the local snapshot. Exit code `0` means the complete diagnostic passed.
+`version` reports the installed method, source channel and source revision. `doctor` is the normal post-installation and post-update verification command. It checks installation metadata, YAML configuration, CPU/MEMORY/NETWORK, optional GPU, systemd active/enabled state, state-directory ownership/mode and the local snapshot. When HTTP transport is enabled, it also probes `/v1/health` and `/v1/snapshot` locally and validates the wire schema, Agent identity, mandatory capabilities, health and snapshot freshness. Exit code `0` means the complete diagnostic passed.
 
 The systemd service runs:
 
@@ -129,10 +129,10 @@ agent/
 
 ## Agent -> Pi transport
 
-V1 uses read-only HTTP on the trusted LAN. Configure `transport.enabled`, `transport.listen` and `transport.port` in `/etc/pulsedeck-agent/agent.yml`. The monitored machine address itself is configured on the Pi; it is not embedded in the Agent or hub code. The endpoint must not be exposed directly to the Internet.
+V1 uses read-only HTTP on the trusted LAN. Configure `transport.enabled`, `transport.listen` and `transport.port` in `/etc/pulsedeck-agent/agent.yml`. The Agent exposes `GET /v1/health` for local/operational health checks and `GET /v1/snapshot` for the Pi. When `listen: 0.0.0.0`, `pulsedeck-agent doctor` probes the service through `127.0.0.1`; the wildcard bind address is never used as a connection destination. The monitored machine address itself is configured on the Pi; it is not embedded in the Agent or hub code. The endpoint must not be exposed directly to the Internet.
 
 ## Still unresolved
 
 - history ownership and retention.
 
-The local `sample_interval_s` value controls local sampling only; the Pi polling cadence is configured independently under `[collectors.mini_server]`.
+The local `sample_interval_s` value controls local sampling only; the Pi polling cadence is configured independently under `[collectors.machines]`.

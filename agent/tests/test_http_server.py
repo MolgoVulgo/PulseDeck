@@ -14,6 +14,17 @@ class HttpTransportTests(unittest.TestCase):
         payload["snapshot"]["agent"]["id"] = "changed"  # type: ignore[index]
         self.assertEqual(snapshot["agent"]["id"], "mini-server")  # type: ignore[index]
 
+    def test_http_health_endpoint(self) -> None:
+        server = AgentHTTPServer("127.0.0.1", 0, lambda: None)
+        server.start()
+        self.addCleanup(server.stop)
+        port = server.bound_port
+        self.assertIsNotNone(port)
+        with urlopen(f"http://127.0.0.1:{port}/v1/health", timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["schema"], 1)
+        self.assertEqual(payload["state"], "online")
+
     def test_http_snapshot_endpoint(self) -> None:
         snapshot = {"schema": 1, "ts": 123, "agent": {"id": "mini-server"}, "state": {"ok": True}}
         server = AgentHTTPServer("127.0.0.1", 0, lambda: snapshot)

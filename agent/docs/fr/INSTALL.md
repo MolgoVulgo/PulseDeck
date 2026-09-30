@@ -142,6 +142,10 @@ collectors:
     enabled: false
 runtime:
   sample_interval_s: 1.0
+transport:
+  enabled: true
+  listen: 0.0.0.0
+  port: 8765
 ```
 
 Exemple PC gamer :
@@ -159,7 +163,13 @@ collectors:
     enabled: true
 runtime:
   sample_interval_s: 1.0
+transport:
+  enabled: true
+  listen: 0.0.0.0
+  port: 8765
 ```
+
+Le transport HTTP est désactivé par défaut dans l’exemple versionné. L’activer sur les machines supervisées avant leur ajout dans PulseDeck Admin. `listen: 0.0.0.0` accepte toutes les interfaces locales ; utiliser une adresse LAN précise pour limiter davantage l’écoute.
 
 Après une modification de configuration :
 
@@ -197,11 +207,12 @@ Service       : active
 Autostart     : enabled
 State dir     : OK (pulsedeck-agent:pulsedeck-agent 0755)
 Snapshot      : OK (age 0.4s)
+Transport     : OK (127.0.0.1:8765; health + snapshot age 0.4s)
 
 Result: OK
 ```
 
-Le code retour vaut `0` uniquement si tous les contrôles obligatoires passent :
+Lorsque le transport est activé, `doctor` teste `/v1/health` et `/v1/snapshot` et valide les capacités obligatoires `cpu`/`memory`/`network` ; pour une écoute wildcard `0.0.0.0`, la connexion locale utilise `127.0.0.1`. Le code retour vaut `0` uniquement si tous les contrôles obligatoires passent :
 
 ```bash
 pulsedeck-agent doctor
