@@ -58,10 +58,15 @@ api_key_file = "/etc/pulsedeck/secrets/newsapi_api_key"
 enabled = false
 
 [collectors.mini_server]
-# First machine selected for PulseDeck Agent monitoring.
-# Keep disabled until the Agent -> Pi transport contract is implemented.
+# First machine profile monitored through PulseDeck Agent. The address is user-configured;
+# 192.168.0.1 is only an example and is not hardcoded anywhere in the hub.
 enabled = false
-host = "192.168.0.1"
+host = "" # example: "192.168.0.1"
+port = 8765
+poll_interval = 2
+request_timeout = 2
+offline_after_failures = 3
+max_snapshot_age = 10
 
 [collectors.printer]
 enabled = false

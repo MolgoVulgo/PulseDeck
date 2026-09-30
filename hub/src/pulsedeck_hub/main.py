@@ -69,7 +69,7 @@ class HubRuntime:
 
     def _start_mini_server(self) -> None:
         if self.config.mini_server.enabled:
-            self.mini_server_collector = MiniServerCollector(self.config.mini_server)
+            self.mini_server_collector = MiniServerCollector(self.config.mini_server, self.mqtt_client)
             self.mini_server_collector.start()
         else:
             self.mini_server_collector = None

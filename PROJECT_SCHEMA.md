@@ -142,10 +142,12 @@ knowledge:
     - "From agent-004, the Arch installer builds from a fresh temporary checkout of the selected remote channel, pins the build to the resolved Git commit, and must not depend on local working-tree contents."
     - "From agent-004-1, the Arch installer authenticates sudo once, builds the package without makepkg-driven installation, then installs it explicitly with non-interactive pacman; subsequent privileged steps use the same sudo authorization without additional prompts."
     - "From agent-002, the normal user-facing update command is pulsedeck-agent update."
+    - "From patch_0021, Agent-to-Pi transport V1 is read-only HTTP on the trusted LAN: GET /v1/snapshot, default TCP port 8765, configurable Agent bind address/port and configurable Pi target host/port."
+    - "Patch_0021 defines Agent wire schema 1 as an explicit envelope with schema=1, protocol=pulsedeck-agent-http, response timestamp and a snapshot object; the Pi validates age/health before normalization."
+    - "Patch_0021 defines mini-server MQTT schema 1 on pulsedeck/v1/server/mini/availability and pulsedeck/v1/server/mini/dashboard, retained QoS 1."
+    - "The mini-server address is configuration data; no monitored-machine IP is hardcoded in the hub. 192.168.0.1 remains documentation/example input only."
   unresolved:
-    - "Exact Agent-to-Pi transport and protocol."
-    - "Exact PulseDeck Agent wire payload schema."
-    - "Exact application payload schemas outside Weather and News."
+    - "Exact application payload schemas outside Weather, News and the mini-server."
     - "Exact cache policy."
     - "Collector cadences outside Weather and News."
     - "ESP-IDF version."
@@ -159,7 +161,7 @@ knowledge:
 contracts:
   architecture:
     - "The Pi remains the central collection orchestrator, normalizer and display-oriented MQTT publisher; machine-local Agent instances do not replace the Pi hub."
-    - "PulseDeck Agent collects only machine-local metrics and sends them to the Pi; exact Agent-to-Pi transport remains unresolved."
+    - "PulseDeck Agent collects only machine-local metrics; the Pi polls the Agent over the V1 read-only HTTP transport and remains responsible for normalization and display-oriented MQTT publication."
     - "The Pi centralizes collection, remote protocols and normalization; the ESP32 focuses on the interface."
     - "MQTT is the primary bus between Pi and ESP32."
     - "A new application does not recreate its own remote network stack and should be addable without modifying other applications."
@@ -179,6 +181,9 @@ contracts:
     - "Standalone installation uses agent/scripts/install.sh and an isolated runtime under /opt/pulsedeck-agent."
     - "Both installation paths expose the common command pulsedeck-agent and normal updates use pulsedeck-agent update."
     - "agent-002 local snapshot.json is diagnostic/internal Agent state and does not define the Agent-to-Pi wire payload."
+    - "Agent HTTP transport is disabled unless enabled in /etc/pulsedeck-agent/agent.yml; listen address and port are configurable, with default port 8765 and fixed snapshot endpoint /v1/snapshot."
+    - "The V1 Agent HTTP endpoint is read-only and unauthenticated only within the current trusted LAN scope; it must not be exposed directly to the Internet."
+    - "The Pi mini-server collector accepts a configurable host/IP and port, polls on a configurable cadence/timeout, rejects stale or unhealthy snapshots, and uses a configurable consecutive-failure threshold before MQTT offline."
   weather:
     - "V1 provider: OpenWeather One Call API 4.0."
     - "Collector uses current, timeline/1h and timeline/1day; 1min and 15min remain outside patch_0007."

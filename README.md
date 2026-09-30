@@ -105,7 +105,7 @@ V1 metrics:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available.
 
-The same agent codebase is used on both machines. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision, ignores local checkout changes, authenticates sudo once and installs the built package non-interactively with pacman; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. The exact Agent-to-Pi transport and wire payload schema remain unresolved.
+The same agent codebase is used on both machines. GPU activation is configuration-driven. Runtime configuration is YAML at `/etc/pulsedeck-agent/agent.yml`; systemd is the service manager; Arch/pacman installation uses `makepkg` through a clean, channel-aware installer that pins the remote Git revision, ignores local checkout changes, authenticates sudo once and installs the built package non-interactively with pacman; the standalone source installer is restricted to non-Arch Linux systems and refuses Arch/pacman hosts; normal updates use `pulsedeck-agent update` on the installed channel. From `patch_0021`, Agent-to-Pi V1 is read-only HTTP (`GET /v1/snapshot`, default port `8765`) with configurable Agent bind and configurable Pi target host/port; monitored-machine IPs are not hardcoded.
 
 See [`agent/README.md`](agent/README.md) and [`agent/docs/INSTALL.md`](agent/docs/INSTALL.md).
 
@@ -230,8 +230,8 @@ Completed foundation:
 
 Next planned integrations:
 
-- deploy and validate the first PulseDeck Agent runtime on the mini-server, then on the PC gamer;
-- connect both agents to Raspberry Pi collectors and define their normalized MQTT contracts;
+- deploy and validate the mini-server Agent HTTP path end to end, then reuse the same transport for the PC gamer;
+- extend the normalized machine MQTT contract to the PC gamer/GPU profile;
 - Printer;
 - ESP32 application screens, home dashboard, graphs and animations.
 

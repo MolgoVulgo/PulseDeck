@@ -4,7 +4,7 @@
 
 PulseDeck Agent is the machine-local metrics component for monitored PCs and servers. It collects local telemetry and is designed to send it to the Raspberry Pi, which remains the central PulseDeck hub, normalizer and display-oriented MQTT publisher.
 
-`agent-004-1` keeps the clean-build channel contract from `agent-004` and hardens the Arch user experience: sudo is authenticated once, the package is built without makepkg-driven installation, pacman installation is non-interactive, and post-install health validation remains automatic. Agent -> Pi transport remains intentionally unimplemented until that contract is defined.
+`agent-004-1` keeps the clean-build channel contract from `agent-004` and hardens the Arch user experience: sudo is authenticated once, the package is built without makepkg-driven installation, pacman installation is non-interactive, and post-install health validation remains automatic. From `patch_0021`, Agent -> Pi transport V1 is a read-only HTTP endpoint on the trusted LAN. It is disabled by default and uses a configurable bind address and port (default `8765`).
 
 ## V1 modules
 
@@ -64,13 +64,13 @@ The systemd service runs:
 pulsedeck-agent run
 ```
 
-Until Agent -> Pi transport is defined, `run` collects locally and atomically maintains:
+`run` always collects locally and atomically maintains:
 
 ```text
 /var/lib/pulsedeck-agent/snapshot.json
 ```
 
-That file and `snapshot` command are diagnostic/internal Agent state, not the future Agent -> Pi wire payload contract.
+That file and `snapshot` command remain diagnostic/internal Agent state. When HTTP transport is enabled, the Agent separately exposes `GET /v1/snapshot` using wire schema 1 (`protocol=pulsedeck-agent-http`); the Pi never reads `snapshot.json` remotely.
 
 ## Installation
 
@@ -122,14 +122,17 @@ agent/
     ├── models/
     ├── cli.py
     ├── config.py
+    ├── http_server.py
     ├── metadata.py
     └── runtime.py
 ```
 
+## Agent -> Pi transport
+
+V1 uses read-only HTTP on the trusted LAN. Configure `transport.enabled`, `transport.listen` and `transport.port` in `/etc/pulsedeck-agent/agent.yml`. The monitored machine address itself is configured on the Pi; it is not embedded in the Agent or hub code. The endpoint must not be exposed directly to the Internet.
+
 ## Still unresolved
 
-- exact Agent -> Pi transport and protocol;
-- exact Agent -> Pi payload schema;
 - history ownership and retention.
 
-The local `sample_interval_s` value is an Agent implementation setting only; it does not define the future Pi collection/publication cadence.
+The local `sample_interval_s` value controls local sampling only; the Pi polling cadence is configured independently under `[collectors.mini_server]`.

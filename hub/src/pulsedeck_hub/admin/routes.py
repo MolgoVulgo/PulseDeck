@@ -556,6 +556,8 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 runtime.config.news.provider,
                 printer_state,
                 runtime.config.printer.enabled,
+                runtime.mini_server_collector.status() if runtime.mini_server_collector is not None else None,
+                runtime.config.mini_server.enabled,
             ),
         }
 
@@ -578,6 +580,18 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "enabled": runtime.config.news.enabled,
                 "health": state["news"],
                 "messages": _retained_messages(runtime, "news"),
+            },
+            "mini_server": {
+                "enabled": runtime.config.mini_server.enabled,
+                "status": runtime.mini_server_collector.status() if runtime.mini_server_collector is not None else {
+                    "enabled": False,
+                    "host": runtime.config.mini_server.host,
+                    "port": runtime.config.mini_server.port,
+                    "profile": "mini-server",
+                    "transport": "http",
+                    "state": "disabled",
+                },
+                "messages": _retained_messages(runtime, "server/mini"),
             },
             "printer": {
                 "enabled": runtime.config.printer.enabled,

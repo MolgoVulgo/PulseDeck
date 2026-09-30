@@ -92,7 +92,7 @@ def test_gnews_configuration_loads_with_separate_secret(tmp_path: Path) -> None:
     assert cfg.news.nullable == "description,image"
 
 
-def test_mini_server_target_loads_without_defining_transport(tmp_path: Path) -> None:
+def test_mini_server_target_loads_with_configurable_http_transport(tmp_path: Path) -> None:
     cfg = load_config(
         _write(
             tmp_path,
@@ -101,6 +101,9 @@ def test_mini_server_target_loads_without_defining_transport(tmp_path: Path) -> 
     )
     assert cfg.mini_server.enabled is False
     assert cfg.mini_server.host == "192.168.0.1"
+    assert cfg.mini_server.port == 8765
+    assert cfg.mini_server.poll_interval == 2
+    assert cfg.mini_server.offline_after_failures == 3
 
 
 def test_enabled_mini_server_requires_host(tmp_path: Path) -> None:
@@ -109,4 +112,19 @@ def test_enabled_mini_server_requires_host(tmp_path: Path) -> None:
         """[collectors.weather]\nenabled = false\n\n[collectors.mini_server]\nenabled = true\n""",
     )
     with pytest.raises(ValueError, match="mini-server collector requires host"):
+        load_config(path)
+
+
+def test_mini_server_host_rejects_url_syntax(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """[collectors.weather]
+enabled = false
+
+[collectors.mini_server]
+enabled = true
+host = "http://192.168.0.1"
+""",
+    )
+    with pytest.raises(ValueError, match="IP address or hostname"):
         load_config(path)

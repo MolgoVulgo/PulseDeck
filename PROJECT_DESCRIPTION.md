@@ -107,9 +107,9 @@ Locked V1 metric scope:
 - NETWORK: configured interface, RX/TX throughput and RX/TX byte counters;
 - GPU when enabled: usage, temperature, power, core clock, memory clock, VRAM used/total and fan telemetry when available.
 
-The network collector targets the interface selected by YAML configuration so container/bridge interfaces are not implicitly aggregated; `auto` resolves the default-route interface when possible. GPU enablement is configuration-driven. Agent configuration is YAML at `/etc/pulsedeck-agent/agent.yml`, systemd supervises the runtime, Arch/pacman installation uses `makepkg` through a clean temporary checkout of the selected remote channel pinned to an exact Git revision; the Arch installer authenticates sudo once, builds without delegating installation to makepkg, then installs the resulting package explicitly and non-interactively with pacman. The standalone installer uses the same `agent/` sources but is restricted to non-Arch Linux systems and refuses Arch/pacman hosts, and `pulsedeck-agent update` is the common same-channel update command. The exact Agent-to-Pi transport and exact wire payload schema remain unresolved.
+The network collector targets the interface selected by YAML configuration so container/bridge interfaces are not implicitly aggregated; `auto` resolves the default-route interface when possible. GPU enablement is configuration-driven. Agent configuration is YAML at `/etc/pulsedeck-agent/agent.yml`, systemd supervises the runtime, Arch/pacman installation uses `makepkg` through a clean temporary checkout of the selected remote channel pinned to an exact Git revision; the Arch installer authenticates sudo once, builds without delegating installation to makepkg, then installs the resulting package explicitly and non-interactively with pacman. The standalone installer uses the same `agent/` sources but is restricted to non-Arch Linux systems and refuses Arch/pacman hosts, and `pulsedeck-agent update` is the common same-channel update command. From `patch_0021`, Agent-to-Pi transport V1 is read-only HTTP on the trusted LAN. The Agent exposes `GET /v1/snapshot` on a configurable bind address and port (default `8765`); the Pi polls a configurable host/IP and port. No monitored-machine IP is hardcoded. The HTTP endpoint is unauthenticated in the current trusted-LAN V1 scope and must not be exposed directly to the Internet.
 
-The first Agent deployment target is the mini-server with CPU + MEMORY + NETWORK. The PC gamer uses the same agent with GPU enabled. `agent-002` maintains a local diagnostic snapshot under `/var/lib/pulsedeck-agent/snapshot.json`; this file is not the future Agent-to-Pi payload contract.
+The first Agent deployment target is the mini-server with CPU + MEMORY + NETWORK. The PC gamer uses the same agent with GPU enabled. `agent-002` maintains a local diagnostic snapshot under `/var/lib/pulsedeck-agent/snapshot.json`. `patch_0021` does not fetch that file: it defines a separate HTTP wire envelope (`schema=1`, `protocol=pulsedeck-agent-http`, response timestamp, `snapshot`) and validates snapshot age/health on the Pi before normalization.
 
 ---
 
@@ -253,6 +253,8 @@ pulsedeck/v1/pc/gamer/dashboard
 pulsedeck/v1/server/mini/availability
 pulsedeck/v1/server/mini/dashboard
 ```
+
+Mini-server V1 uses PulseDeck Agent HTTP as its source transport. The Pi target address is configured under `[collectors.mini_server]` (`host`, `port`) and is never compiled into the hub. `192.168.0.1` is only an example address. Agent HTTP defaults to TCP `8765`, exposes `GET /v1/snapshot`, and is read-only. The Pi normalizes the Agent wire payload into MQTT `server/mini/dashboard` schema 1 and tracks online/offline on `server/mini/availability`; both are retained QoS 1.
 
 V1 QoS policy:
 - QoS 1 for state, availability and application snapshots;
@@ -429,7 +431,7 @@ Machine metrics are supplied to the Pi by PulseDeck Agent instances. The same ag
 - mini-server: CPU + MEMORY + NETWORK;
 - PC gamer: CPU + MEMORY + NETWORK + GPU.
 
-The Pi owns the normalized application state and MQTT publication. `agent-002` implements local collection and service/install mechanics only; the Agent-to-Pi transport remains to be defined before network integration.
+The Pi owns normalized application state and MQTT publication. From `patch_0021`, the mini-server collector polls the configurable Agent HTTP endpoint, normalizes CPU/RAM/network values, preserves unavailable optional telemetry as `null`, and publishes retained QoS 1 `server/mini/availability` plus `server/mini/dashboard`. Consecutive-failure and stale-snapshot thresholds are configurable.
 
 Dashboard data can include:
 - CPU;
@@ -540,7 +542,7 @@ Move progressively to the Pi:
 Deploy and validate PulseDeck Agent, then integrate machine metrics through the Raspberry Pi:
 - validate `agent-002` local collection, YAML configuration, systemd service and installation/update paths on the mini-server;
 - second deployment on the PC gamer with CPU + MEMORY + NETWORK + GPU;
-- define the Agent-to-Pi transport and payload contract;
+- validate the Agent HTTP transport and mini-server MQTT schema 1 end to end;
 - normalize machine state on the Pi before MQTT publication;
 - expose per-machine online/offline availability and dashboard data.
 
@@ -563,7 +565,6 @@ Add new apps only after the MQTT/UI foundation is stable.
 ## 13. Decisions still required
 
 Define before full implementation:
-- exact Agent-to-Pi transport and wire payload schema;
 - exact payload schemas outside Weather and News;
 - cache policy;
 - collector cadences outside Weather and News;

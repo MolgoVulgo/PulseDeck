@@ -25,5 +25,13 @@ collectors:
       - unknown
 
 runtime:
-  # Local collection cadence only. Agent -> Pi transport is not implemented in agent-002.
+  # Local collection cadence.
   sample_interval_s: 1.0
+
+transport:
+  # Read-only Agent -> Pi HTTP transport. Enable only on the trusted LAN.
+  enabled: false
+  # Bind address on the monitored machine. Use a LAN IP to restrict exposure,
+  # or 0.0.0.0 when all local interfaces are intentionally accepted.
+  listen: "0.0.0.0"
+  port: 8765

@@ -13,6 +13,8 @@ def build_service_catalog(
     news_provider: str = "newsapi",
     printer_state: dict[str, Any] | None = None,
     printer_enabled: bool = False,
+    mini_server_state: dict[str, Any] | None = None,
+    mini_server_enabled: bool = False,
 ) -> list[dict[str, Any]]:
     """Return stable Admin metadata for implemented and planned collectors."""
 
@@ -64,12 +66,12 @@ def build_service_catalog(
         {
             "id": "mini_server",
             "label": "Mini server",
-            "available": False,
-            "state": "planned",
-            "enabled": False,
-            "provider": None,
-            "transport": None,
-            "auth": None,
+            "available": True,
+            "state": (mini_server_state or {}).get("state", "disabled"),
+            "enabled": mini_server_enabled,
+            "provider": "PulseDeck Agent",
+            "transport": "HTTP LAN",
+            "auth": "none (trusted LAN V1)",
             "view": None,
         },
     ]

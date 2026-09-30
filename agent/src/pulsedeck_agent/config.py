@@ -28,6 +28,9 @@ class AgentConfig:
     gpu_pci_slot: str | None
     gpu_temperature_labels: tuple[str, ...]
     sample_interval_s: float
+    transport_enabled: bool
+    transport_listen: str
+    transport_port: int
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AgentConfig:
@@ -42,7 +45,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AgentConfig:
     if raw is None:
         raw = {}
     root = _mapping(raw, "root")
-    _only_keys(root, {"agent", "collectors", "runtime"}, "root")
+    _only_keys(root, {"agent", "collectors", "runtime", "transport"}, "root")
 
     agent = _mapping(root.get("agent", {}), "agent")
     _only_keys(agent, {"id", "name"}, "agent")
@@ -94,6 +97,16 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AgentConfig:
     if sample_interval_s < 0.25 or sample_interval_s > 60.0:
         raise ConfigError("runtime.sample_interval_s must be in [0.25, 60.0]")
 
+    transport = _mapping(root.get("transport", {}), "transport")
+    _only_keys(transport, {"enabled", "listen", "port"}, "transport")
+    transport_enabled = _bool(transport.get("enabled", False), "transport.enabled")
+    transport_listen = str(transport.get("listen", "0.0.0.0")).strip()
+    if not transport_listen or len(transport_listen) > 255 or any(ch.isspace() for ch in transport_listen) or ":" in transport_listen:
+        raise ConfigError("transport.listen must be a non-empty IPv4 address/hostname without whitespace or port")
+    transport_port = _int(transport.get("port", 8765), "transport.port")
+    if transport_port < 1 or transport_port > 65535:
+        raise ConfigError("transport.port must be in [1, 65535]")
+
     return AgentConfig(
         agent_id=agent_id,
         name=name,
@@ -102,6 +115,9 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AgentConfig:
         gpu_pci_slot=gpu_pci_slot,
         gpu_temperature_labels=tuple(labels),
         sample_interval_s=sample_interval_s,
+        transport_enabled=transport_enabled,
+        transport_listen=transport_listen,
+        transport_port=transport_port,
     )
 
 
@@ -135,6 +151,12 @@ def _float(value: object, path: str) -> float:
     if not math.isfinite(parsed):
         raise ConfigError(f"{path} must be finite")
     return parsed
+
+
+def _int(value: object, path: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"{path} must be an integer")
+    return value
 
 
 def _normalize_id(hostname: str) -> str:

@@ -107,9 +107,9 @@ Périmètre des métriques V1 verrouillé :
 - NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
 - GPU lorsqu’il est activé : utilisation, température, puissance, fréquence core, fréquence mémoire, VRAM utilisée/totale et ventilation si disponible.
 
-Le collector réseau cible l’interface sélectionnée par la configuration YAML afin de ne pas agréger implicitement les interfaces de conteneurs/bridges ; `auto` résout si possible l’interface portant la route par défaut. L’activation GPU dépend de la configuration. La configuration Agent est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd supervise le runtime, l’installation Arch/pacman utilise `makepkg` depuis un checkout temporaire propre du canal distant sélectionné et épinglé à une révision Git précise ; l’installateur Arch authentifie sudo une seule fois, construit sans déléguer l’installation à makepkg, puis installe explicitement et sans interaction le paquet produit avec pacman. L’installateur standalone utilise les mêmes sources `agent/` mais est réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman, et `pulsedeck-agent update` est la commande de mise à jour commune sur le même canal. Le transport exact Agent → Pi et le schéma exact du payload réseau restent `unresolved`.
+Le collector réseau cible l’interface sélectionnée par la configuration YAML afin de ne pas agréger implicitement les interfaces de conteneurs/bridges ; `auto` résout si possible l’interface portant la route par défaut. L’activation GPU dépend de la configuration. La configuration Agent est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd supervise le runtime, l’installation Arch/pacman utilise `makepkg` depuis un checkout temporaire propre du canal distant sélectionné et épinglé à une révision Git précise ; l’installateur Arch authentifie sudo une seule fois, construit sans déléguer l’installation à makepkg, puis installe explicitement et sans interaction le paquet produit avec pacman. L’installateur standalone utilise les mêmes sources `agent/` mais est réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman, et `pulsedeck-agent update` est la commande de mise à jour commune sur le même canal. À partir de `patch_0021`, le transport Agent → Pi V1 est HTTP en lecture seule sur le LAN de confiance. L’Agent expose `GET /v1/snapshot` sur une adresse d’écoute et un port configurables (port `8765` par défaut) ; le Pi interroge un host/IP et un port configurables. Aucune IP de machine supervisée n’est codée en dur. L’endpoint HTTP est sans authentification dans le périmètre LAN de confiance V1 actuel et ne doit pas être exposé directement à Internet.
 
-La première cible de déploiement de l’Agent est le mini-serveur avec CPU + MEMORY + NETWORK. Le PC gamer utilise le même agent avec GPU activé. `agent-002` maintient un snapshot diagnostique local sous `/var/lib/pulsedeck-agent/snapshot.json` ; ce fichier n’est pas le futur contrat de payload Agent → Pi.
+La première cible de déploiement de l’Agent est le mini-serveur avec CPU + MEMORY + NETWORK. Le PC gamer utilise le même agent avec GPU activé. `agent-002` maintient un snapshot diagnostique local sous `/var/lib/pulsedeck-agent/snapshot.json`. `patch_0021` ne lit pas ce fichier à distance : il définit une enveloppe réseau HTTP distincte (`schema=1`, `protocol=pulsedeck-agent-http`, timestamp de réponse, `snapshot`) et le Pi valide âge/santé avant normalisation.
 
 ---
 
@@ -253,6 +253,8 @@ pulsedeck/v1/pc/gamer/dashboard
 pulsedeck/v1/server/mini/availability
 pulsedeck/v1/server/mini/dashboard
 ```
+
+Le mini-serveur V1 utilise HTTP PulseDeck Agent comme transport source. L’adresse cible du Pi est configurée sous `[collectors.mini_server]` (`host`, `port`) et n’est jamais compilée dans le hub. `192.168.0.1` est uniquement un exemple d’adresse. HTTP Agent utilise par défaut le port TCP `8765`, expose `GET /v1/snapshot` et reste en lecture seule. Le Pi normalise le payload réseau Agent vers le schéma MQTT 1 `server/mini/dashboard` et suit online/offline via `server/mini/availability` ; les deux sont retained QoS 1.
 
 Politique QoS V1 :
 - QoS 1 pour les états, disponibilités et snapshots applicatifs ;
@@ -429,7 +431,7 @@ Les métriques machines sont fournies au Pi par des instances PulseDeck Agent. L
 - mini-serveur : CPU + MEMORY + NETWORK ;
 - PC gamer : CPU + MEMORY + NETWORK + GPU.
 
-Le Pi porte l’état applicatif normalisé et la publication MQTT. `agent-002` implémente uniquement la collecte locale et les mécanismes service/installation ; le transport Agent → Pi reste à définir avant l’intégration réseau.
+Le Pi porte l’état applicatif normalisé et la publication MQTT. À partir de `patch_0021`, le collector mini-serveur interroge l’endpoint HTTP Agent configurable, normalise CPU/RAM/réseau, conserve les télémétries optionnelles indisponibles à `null`, puis publie en retained QoS 1 `server/mini/availability` et `server/mini/dashboard`. Les seuils d’échecs consécutifs et d’ancienneté du snapshot sont configurables.
 
 Les données de dashboard peuvent inclure :
 - CPU ;
@@ -540,7 +542,7 @@ Déplacer progressivement vers le Pi :
 Déployer et valider PulseDeck Agent, puis intégrer les métriques machines via le Raspberry Pi :
 - valider la collecte locale `agent-002`, la configuration YAML, le service systemd et les chemins d’installation/mise à jour sur le mini-serveur ;
 - second déploiement sur le PC gamer avec CPU + MEMORY + NETWORK + GPU ;
-- définir le transport Agent → Pi et le contrat de payload ;
+- valider de bout en bout le transport HTTP Agent et le schéma MQTT mini-serveur 1 ;
 - normaliser l’état machine sur le Pi avant publication MQTT ;
 - exposer la disponibilité online/offline et les données dashboard par machine.
 
@@ -563,7 +565,6 @@ Ajouter de nouvelles apps seulement après stabilisation du socle MQTT/UI.
 ## 13. Décisions à prendre au lancement
 
 À définir avant le développement complet :
-- transport Agent → Pi et schéma exact du payload réseau ;
 - schéma exact des payloads applicatifs hors Weather et News ;
 - politique de cache ;
 - cadence des collectors hors Weather et News ;

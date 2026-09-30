@@ -105,7 +105,7 @@ Métriques V1 :
 - NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
 - GPU lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible.
 
-Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. La configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch/pacman passe par `makepkg` via un installateur propre et conscient du canal qui épingle la révision Git distante, ignore les changements du checkout local, authentifie sudo une seule fois et installe le paquet produit sans interaction via pacman, l’installateur source standalone reste réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman, et la mise à jour normale utilise `pulsedeck-agent update` sur le canal installé. Le transport exact Agent → Pi et le schéma de payload réseau restent non résolus.
+Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. La configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch/pacman passe par `makepkg` via un installateur propre et conscient du canal qui épingle la révision Git distante, ignore les changements du checkout local, authentifie sudo une seule fois et installe le paquet produit sans interaction via pacman, l’installateur source standalone reste réservé aux systèmes Linux non-Arch et refuse Arch/pacman, et la mise à jour normale utilise `pulsedeck-agent update` sur le canal installé. À partir de `patch_0021`, Agent → Pi V1 utilise HTTP en lecture seule (`GET /v1/snapshot`, port `8765` par défaut) avec bind Agent configurable et cible host/port configurable côté Pi ; les IP des machines supervisées ne sont pas codées en dur.
 
 Voir [`agent/README.fr.md`](agent/README.fr.md) et [`agent/docs/fr/INSTALL.md`](agent/docs/fr/INSTALL.md).
 
@@ -230,8 +230,8 @@ Socle déjà réalisé :
 
 Prochaines intégrations prévues :
 
-- déployer et valider le premier runtime PulseDeck Agent sur le mini-serveur, puis sur le PC gamer ;
-- connecter les deux agents aux collectors du Raspberry Pi et définir leurs contrats MQTT normalisés ;
+- déployer et valider de bout en bout le chemin HTTP Agent du mini-serveur, puis réutiliser le même transport pour le PC gamer ;
+- étendre le contrat MQTT machine normalisé au profil PC gamer/GPU ;
 - Printer ;
 - écrans applicatifs ESP32, home dashboard, graphes et animations.
 

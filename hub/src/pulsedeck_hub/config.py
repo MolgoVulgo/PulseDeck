@@ -104,6 +104,11 @@ class NewsConfig:
 class MiniServerConfig:
     enabled: bool = False
     host: str = ""
+    port: int = 8765
+    poll_interval: int = 2
+    request_timeout: int = 2
+    offline_after_failures: int = 3
+    max_snapshot_age: int = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -356,7 +361,7 @@ def news_config_from_mapping(raw: object) -> NewsConfig:
 
 
 def mini_server_config_from_mapping(raw: object) -> MiniServerConfig:
-    """Parse the Pi-side mini-server target without defining Agent transport."""
+    """Parse the configurable Agent HTTP target for the first monitored server."""
     if raw is None:
         return MiniServerConfig()
     if not isinstance(raw, dict):
@@ -369,10 +374,26 @@ def mini_server_config_from_mapping(raw: object) -> MiniServerConfig:
     host = host.strip()
     if enabled and not host:
         raise ValueError("enabled mini-server collector requires host")
+    if host and (len(host) > 255 or any(ch.isspace() for ch in host) or ":" in host or "/" in host):
+        raise ValueError("collectors.mini_server.host must be an IP address or hostname without scheme/path")
 
-    # Transport, authentication, cadence and wire payload are deliberately not
-    # accepted here while the Agent -> Pi contract remains unresolved.
-    return MiniServerConfig(enabled=enabled, host=host)
+    return MiniServerConfig(
+        enabled=enabled,
+        host=host,
+        port=_positive_int(raw.get("port", 8765), "collectors.mini_server.port", maximum=65535),
+        poll_interval=_positive_int(raw.get("poll_interval", 2), "collectors.mini_server.poll_interval", maximum=300),
+        request_timeout=_positive_int(raw.get("request_timeout", 2), "collectors.mini_server.request_timeout", maximum=60),
+        offline_after_failures=_positive_int(
+            raw.get("offline_after_failures", 3),
+            "collectors.mini_server.offline_after_failures",
+            maximum=60,
+        ),
+        max_snapshot_age=_positive_int(
+            raw.get("max_snapshot_age", 10),
+            "collectors.mini_server.max_snapshot_age",
+            maximum=3600,
+        ),
+    )
 
 
 def printer_config_from_mapping(raw: object) -> PrinterConfig:

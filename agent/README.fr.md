@@ -4,7 +4,7 @@
 
 PulseDeck Agent est le composant de métriques local aux PC et serveurs supervisés. Il collecte la télémétrie de la machine et est destiné à l'envoyer au Raspberry Pi, qui reste le hub PulseDeck central, le normaliseur et le producteur MQTT orienté affichage.
 
-`agent-004-1` conserve le contrat de build propre de `agent-004` et durcit l’expérience Arch : sudo est authentifié une seule fois, le paquet est construit sans installation pilotée par makepkg, l’installation pacman est non interactive et la validation post-installation reste automatique. Le transport Agent -> Pi reste volontairement non implémenté tant que ce contrat n'est pas défini.
+`agent-004-1` conserve le contrat de build propre de `agent-004` et durcit l’expérience Arch : sudo est authentifié une seule fois, le paquet est construit sans installation pilotée par makepkg, l’installation pacman est non interactive et la validation post-installation reste automatique. À partir de `patch_0021`, le transport Agent -> Pi V1 est un endpoint HTTP en lecture seule sur le LAN de confiance. Il est désactivé par défaut et utilise une adresse d’écoute et un port configurables (port `8765` par défaut).
 
 ## Modules V1
 
@@ -64,13 +64,13 @@ Le service systemd exécute :
 pulsedeck-agent run
 ```
 
-Tant que le transport Agent -> Pi n'est pas défini, `run` effectue la collecte locale et maintient atomiquement :
+`run` effectue toujours la collecte locale et maintient atomiquement :
 
 ```text
 /var/lib/pulsedeck-agent/snapshot.json
 ```
 
-Ce fichier et la commande `snapshot` sont un état interne/diagnostique de l'Agent, pas le futur contrat de payload Agent -> Pi.
+Ce fichier et la commande `snapshot` restent un état interne/diagnostique de l’Agent. Lorsque le transport HTTP est activé, l’Agent expose séparément `GET /v1/snapshot` avec le schéma réseau 1 (`protocol=pulsedeck-agent-http`) ; le Pi ne lit jamais `snapshot.json` à distance.
 
 ## Installation
 
@@ -122,14 +122,17 @@ agent/
     ├── models/
     ├── cli.py
     ├── config.py
+    ├── http_server.py
     ├── metadata.py
     └── runtime.py
 ```
 
+## Transport Agent -> Pi
+
+La V1 utilise HTTP en lecture seule sur le LAN de confiance. Configurer `transport.enabled`, `transport.listen` et `transport.port` dans `/etc/pulsedeck-agent/agent.yml`. L’adresse de la machine supervisée est configurée côté Pi ; elle n’est intégrée ni au code Agent ni au code hub. L’endpoint ne doit pas être exposé directement à Internet.
+
 ## Toujours non résolu
 
-- transport et protocole exacts Agent -> Pi ;
-- schéma exact du payload Agent -> Pi ;
 - responsabilité et rétention de l'historique.
 
-La valeur locale `sample_interval_s` est uniquement un réglage d'implémentation de l'Agent ; elle ne définit pas la future cadence de collecte/publication du Pi.
+La valeur locale `sample_interval_s` contrôle uniquement l’échantillonnage local ; la cadence d’interrogation du Pi est configurée indépendamment sous `[collectors.mini_server]`.
