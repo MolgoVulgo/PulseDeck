@@ -30,7 +30,7 @@ Admin V1 utilise HTTP sur le LAN domestique de confiance. Ne pas l’exposer dir
 
 ## Vues
 
-- Dashboard — état hub, MQTT, système et collectors ;
+- Dashboard — synthèse compacte Hub/MQTT/système, cartes dynamiques pour chaque machine supervisée avec télémétrie CPU/RAM/GPU/réseau courante, et état agrégé des autres services ; l’activité détaillée Weather/News reste dans leurs vues dédiées ;
 - Weather — configuration OpenWeather, test fournisseur et hot reload ;
 - News — choix NewsAPI/GNews, configuration adaptée au fournisseur et à l’endpoint, test fournisseur et hot reload ;
 - Machines — ajout centré sur l’Agent : saisir une IP/hostname, détecter l’Agent, relire/modifier ID/nom/type/host/port préremplis puis enregistrer ; les cibles existantes restent testables, activables/désactivables ou supprimables et la flotte est rechargée à chaud ;

@@ -1,7 +1,8 @@
+import json
 from pathlib import Path
 
 from pulsedeck_hub.admin.catalog import build_service_catalog
-from pulsedeck_hub.admin.routes import _printer_runtime_snapshot, _retained_messages
+from pulsedeck_hub.admin.routes import _machine_dashboard_devices, _printer_runtime_snapshot, _retained_messages
 from pulsedeck_hub.admin.ui import ADMIN_HTML
 from pulsedeck_hub.admin.security import hash_password, make_session, verify_password, verify_session
 from pulsedeck_hub.admin.storage import (
@@ -111,6 +112,14 @@ def test_service_catalog_reports_machine_fleet_state() -> None:
 
 def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'data-view="dashboard"' in ADMIN_HTML
+    assert 'id="machinesState"' in ADMIN_HTML
+    assert 'id="dashboardMachines"' in ADMIN_HTML
+    assert 'Machines supervisées' in ADMIN_HTML
+    assert 'Activité Weather' not in ADMIN_HTML
+    assert 'Activité News' not in ADMIN_HTML
+    assert 'weatherState' not in ADMIN_HTML
+    assert 'newsState' not in ADMIN_HTML
+    assert 'printerState' not in ADMIN_HTML
     assert 'data-view="weather"' in ADMIN_HTML
     assert 'data-view="news"' in ADMIN_HTML
     assert 'data-view="machines"' in ADMIN_HTML
@@ -274,6 +283,66 @@ def test_retained_messages_decode_confirmed_publications() -> None:
     assert [item["suffix"] for item in messages] == ["weather/current", "weather/hourly"]
     assert messages[0]["payload"]["data"]["temperature_c"] == 18.5
     assert messages[1]["payload"] == "not-json"
+
+
+def test_machine_dashboard_devices_merges_runtime_and_retained_metrics() -> None:
+    class MQTT:
+        def retained_snapshot(self, prefix=None):
+            assert prefix == "machine"
+            return {
+                "machine/shadow/dashboard": {
+                    "topic": "pulsedeck/v1/machine/shadow/dashboard",
+                    "published_at": 200,
+                    "qos": 1,
+                    "payload": json.dumps({
+                        "schema": 1,
+                        "ts": 198,
+                        "capabilities": ["cpu", "memory", "network", "gpu"],
+                        "data": {
+                            "cpu": {"usage_pct": 12.5, "temperature_c": 44.0},
+                            "memory": {"usage_pct": 51.0},
+                            "gpu": {"usage_pct": 75.0, "temperature_c": 65.0},
+                            "network": {"interface": "eth0", "rx_bps": 1024, "tx_bps": 2048},
+                        },
+                    }),
+                },
+                "machine/shadow/availability": {
+                    "topic": "pulsedeck/v1/machine/shadow/availability",
+                    "published_at": 200,
+                    "qos": 1,
+                    "payload": '{"schema":1,"state":"online"}',
+                },
+            }
+
+    class Runtime:
+        mqtt_client = MQTT()
+
+    state = {
+        "devices": [
+            {
+                "id": "shadow",
+                "name": "Shadow Box",
+                "type": "pc",
+                "host": "192.168.0.1",
+                "port": 8765,
+                "enabled": True,
+                "state": "online",
+                "last_success": 200,
+                "last_error": None,
+            }
+        ]
+    }
+    devices = _machine_dashboard_devices(Runtime(), state)
+    assert len(devices) == 1
+    device = devices[0]
+    assert device["snapshot_ts"] == 198
+    assert device["published_at"] == 200
+    assert device["capabilities"][-1] == "gpu"
+    assert device["metrics"]["cpu_usage_pct"] == 12.5
+    assert device["metrics"]["memory_usage_pct"] == 51.0
+    assert device["metrics"]["gpu_usage_pct"] == 75.0
+    assert device["metrics"]["network_interface"] == "eth0"
+    assert device["metrics"]["network_tx_bps"] == 2048
 
 def test_machines_section_round_trip_replaces_legacy_mini_server(tmp_path: Path) -> None:
     path = tmp_path / "pulsedeck.toml"

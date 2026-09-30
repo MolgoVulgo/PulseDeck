@@ -458,6 +458,71 @@ def _retained_messages(runtime: Any, prefix: str) -> list[dict[str, Any]]:
     return messages
 
 
+def _machine_dashboard_devices(runtime: Any, machines_state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Merge runtime state with the latest normalized per-machine dashboard payload."""
+    dashboards: dict[str, tuple[dict[str, Any], int | None]] = {}
+    for message in _retained_messages(runtime, "machine"):
+        suffix = message.get("suffix")
+        payload = message.get("payload")
+        if not isinstance(suffix, str) or not isinstance(payload, dict):
+            continue
+        parts = suffix.split("/")
+        if len(parts) != 3 or parts[0] != "machine" or parts[2] != "dashboard":
+            continue
+        published_at = message.get("published_at")
+        dashboards[parts[1]] = (payload, published_at if isinstance(published_at, int) else None)
+
+    devices: list[dict[str, Any]] = []
+    raw_devices = machines_state.get("devices", [])
+    if not isinstance(raw_devices, list):
+        return devices
+    for raw_device in raw_devices:
+        if not isinstance(raw_device, dict):
+            continue
+        item = dict(raw_device)
+        machine_id = item.get("id")
+        dashboard_entry = dashboards.get(machine_id) if isinstance(machine_id, str) else None
+        metrics: dict[str, object] = {}
+        capabilities: list[str] = []
+        snapshot_ts: int | None = None
+        published_at: int | None = None
+        if dashboard_entry is not None:
+            payload, published_at = dashboard_entry
+            raw_capabilities = payload.get("capabilities")
+            if isinstance(raw_capabilities, list):
+                capabilities = [value for value in raw_capabilities if isinstance(value, str)]
+            raw_ts = payload.get("ts")
+            if isinstance(raw_ts, int) and not isinstance(raw_ts, bool):
+                snapshot_ts = raw_ts
+            data = payload.get("data")
+            if isinstance(data, dict):
+                cpu = data.get("cpu") if isinstance(data.get("cpu"), dict) else {}
+                memory = data.get("memory") if isinstance(data.get("memory"), dict) else {}
+                gpu = data.get("gpu") if isinstance(data.get("gpu"), dict) else {}
+                network = data.get("network") if isinstance(data.get("network"), dict) else {}
+
+                def number(section: dict[str, Any], key: str) -> int | float | None:
+                    value = section.get(key)
+                    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+                metrics = {
+                    "cpu_usage_pct": number(cpu, "usage_pct"),
+                    "cpu_temperature_c": number(cpu, "temperature_c"),
+                    "memory_usage_pct": number(memory, "usage_pct"),
+                    "gpu_usage_pct": number(gpu, "usage_pct"),
+                    "gpu_temperature_c": number(gpu, "temperature_c"),
+                    "network_rx_bps": number(network, "rx_bps"),
+                    "network_tx_bps": number(network, "tx_bps"),
+                    "network_interface": network.get("interface") if isinstance(network.get("interface"), str) else None,
+                }
+        item["snapshot_ts"] = snapshot_ts
+        item["published_at"] = published_at
+        item["capabilities"] = capabilities
+        item["metrics"] = metrics
+        devices.append(item)
+    return devices
+
+
 def _system_metrics() -> dict[str, Any]:
     memory_available = memory_total = 0
     try:
@@ -569,6 +634,7 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
                 "configured_devices": machines_state["configured_devices"],
                 "enabled_devices": machines_state["enabled_devices"],
                 "online_devices": machines_state["online_devices"],
+                "devices": _machine_dashboard_devices(runtime, machines_state),
             },
             "printer": {
                 "state": printer_state["state"],
