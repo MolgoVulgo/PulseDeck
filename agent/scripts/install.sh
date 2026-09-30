@@ -27,18 +27,28 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ -e /etc/arch-release ]] || command -v pacman >/dev/null 2>&1; then
+    cat >&2 <<'ARCH_ERROR'
+PulseDeck Agent standalone installation is not supported on Arch Linux or pacman-based systems.
+Use the Arch package path instead:
+
+  git clone https://github.com/MolgoVulgo/PulseDeck.git
+  cd PulseDeck/agent/packaging/arch
+  makepkg -si
+  sudo systemctl enable --now pulsedeck-agent.service
+
+Do not mix the standalone installer with files managed by pacman.
+ARCH_ERROR
+    exit 3
+fi
+
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-    echo "Run the standard installer as root (normally with sudo)." >&2
+    echo "Run the standalone installer as root (normally with sudo)." >&2
     exit 2
 fi
 for cmd in python3 systemctl; do
     command -v "$cmd" >/dev/null 2>&1 || { echo "Missing required command: $cmd" >&2; exit 2; }
 done
-
-if command -v pacman >/dev/null 2>&1 && [[ -e /usr/bin/pulsedeck-agent ]] && pacman -Qo /usr/bin/pulsedeck-agent >/dev/null 2>&1; then
-    echo "An Arch package owns /usr/bin/pulsedeck-agent. Use the makepkg installation/update path instead of mixing methods." >&2
-    exit 2
-fi
 
 python3 - <<'PY'
 import sys

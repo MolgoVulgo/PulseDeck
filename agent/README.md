@@ -71,12 +71,12 @@ That file and `snapshot` command are diagnostic/internal Agent state, not the fu
 
 ## Installation
 
-Two supported paths are defined:
+Two mutually exclusive installation paths are defined:
 
-1. Arch Linux-compatible package build with `makepkg -si`;
-2. standalone source installer with `agent/scripts/install.sh`.
+1. Arch Linux / pacman-based systems: package build with `makepkg -si` only;
+2. non-Arch Linux systems: standalone installer `agent/scripts/install.sh` only.
 
-Both retrieve/use the same `agent/` sources and install the same command and systemd service. Updates use one user-facing command:
+`install.sh` explicitly refuses to run on Arch/pacman-based systems so package-managed and standalone files cannot be mixed. Both paths use the same `agent/` sources and install the same command and systemd service. Updates use one user-facing command:
 
 ```bash
 pulsedeck-agent update

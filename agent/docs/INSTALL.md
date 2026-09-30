@@ -12,7 +12,7 @@ Both supported installation paths provide:
 - automatic start at boot;
 - `pulsedeck-agent update` as the normal update command.
 
-The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disabled. Do not mix the Arch-package and standalone installation methods on the same host.
+The default configuration enables CPU, MEMORY and NETWORK and leaves GPU disabled. The methods are mutually exclusive: Arch Linux/pacman-based systems use the package path, while the standalone installer is reserved for non-Arch Linux systems. `install.sh` refuses Arch/pacman systems.
 
 ## Method 1 — Arch Linux / makepkg
 
@@ -36,7 +36,9 @@ pulsedeck-agent update
 
 For an Arch package installation, the update helper clones the current PulseDeck source and runs `makepkg -si` as the calling non-root user.
 
-## Method 2 — standalone installer
+## Method 2 — standalone installer (non-Arch Linux only)
+
+This method is for Linux systems that are not Arch/pacman-based. On Arch Linux or a pacman-based compatible system, `install.sh` exits without modifying the machine and points to the `makepkg` procedure.
 
 Remote bootstrap:
 
@@ -126,3 +128,5 @@ sudo /usr/local/libexec/pulsedeck-agent/uninstall.sh --purge
 ```
 
 Arch installations should be removed with pacman instead of the standalone uninstaller.
+
+If an older standalone Agent was previously installed on an Arch/pacman host, remove that standalone installation first with `/usr/local/libexec/pulsedeck-agent/uninstall.sh` before installing the package with `makepkg -si`.

@@ -138,7 +138,7 @@ knowledge:
     - "Agent V1 GPU metrics when enabled: usage, temperature, power, core/memory clocks, VRAM used/total and fan telemetry when available."
     - "From agent-002, Agent runtime configuration is YAML at /etc/pulsedeck-agent/agent.yml."
     - "From agent-002, systemd supervises pulsedeck-agent.service; local diagnostic state is written under /var/lib/pulsedeck-agent/."
-    - "From agent-002, supported installation paths are Arch makepkg and a standalone source installer; both use the same agent/ source tree."
+    - "From agent-002-1, installation methods are mutually exclusive: Arch/pacman systems use makepkg only; the standalone installer is reserved for non-Arch Linux and refuses Arch/pacman hosts; both use the same agent/ source tree."
     - "From agent-002, the normal user-facing update command is pulsedeck-agent update."
   unresolved:
     - "Exact Agent-to-Pi transport and protocol."
@@ -172,7 +172,8 @@ contracts:
     - "Unavailable optional telemetry such as CPU/GPU power or GPU fan data must remain unavailable rather than being synthesized as zero."
     - "Agent runtime configuration format is YAML at /etc/pulsedeck-agent/agent.yml; CPU, MEMORY and NETWORK are mandatory and GPU alone has an enabled switch."
     - "Agent service supervision uses systemd via pulsedeck-agent.service."
-    - "Arch-compatible installation uses agent/packaging/arch/PKGBUILD with makepkg; makepkg must run as a regular user."
+    - "Arch/pacman installation uses agent/packaging/arch/PKGBUILD with makepkg exclusively; makepkg must run as a regular user."
+    - "agent/scripts/install.sh is the standalone installer for non-Arch Linux only and must refuse Arch/pacman hosts before making system changes."
     - "Standalone installation uses agent/scripts/install.sh and an isolated runtime under /opt/pulsedeck-agent."
     - "Both installation paths expose the common command pulsedeck-agent and normal updates use pulsedeck-agent update."
     - "agent-002 local snapshot.json is diagnostic/internal Agent state and does not define the Agent-to-Pi wire payload."

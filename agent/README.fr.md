@@ -71,12 +71,12 @@ Ce fichier et la commande `snapshot` sont un état interne/diagnostique de l'Age
 
 ## Installation
 
-Deux chemins sont définis :
+Deux chemins mutuellement exclusifs sont définis :
 
-1. paquet compatible Arch Linux construit avec `makepkg -si` ;
-2. installateur source standard `agent/scripts/install.sh`.
+1. Arch Linux / systèmes basés sur pacman : paquet construit avec `makepkg -si` uniquement ;
+2. systèmes Linux non-Arch : installateur standalone `agent/scripts/install.sh` uniquement.
 
-Les deux utilisent les mêmes sources `agent/`, installent la même commande et le même service systemd. La mise à jour utilise une commande utilisateur unique :
+`install.sh` refuse explicitement de s’exécuter sur Arch/pacman afin d’éviter de mélanger des fichiers gérés par pacman et une installation standalone. Les deux chemins utilisent les mêmes sources `agent/`, installent la même commande et le même service systemd. La mise à jour utilise une commande utilisateur unique :
 
 ```bash
 pulsedeck-agent update

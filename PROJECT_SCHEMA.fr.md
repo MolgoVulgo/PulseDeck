@@ -138,7 +138,7 @@ knowledge:
     - "Métriques GPU Agent V1 lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible."
     - "À partir de agent-002, la configuration runtime Agent est en YAML sous /etc/pulsedeck-agent/agent.yml."
     - "À partir de agent-002, systemd supervise pulsedeck-agent.service ; l’état diagnostique local est écrit sous /var/lib/pulsedeck-agent/."
-    - "À partir de agent-002, les chemins d’installation supportés sont makepkg sur Arch et l’installateur source standard ; les deux utilisent les mêmes sources agent/."
+    - "À partir de agent-002-1, les méthodes d’installation sont mutuellement exclusives : les systèmes Arch/pacman utilisent uniquement makepkg ; l’installateur standalone est réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman ; les deux utilisent les mêmes sources agent/."
     - "À partir de agent-002, la commande normale de mise à jour est pulsedeck-agent update."
   unresolved:
     - "Transport et protocole exacts Agent → Pi."
@@ -172,7 +172,8 @@ contracts:
     - "Les télémétries optionnelles indisponibles, comme la puissance CPU/GPU ou la ventilation GPU, restent indisponibles et ne sont pas synthétisées à zéro."
     - "La configuration runtime Agent est en YAML sous /etc/pulsedeck-agent/agent.yml ; CPU, MEMORY et NETWORK sont obligatoires et seul GPU possède un switch enabled."
     - "La supervision du service Agent utilise systemd via pulsedeck-agent.service."
-    - "L’installation compatible Arch utilise agent/packaging/arch/PKGBUILD avec makepkg ; makepkg doit être exécuté avec un utilisateur normal."
+    - "L’installation Arch/pacman utilise exclusivement agent/packaging/arch/PKGBUILD avec makepkg ; makepkg doit être exécuté avec un utilisateur normal."
+    - "agent/scripts/install.sh est l’installateur standalone réservé aux systèmes Linux non-Arch et doit refuser les hôtes Arch/pacman avant toute modification système."
     - "L’installation standard utilise agent/scripts/install.sh et un runtime isolé sous /opt/pulsedeck-agent."
     - "Les deux méthodes exposent la commande commune pulsedeck-agent et les mises à jour normales utilisent pulsedeck-agent update."
     - "Le snapshot.json local de agent-002 est un état interne/diagnostique et ne définit pas le payload réseau Agent → Pi."

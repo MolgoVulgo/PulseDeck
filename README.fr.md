@@ -105,7 +105,7 @@ Métriques V1 :
 - NETWORK : interface configurée, débits RX/TX et compteurs d’octets RX/TX ;
 - GPU lorsqu’il est activé : utilisation, température, puissance, fréquences core/mémoire, VRAM utilisée/totale et ventilation si disponible.
 
-Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. À partir de `agent-002`, la configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch compatible passe par `makepkg -si`, un installateur source standard est également fourni et la mise à jour normale utilise `pulsedeck-agent update`. Le transport exact Agent → Pi et le schéma de payload réseau restent non résolus.
+Le même code agent est utilisé sur les deux machines. L’activation GPU dépend de la configuration. À partir de `agent-002-1`, la configuration runtime est en YAML sous `/etc/pulsedeck-agent/agent.yml`, systemd gère le service, l’installation Arch/pacman passe exclusivement par `makepkg -si`, l’installateur source standalone est réservé aux systèmes Linux non-Arch et refuse les hôtes Arch/pacman, et la mise à jour normale utilise `pulsedeck-agent update`. Le transport exact Agent → Pi et le schéma de payload réseau restent non résolus.
 
 Voir [`agent/README.fr.md`](agent/README.fr.md) et [`agent/docs/fr/INSTALL.md`](agent/docs/fr/INSTALL.md).
 
