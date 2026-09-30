@@ -61,10 +61,12 @@ request_timeout = 2
 offline_after_failures = 3
 max_snapshot_age = 10
 
-# Add machines from PulseDeck Admin, or use one table per monitored Agent:
+# Recommended: add machines from PulseDeck Admin by entering the Agent IP/hostname; identity/capabilities are discovered and fields remain editable.
+# Or use one table per monitored Agent:
 # [[collectors.machines.devices]]
 # id = "mini-server"
 # name = "Mini serveur"
+# type = "server" # server | pc | laptop | other
 # host = "192.168.0.1" # example only; user-configured
 # enabled = true
 # port = 8765

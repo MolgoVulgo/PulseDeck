@@ -96,13 +96,15 @@ def test_machines_load_multiple_configurable_targets(tmp_path: Path) -> None:
     cfg = load_config(
         _write(
             tmp_path,
-            """[collectors.weather]\nenabled = false\n\n[collectors.machines]\nenabled = true\npoll_interval = 3\n\n[[collectors.machines.devices]]\nid = \"mini-server\"\nname = \"Mini serveur\"\nhost = \"192.168.0.1\"\nport = 8765\n\n[[collectors.machines.devices]]\nid = \"gaming-pc\"\nname = \"PC gamer\"\nhost = \"gaming.local\"\nport = 9000\n""",
+            """[collectors.weather]\nenabled = false\n\n[collectors.machines]\nenabled = true\npoll_interval = 3\n\n[[collectors.machines.devices]]\nid = \"mini-server\"\nname = \"Mini serveur\"\ntype = \"server\"\nhost = \"192.168.0.1\"\nport = 8765\n\n[[collectors.machines.devices]]\nid = \"gaming-pc\"\nname = \"PC gamer\"\ntype = \"pc\"\nhost = \"gaming.local\"\nport = 9000\n""",
         )
     )
     assert cfg.machines.enabled is True
     assert cfg.machines.poll_interval == 3
     assert [device.id for device in cfg.machines.devices] == ["mini-server", "gaming-pc"]
     assert cfg.machines.devices[0].host == "192.168.0.1"
+    assert cfg.machines.devices[0].machine_type == "server"
+    assert cfg.machines.devices[1].machine_type == "pc"
     assert cfg.machines.devices[1].host == "gaming.local"
     assert cfg.machines.devices[1].port == 9000
 
@@ -146,5 +148,26 @@ def test_patch21_mini_server_config_migrates_in_memory(tmp_path: Path) -> None:
     assert len(cfg.machines.devices) == 1
     device = cfg.machines.devices[0]
     assert device.id == "mini-server"
+    assert device.machine_type == "server"
     assert device.host == "10.0.0.42"
     assert device.port == 9999
+
+
+def test_machine_type_is_validated(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        """[collectors.weather]
+enabled = false
+
+[collectors.machines]
+enabled = true
+
+[[collectors.machines.devices]]
+id = "host-a"
+name = "Host A"
+type = "router"
+host = "host-a.local"
+""",
+    )
+    with pytest.raises(ValueError, match="type must be"):
+        load_config(path)

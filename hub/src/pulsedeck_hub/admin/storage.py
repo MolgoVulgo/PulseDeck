@@ -115,6 +115,7 @@ def render_machines_section(config: MachinesConfig) -> str:
                 "[[collectors.machines.devices]]",
                 f"id = {json.dumps(device.id)}",
                 f"name = {json.dumps(device.name, ensure_ascii=False)}",
+                f"type = {json.dumps(device.machine_type)}",
                 f"host = {json.dumps(device.host)}",
                 f"enabled = {'true' if device.enabled else 'false'}",
                 f"port = {device.port}",

@@ -147,6 +147,7 @@ knowledge:
     - "Patch_0021 defined the first Agent-to-Pi HTTP machine path; patch_0022 generalizes it to a configurable fleet under [collectors.machines] and repeated [[collectors.machines.devices]] entries."
     - "Patch_0022 defines dynamic retained QoS 1 machine schema 1 on pulsedeck/v1/machine/<id>/availability and pulsedeck/v1/machine/<id>/dashboard."
     - "Each machine has a stable logical id plus user-configured name, host/IP, port and enabled state; no monitored-machine IP is hardcoded in the hub. 192.168.0.1 remains documentation/example input only."
+    - "From patch_0023, PulseDeck Admin discovers a new machine from only its Agent host/IP (plus optional non-default port), reads Agent identity/capabilities from /v1/snapshot, then pre-fills editable id/name/type/host/port fields before save."
     - "PulseDeck Admin can add, edit, test, enable/disable and remove monitored machines; removing a machine clears its retained machine topics."
   unresolved:
     - "Exact application payload schemas outside Weather, News and Machines."
@@ -186,14 +187,15 @@ contracts:
     - "Agent HTTP transport is disabled unless enabled in /etc/pulsedeck-agent/agent.yml; listen address and port are configurable, with default port 8765 and fixed snapshot endpoint /v1/snapshot."
     - "The V1 Agent HTTP endpoint is read-only and unauthenticated only within the current trusted LAN scope; it must not be exposed directly to the Internet."
   machines:
-    - "Hub configuration uses [collectors.machines] plus repeated [[collectors.machines.devices]] entries with stable id, display name, host/IP, port and enabled state."
+    - "Hub configuration uses [collectors.machines] plus repeated [[collectors.machines.devices]] entries with stable id, display name, user-editable type (server/pc/laptop/other), host/IP, port and enabled state."
     - "The Pi Machines collector accepts one or more configurable devices, polls each enabled Agent independently, rejects stale or unhealthy snapshots, and uses configurable poll_interval/request_timeout/offline_after_failures/max_snapshot_age settings."
     - "Machine MQTT schema 1 uses retained QoS 1 on machine/<id>/availability and machine/<id>/dashboard, where <id> is the configured logical machine id."
     - "machine/<id>/dashboard schema 1 contains schema, ts, source, machine{id,name,host}, agent{id,name}, capabilities and data. data always contains cpu{usage_pct,temperature_c,power_w}, memory{used_b,total_b,usage_pct} and network{interface,rx_bps,tx_bps,rx_bytes,tx_bytes}; gpu{usage_pct,temperature_c,power_w,core_clock_mhz,memory_clock_mhz,vram_used_b,vram_total_b,fan_rpm,fan_pct} is included when advertised/present."
     - "Unavailable optional readings remain null; they are never synthesized as zero."
     - "machine/<id>/availability uses source availability schema 1 with source=pulsedeck-agent, state online/offline, ts and optional last_success/reason."
     - "Machine dashboards carry both configured logical-machine identity and Agent-reported identity/capabilities; the logical id is not required to equal the Agent id."
-    - "PulseDeck Admin supports add/edit/test/enable-disable/remove operations and hot reloads the fleet without restarting the hub."
+    - "PulseDeck Admin supports discovery-by-host followed by editable id/name/type/host/port fields, plus test/enable-disable/remove operations, and hot reloads the fleet without restarting the hub."
+    - "Discovery is advisory metadata only: Agent id/name and capabilities are read from the live snapshot; type is suggested as pc when GPU capability is advertised and server otherwise, and the user may change it before save."
     - "Legacy [collectors.mini_server] from patch_0021 is accepted for in-memory migration; the first Machines Admin save persists the canonical multi-device format and removes the legacy section."
   weather:
     - "V1 provider: OpenWeather One Call API 4.0."

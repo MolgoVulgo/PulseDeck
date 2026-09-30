@@ -33,7 +33,7 @@ Admin V1 uses HTTP on the trusted home LAN. Do not expose it directly to the Int
 - Dashboard — hub, MQTT, system and collector status;
 - Weather — OpenWeather configuration, provider test and hot reload;
 - News — selectable NewsAPI/GNews provider, provider-specific endpoint/filter configuration, provider test and hot reload;
-- Machines — configurable list of monitored PCs/servers; add, edit, test, enable/disable or remove PulseDeck Agent targets and hot reload the fleet;
+- Machines — Agent-first onboarding: enter an IP/hostname, detect the Agent, review/edit the pre-filled ID/name/type/host/port, then save; existing targets can still be tested, enabled/disabled or removed and the fleet hot-reloads;
 - Printer — configurable multi-printer list, connection tests and runtime state;
 - Services — common collector catalog for implemented and planned services;
 - Logs — in-memory runtime logs with a service filter; `All` is selected by default, with Hub / MQTT / Weather / News / Machines / Printer / Admin filters;
@@ -47,7 +47,7 @@ The Logs view exposes up to 500 recent Python runtime log entries from the curre
 
 ## Transactional collector changes
 
-For Weather and News, Admin validates submitted configuration and tests the remote provider before enabling a new working configuration. Machines uses a device-list contract comparable to Printer: each target has a stable ID, display name, host/IP, Agent HTTP port and enabled state. A machine can be connection-tested without enabling continuous collection; saving the fleet is atomic, hot-reloads the Machines collector and rolls back the previous TOML on failure. Removing a machine clears its retained `machine/<id>/availability` and `machine/<id>/dashboard` publications. News separates provider request fields from PulseDeck runtime fields, fixes provider pagination to page 1 for the current snapshot, and keeps collection cadence / HTTP timeout as local runtime settings. NewsAPI and GNews keys are stored independently, so switching provider does not overwrite the other secret. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
+For Weather and News, Admin validates submitted configuration and tests the remote provider before enabling a new working configuration. Machines uses a device-list contract comparable to Printer: each target has a stable ID, display name, editable type, host/IP, Agent HTTP port and enabled state. New-machine onboarding first calls the live Agent snapshot using only host/IP plus optional non-default port, then pre-fills Agent ID/name and a capability-derived type suggestion; every pre-filled field remains editable. A machine can be connection-tested without enabling continuous collection; saving the fleet is atomic, hot-reloads the Machines collector and rolls back the previous TOML on failure. Removing a machine clears its retained `machine/<id>/availability` and `machine/<id>/dashboard` publications. News separates provider request fields from PulseDeck runtime fields, fixes provider pagination to page 1 for the current snapshot, and keeps collection cadence / HTTP timeout as local runtime settings. NewsAPI and GNews keys are stored independently, so switching provider does not overwrite the other secret. Runtime TOML and secrets are written atomically. If applying a change fails, PulseDeck attempts to restore the previous working configuration.
 
 ## Runtime paths
 

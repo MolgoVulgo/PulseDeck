@@ -118,7 +118,12 @@ def test_admin_ui_exposes_common_navigation_and_human_cadence_units() -> None:
     assert 'id="addMachineButton"' in ADMIN_HTML
     assert 'id="machineDevices"' in ADMIN_HTML
     assert '/api/machines/config' in ADMIN_HTML
+    assert '/api/machines/discover' in ADMIN_HTML
     assert '/api/machines/test' in ADMIN_HTML
+    assert 'id="machineDiscoverHost"' in ADMIN_HTML
+    assert 'Détecter l’Agent' in ADMIN_HTML
+    assert 'Réglages avancés' in ADMIN_HTML
+    assert 'class="machine-type"' in ADMIN_HTML
     assert '/api/machines/runtime' in ADMIN_HTML
     assert 'data-view="printer"' in ADMIN_HTML
     assert 'data-view-panel="printer"' in ADMIN_HTML
@@ -280,8 +285,8 @@ def test_machines_section_round_trip_replaces_legacy_mini_server(tmp_path: Path)
     config = MachinesConfig(
         enabled=True,
         devices=(
-            MachineDeviceConfig(id="mini-server", name="Mini serveur", host="10.0.0.42"),
-            MachineDeviceConfig(id="gaming-pc", name="PC gamer", host="gaming.local", port=9000),
+            MachineDeviceConfig(id="mini-server", name="Mini serveur", host="10.0.0.42", machine_type="server"),
+            MachineDeviceConfig(id="gaming-pc", name="PC gamer", host="gaming.local", machine_type="pc", port=9000),
         ),
     )
     update_machines_config(path, config)
@@ -291,7 +296,10 @@ def test_machines_section_round_trip_replaces_legacy_mini_server(tmp_path: Path)
     text = path.read_text(encoding="utf-8")
     assert "[collectors.mini_server]" not in text
     assert text.count("[[collectors.machines.devices]]") == 2
-    assert 'host = "10.0.0.42"' in render_machines_section(config)
+    rendered = render_machines_section(config)
+    assert 'host = "10.0.0.42"' in rendered
+    assert 'type = "server"' in rendered
+    assert 'type = "pc"' in rendered
 
 
 def test_printer_section_round_trip_preserves_following_sections(tmp_path: Path) -> None:

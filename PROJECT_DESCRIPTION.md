@@ -251,7 +251,7 @@ pulsedeck/v1/machine/<id>/availability
 pulsedeck/v1/machine/<id>/dashboard
 ```
 
-From `patch_0022`, monitored PCs and servers form a configurable fleet under `[collectors.machines]` and repeated `[[collectors.machines.devices]]` tables. Each entry has a stable logical `id`, display `name`, user-configured `host`, `port` and enabled state. `192.168.0.1` remains example input only; no monitored-machine address is compiled into the hub. The Pi polls each enabled PulseDeck Agent over read-only HTTP (`GET /v1/snapshot`, default TCP `8765`), validates freshness/health, normalizes the Agent wire payload and publishes retained QoS 1 schema 1 under `machine/<id>/availability` and `machine/<id>/dashboard`. CPU, memory and network are mandatory Agent capabilities; GPU data is normalized when the Agent advertises it.
+From `patch_0022`, monitored PCs and servers form a configurable fleet under `[collectors.machines]` and repeated `[[collectors.machines.devices]]` tables. From `patch_0023`, the normal Admin flow starts with only the Agent host/IP (and optional non-default port): the Pi reads `/v1/snapshot`, pre-fills Agent-derived `id`/`name`, proposes an editable machine `type` (`server`, `pc`, `laptop`, `other`) from capabilities, and preserves host/port as editable fields. Each saved entry has a stable logical `id`, display `name`, user-editable `type`, `host`, `port` and enabled state. `192.168.0.1` remains example input only; no monitored-machine address is compiled into the hub. The Pi polls each enabled PulseDeck Agent over read-only HTTP (`GET /v1/snapshot`, default TCP `8765`), validates freshness/health, normalizes the Agent wire payload and publishes retained QoS 1 schema 1 under `machine/<id>/availability` and `machine/<id>/dashboard`. CPU, memory and network are mandatory Agent capabilities; GPU data is normalized when the Agent advertises it.
 
 V1 QoS policy:
 - QoS 1 for state, availability and application snapshots;
@@ -427,7 +427,7 @@ Machine metrics are supplied to the Pi by PulseDeck Agent instances. The same Ag
 - mini-server: CPU + MEMORY + NETWORK;
 - PC gamer: CPU + MEMORY + NETWORK + GPU.
 
-From `patch_0022`, PulseDeck Admin manages the machine fleet using the same device-list model as Printer: add, edit, test, enable/disable and remove a machine without changing hub code. The Pi owns normalized application state and MQTT publication, polls each configured Agent independently, preserves unavailable optional telemetry as `null`, and publishes retained QoS 1 under `machine/<id>/availability` plus `machine/<id>/dashboard`. Poll cadence, timeout, consecutive-failure threshold and maximum snapshot age are fleet settings. Removing a machine clears its retained machine topics.
+From `patch_0023`, PulseDeck Admin simplifies machine onboarding: enter the Agent IP/hostname, detect it, then review/edit the pre-filled ID, display name, type, host and port before saving. Existing machine cards remain fully editable and testable. The fleet still uses the same device-list model as Printer: enable/disable or remove a machine without changing hub code. The Pi owns normalized application state and MQTT publication, polls each configured Agent independently, preserves unavailable optional telemetry as `null`, and publishes retained QoS 1 under `machine/<id>/availability` plus `machine/<id>/dashboard`. Poll cadence, timeout, consecutive-failure threshold and maximum snapshot age are fleet settings. Removing a machine clears its retained machine topics.
 
 Dashboard data can include:
 - CPU;
@@ -540,7 +540,7 @@ Deploy and validate PulseDeck Agent, then integrate machine metrics through the 
 - second deployment on the PC gamer with CPU + MEMORY + NETWORK + GPU;
 - validate the Agent HTTP transport end to end on more than one configured machine;
 - validate dynamic `machine/<id>/...` MQTT schema 1, including optional GPU telemetry;
-- manage add/edit/test/enable/disable/remove operations from PulseDeck Admin;
+- validate discovery-by-IP/hostname, Agent-derived prefill, editable machine type, and add/edit/test/enable/disable/remove operations from PulseDeck Admin;
 - normalize machine state on the Pi before MQTT publication and expose per-machine online/offline availability plus dashboard data.
 
 ### Phase 7 — Advanced UI

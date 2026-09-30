@@ -251,7 +251,7 @@ pulsedeck/v1/machine/<id>/availability
 pulsedeck/v1/machine/<id>/dashboard
 ```
 
-À partir de `patch_0022`, les PC et serveurs supervisés forment une flotte configurable sous `[collectors.machines]` et des tables répétées `[[collectors.machines.devices]]`. Chaque entrée possède un `id` logique stable, un `name` affiché, un `host`, un `port` et un état activé configurés par l’utilisateur. `192.168.0.1` reste uniquement un exemple de saisie ; aucune adresse de machine supervisée n’est compilée dans le hub. Le Pi interroge chaque PulseDeck Agent activé via HTTP en lecture seule (`GET /v1/snapshot`, port TCP `8765` par défaut), valide fraîcheur/santé, normalise le payload réseau Agent et publie en retained QoS 1 schéma 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. CPU, mémoire et réseau sont les capacités Agent obligatoires ; les données GPU sont normalisées lorsque l’Agent les annonce.
+À partir de `patch_0022`, les PC et serveurs supervisés forment une flotte configurable sous `[collectors.machines]` et des tables répétées `[[collectors.machines.devices]]`. À partir de `patch_0023`, le parcours Admin normal commence uniquement par le host/IP de l’Agent (et éventuellement un port non standard) : le Pi lit `/v1/snapshot`, préremplit `id`/`name` depuis l’Agent, propose un `type` modifiable (`server`, `pc`, `laptop`, `other`) à partir des capacités, et conserve host/port modifiables. Chaque entrée enregistrée possède un `id` logique stable, un `name` affiché, un `type`, un `host`, un `port` et un état activé configurés par l’utilisateur. `192.168.0.1` reste uniquement un exemple de saisie ; aucune adresse de machine supervisée n’est compilée dans le hub. Le Pi interroge chaque PulseDeck Agent activé via HTTP en lecture seule (`GET /v1/snapshot`, port TCP `8765` par défaut), valide fraîcheur/santé, normalise le payload réseau Agent et publie en retained QoS 1 schéma 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. CPU, mémoire et réseau sont les capacités Agent obligatoires ; les données GPU sont normalisées lorsque l’Agent les annonce.
 
 Politique QoS V1 :
 - QoS 1 pour les états, disponibilités et snapshots applicatifs ;
@@ -427,7 +427,7 @@ Les métriques machines sont fournies au Pi par des instances PulseDeck Agent. L
 - mini-serveur : CPU + MEMORY + NETWORK ;
 - PC gamer : CPU + MEMORY + NETWORK + GPU.
 
-À partir de `patch_0022`, PulseDeck Admin gère la flotte avec le même modèle de liste d’équipements que Printer : ajouter, modifier, tester, activer/désactiver et retirer une machine sans modifier le code du hub. Le Pi porte l’état applicatif normalisé et la publication MQTT, interroge chaque Agent configuré indépendamment, conserve les télémétries optionnelles indisponibles à `null`, puis publie en retained QoS 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. Cadence de polling, timeout, seuil d’échecs consécutifs et âge maximal du snapshot sont des réglages de flotte. Retirer une machine efface ses topics retained machine.
+À partir de `patch_0023`, PulseDeck Admin simplifie l’ajout d’une machine : saisir l’IP/hostname de l’Agent, le détecter, puis relire/modifier l’ID, le nom affiché, le type, le host et le port préremplis avant enregistrement. Les cartes existantes restent entièrement modifiables et testables. La flotte conserve le même modèle de liste d’équipements que Printer : activer/désactiver ou retirer une machine sans modifier le code du hub. Le Pi porte l’état applicatif normalisé et la publication MQTT, interroge chaque Agent configuré indépendamment, conserve les télémétries optionnelles indisponibles à `null`, puis publie en retained QoS 1 sous `machine/<id>/availability` et `machine/<id>/dashboard`. Cadence de polling, timeout, seuil d’échecs consécutifs et âge maximal du snapshot sont des réglages de flotte. Retirer une machine efface ses topics retained machine.
 
 Les données de dashboard peuvent inclure :
 - CPU ;
@@ -540,7 +540,7 @@ Déployer et valider PulseDeck Agent, puis intégrer les métriques machines via
 - second déploiement sur le PC gamer avec CPU + MEMORY + NETWORK + GPU ;
 - valider de bout en bout le transport HTTP Agent sur plusieurs machines configurées ;
 - valider le schéma MQTT 1 dynamique `machine/<id>/...`, y compris la télémétrie GPU optionnelle ;
-- gérer ajout/modification/test/activation-désactivation/suppression depuis PulseDeck Admin ;
+- valider la découverte par IP/hostname, le préremplissage depuis l’Agent, le type machine modifiable et les opérations ajout/modification/test/activation-désactivation/suppression depuis PulseDeck Admin ;
 - normaliser l’état machine sur le Pi avant publication MQTT et exposer disponibilité online/offline plus dashboard par machine.
 
 ### Phase 7 — UI avancée

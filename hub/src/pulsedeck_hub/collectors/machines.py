@@ -48,6 +48,53 @@ def _metric_value(section: object, key: str) -> object | None:
     return metric.get("value_raw")
 
 
+def discover_agent(
+    host: str,
+    port: int,
+    *,
+    request_timeout: int,
+    max_snapshot_age: int,
+    fetch_json: FetchJson = _fetch_json,
+) -> dict[str, object]:
+    """Discover one Agent from host/port without requiring a preconfigured machine ID."""
+    url = f"http://{host}:{port}/v1/snapshot"
+    payload = fetch_json(url, float(request_timeout))
+    if payload.get("schema") != AGENT_WIRE_SCHEMA or payload.get("protocol") != AGENT_PROTOCOL:
+        raise ValueError("unsupported Agent wire contract")
+    snapshot = payload.get("snapshot")
+    if not isinstance(snapshot, dict) or snapshot.get("schema") != 1:
+        raise ValueError("invalid Agent snapshot")
+    snapshot_ts = snapshot.get("ts")
+    if isinstance(snapshot_ts, bool) or not isinstance(snapshot_ts, int):
+        raise ValueError("Agent snapshot ts must be an integer")
+    now = int(time.time())
+    if snapshot_ts > now + 30 or now - snapshot_ts > max_snapshot_age:
+        raise ValueError("Agent snapshot is stale")
+    agent = snapshot.get("agent")
+    if not isinstance(agent, dict):
+        raise ValueError("Agent identity missing")
+    agent_id = agent.get("id")
+    agent_name = agent.get("name")
+    if not isinstance(agent_id, str) or not agent_id:
+        raise ValueError("Agent id missing")
+    if not isinstance(agent_name, str) or not agent_name:
+        raise ValueError("Agent name missing")
+    capabilities_raw = snapshot.get("capabilities", [])
+    capabilities = [item for item in capabilities_raw if isinstance(item, str)] if isinstance(capabilities_raw, list) else []
+    state = snapshot.get("state")
+    healthy = bool(isinstance(state, dict) and state.get("ok") is True)
+    suggested_type = "pc" if "gpu" in capabilities else "server"
+    return {
+        "host": host,
+        "port": port,
+        "agent": {"id": agent_id, "name": agent_name},
+        "capabilities": capabilities,
+        "healthy": healthy,
+        "ts": snapshot_ts,
+        "suggested": {"id": agent_id, "name": agent_name, "type": suggested_type},
+    }
+
+
 def normalize_agent_snapshot(
     payload: dict[str, object],
     *,
@@ -241,6 +288,7 @@ class MachineCollector:
             return {
                 "id": self.device.id,
                 "name": self.device.name,
+                "type": self.device.machine_type,
                 "enabled": self.device.enabled,
                 "host": self.device.host,
                 "port": self.device.port,
@@ -311,6 +359,7 @@ class MachinesCollector:
                 item = {
                     "id": device.id,
                     "name": device.name,
+                    "type": device.machine_type,
                     "enabled": False,
                     "host": device.host,
                     "port": device.port,
@@ -324,6 +373,7 @@ class MachinesCollector:
                 item = by_id.get(device.id, {
                     "id": device.id,
                     "name": device.name,
+                    "type": device.machine_type,
                     "enabled": True,
                     "host": device.host,
                     "port": device.port,

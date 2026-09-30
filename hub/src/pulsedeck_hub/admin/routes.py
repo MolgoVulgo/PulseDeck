@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import __version__
-from ..collectors.machines import probe_machine
+from ..collectors.machines import discover_agent, probe_machine
 from ..collectors.news import NewsError, build_news_client, normalize_news
 from ..collectors.weather import OpenWeatherClient, WeatherError, geocode_locations
 from ..config import (
@@ -377,6 +377,7 @@ def _machine_device_raw(device: MachineDeviceConfig) -> dict[str, Any]:
     return {
         "id": device.id,
         "name": device.name,
+        "type": device.machine_type,
         "host": device.host,
         "enabled": device.enabled,
         "port": device.port,
@@ -411,6 +412,7 @@ def _machines_runtime_snapshot(runtime: Any) -> dict[str, Any]:
         {
             "id": device.id,
             "name": device.name,
+            "type": device.machine_type,
             "host": device.host,
             "port": device.port,
             "enabled": device.enabled,
@@ -683,6 +685,47 @@ def install_routes(app: FastAPI, runtime: Any) -> None:
     def machines_runtime(request: Request) -> dict[str, Any]:
         _require_auth(request, session_key)
         return _machines_runtime_snapshot(runtime)
+
+    @app.post("/api/machines/discover")
+    async def machines_discover(request: Request) -> dict[str, Any]:
+        _require_mutation_guard(request, session_key)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise _json_error(400, "Invalid body")
+        # Reuse the canonical Machines parser so discovery cannot bypass host/port validation.
+        candidate = _candidate_machines(
+            runtime,
+            {
+                "enabled": True,
+                "poll_interval": runtime.config.machines.poll_interval,
+                "request_timeout": body.get("request_timeout", runtime.config.machines.request_timeout),
+                "offline_after_failures": runtime.config.machines.offline_after_failures,
+                "max_snapshot_age": body.get("max_snapshot_age", runtime.config.machines.max_snapshot_age),
+                "devices": [
+                    {
+                        "id": "discovery",
+                        "name": "Discovery",
+                        "type": "other",
+                        "host": body.get("host"),
+                        "port": body.get("port", 8765),
+                        "enabled": True,
+                    }
+                ],
+            },
+        )
+        device = candidate.devices[0]
+        try:
+            result = discover_agent(
+                device.host,
+                device.port,
+                request_timeout=candidate.request_timeout,
+                max_snapshot_age=candidate.max_snapshot_age,
+            )
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+            LOG.warning("Machine Agent discovery failed for %s:%s: %s", device.host, device.port, exc)
+            raise _json_error(502, str(exc)) from exc
+        LOG.info("Machine Agent discovered at %s:%s: %s", device.host, device.port, result.get("agent"))
+        return {"ok": True, **result}
 
     @app.post("/api/machines/test")
     async def machines_test(request: Request) -> dict[str, Any]:

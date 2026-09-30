@@ -1,7 +1,7 @@
 import json
 import time
 
-from pulsedeck_hub.collectors.machines import MachineCollector, MachinesCollector, normalize_agent_snapshot
+from pulsedeck_hub.collectors.machines import MachineCollector, MachinesCollector, discover_agent, normalize_agent_snapshot
 from pulsedeck_hub.config import MachineDeviceConfig, MachinesConfig
 
 
@@ -51,7 +51,7 @@ class FakeMQTT:
 
 
 def _device(machine_id="mini-server"):
-    return MachineDeviceConfig(id=machine_id, name="Mini serveur", host="10.0.0.42", port=9999)
+    return MachineDeviceConfig(id=machine_id, name="Mini serveur", host="10.0.0.42", machine_type="server", port=9999)
 
 
 def test_normalize_agent_snapshot_is_machine_scoped_and_preserves_gpu() -> None:
@@ -118,3 +118,38 @@ def test_multi_collector_keeps_disabled_devices_in_runtime_snapshot() -> None:
     assert status["enabled_devices"] == 1
     by_id = {item["id"]: item for item in status["devices"]}
     assert by_id["server-b"]["state"] == "disabled"
+
+
+def test_discover_agent_prefills_identity_and_type_from_capabilities() -> None:
+    seen = {}
+
+    def fetch(url, timeout):
+        seen.update(url=url, timeout=timeout)
+        return _wire(gpu=True)
+
+    result = discover_agent(
+        "10.0.0.50",
+        8765,
+        request_timeout=3,
+        max_snapshot_age=10,
+        fetch_json=fetch,
+    )
+    assert seen == {"url": "http://10.0.0.50:8765/v1/snapshot", "timeout": 3.0}
+    assert result["agent"] == {"id": "host-agent", "name": "Host Agent"}
+    assert result["suggested"] == {"id": "host-agent", "name": "Host Agent", "type": "pc"}
+    assert result["healthy"] is True
+    assert "gpu" in result["capabilities"]
+
+
+def test_discover_agent_can_identify_agent_even_when_metrics_are_unhealthy() -> None:
+    wire = _wire()
+    wire["snapshot"]["state"] = {"ok": False}
+    result = discover_agent(
+        "server.local",
+        8765,
+        request_timeout=2,
+        max_snapshot_age=10,
+        fetch_json=lambda url, timeout: wire,
+    )
+    assert result["healthy"] is False
+    assert result["suggested"]["type"] == "server"

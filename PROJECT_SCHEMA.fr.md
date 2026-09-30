@@ -147,6 +147,7 @@ knowledge:
     - "patch_0021 a défini le premier chemin HTTP Agent → Pi ; patch_0022 le généralise en flotte configurable sous [collectors.machines] et des entrées répétées [[collectors.machines.devices]]."
     - "patch_0022 définit le schéma machine 1 dynamique retained QoS 1 sur pulsedeck/v1/machine/<id>/availability et pulsedeck/v1/machine/<id>/dashboard."
     - "Chaque machine possède un id logique stable ainsi qu’un name, host/IP, port et état activé configurés par l’utilisateur ; aucune IP de machine supervisée n’est codée en dur dans le hub. 192.168.0.1 reste uniquement un exemple de documentation/saisie."
+    - "À partir de patch_0023, PulseDeck Admin découvre une nouvelle machine à partir du seul host/IP de son Agent (plus un port non standard optionnel), lit l’identité/capacités Agent via /v1/snapshot puis préremplit les champs id/nom/type/host/port, qui restent modifiables avant enregistrement."
     - "PulseDeck Admin permet d’ajouter, modifier, tester, activer/désactiver et retirer des machines supervisées ; retirer une machine efface ses topics retained machine."
   unresolved:
     - "Schémas exacts des payloads applicatifs hors Weather, News et Machines."
@@ -186,14 +187,15 @@ contracts:
     - "Le transport HTTP Agent est désactivé sauf activation dans /etc/pulsedeck-agent/agent.yml ; adresse d’écoute et port sont configurables, avec port 8765 par défaut et endpoint snapshot fixe /v1/snapshot."
     - "L’endpoint HTTP Agent V1 est en lecture seule et sans authentification uniquement dans le périmètre LAN de confiance actuel ; il ne doit pas être exposé directement à Internet."
   machines:
-    - "La configuration Hub utilise [collectors.machines] et des entrées répétées [[collectors.machines.devices]] avec id stable, nom affiché, host/IP, port et état activé."
+    - "La configuration Hub utilise [collectors.machines] et des entrées répétées [[collectors.machines.devices]] avec id stable, nom affiché, type modifiable (server/pc/laptop/other), host/IP, port et état activé."
     - "Le collector Machines du Pi accepte une ou plusieurs machines configurables, interroge chaque Agent activé indépendamment, rejette les snapshots trop anciens ou non sains et utilise les réglages poll_interval/request_timeout/offline_after_failures/max_snapshot_age."
     - "Le schéma MQTT machine 1 utilise retained QoS 1 sur machine/<id>/availability et machine/<id>/dashboard, où <id> est l’identifiant logique configuré."
     - "Le schéma 1 machine/<id>/dashboard contient schema, ts, source, machine{id,name,host}, agent{id,name}, capabilities et data. data contient toujours cpu{usage_pct,temperature_c,power_w}, memory{used_b,total_b,usage_pct} et network{interface,rx_bps,tx_bps,rx_bytes,tx_bytes} ; gpu{usage_pct,temperature_c,power_w,core_clock_mhz,memory_clock_mhz,vram_used_b,vram_total_b,fan_rpm,fan_pct} est inclus lorsque l’Agent l’annonce/le fournit."
     - "Les télémétries optionnelles indisponibles restent null ; elles ne sont jamais synthétisées à zéro."
     - "machine/<id>/availability utilise le schéma source availability 1 avec source=pulsedeck-agent, state online/offline, ts et last_success/reason optionnels."
     - "Les dashboards machine portent l’identité logique configurée et l’identité/capacités annoncées par l’Agent ; l’id logique n’a pas à être identique à l’id Agent."
-    - "PulseDeck Admin prend en charge ajout/modification/test/activation-désactivation/retrait et recharge la flotte à chaud sans redémarrer le hub."
+    - "PulseDeck Admin prend en charge la découverte par host suivie de champs id/nom/type/host/port modifiables, ainsi que test/activation-désactivation/retrait, et recharge la flotte à chaud sans redémarrer le hub."
+    - "La découverte ne fait qu’une proposition de métadonnées : l’id/nom et les capacités proviennent du snapshot Agent ; le type est proposé à pc lorsque la capacité GPU est annoncée et à server sinon, puis reste modifiable avant enregistrement."
     - "L’ancien [collectors.mini_server] de patch_0021 reste accepté pour migration en mémoire ; le premier enregistrement Machines dans Admin persiste le format multi-équipements canonique et supprime la section legacy."
   weather:
     - "Provider V1 : OpenWeather One Call API 4.0."

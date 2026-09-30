@@ -107,6 +107,7 @@ class MachineDeviceConfig:
     host: str
     enabled: bool = True
     port: int = 8765
+    machine_type: str = "other"
 
 
 @dataclass(frozen=True, slots=True)
@@ -406,6 +407,7 @@ def machines_config_from_mapping(raw: object, *, legacy_mini_server: object = No
                 id="mini-server",
                 name="Mini serveur",
                 host=host,
+                machine_type="server",
                 enabled=True,
                 port=_positive_int(legacy_mini_server.get("port", 8765), "collectors.mini_server.port", maximum=65535),
             ),
@@ -442,11 +444,15 @@ def machines_config_from_mapping(raw: object, *, legacy_mini_server: object = No
         name = item.get("name", machine_id)
         if not isinstance(name, str) or not name.strip() or len(name.strip()) > 128:
             raise ValueError(f"{prefix}.name must be a non-empty string up to 128 characters")
+        machine_type = item.get("type", "other")
+        if not isinstance(machine_type, str) or machine_type not in {"server", "pc", "laptop", "other"}:
+            raise ValueError(f"{prefix}.type must be 'server', 'pc', 'laptop' or 'other'")
         devices.append(
             MachineDeviceConfig(
                 id=machine_id,
                 name=name.strip(),
                 host=_machine_host(item.get("host"), f"{prefix}.host"),
+                machine_type=machine_type,
                 enabled=_bool(item.get("enabled", True), f"{prefix}.enabled"),
                 port=_positive_int(item.get("port", 8765), f"{prefix}.port", maximum=65535),
             )
