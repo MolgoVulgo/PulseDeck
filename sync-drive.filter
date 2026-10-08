@@ -36,7 +36,6 @@
 # Transport : jamais baseline/index
 - /bootstrap/**
 - /patch/**
-- /diagnostics/**
 - /REPO_INDEX.json
 
 # Temporaires
