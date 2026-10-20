@@ -1,1 +1,3 @@
 REPO_INDEX.json
+esp/build/**
+esp/managed_components/**

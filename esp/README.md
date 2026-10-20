@@ -1,11 +1,30 @@
-# PulseDeck ESP — phase 0 (squelette)
+# PulseDeck ESP — bring-up 002
 
-ESP-IDF natif + LVGL 9.5.0. Pas d'EEZ Studio, MQTT, Wi-Fi ou NTP a ce stade.
+Cible: ESP32-S3, ESP-IDF **v5.5**, LVGL **9.5.0**. Le projet est un projet **ESP-IDF natif**, pas PlatformIO.
 
-**Statut : non flashable fonctionnellement.** `display.c` et `touch.c` sont des gardes explicites retournant `ESP_ERR_NOT_SUPPORTED`. L'application refuse donc de rendre sans veritable driver RGB ST7701; le diagnostic LVGL est code mais inatteignable sur carte avant integration du driver. Aucun brochage ni timing n'a ete invente.
+## Compiler sur le poste local (Codex)
 
-Donnees necessaires avant activation : version ESP-IDF retenue, referentiel exact du module ESP32-4848S040C_I, brochage RGB/ST7701, sequence d'initialisation, frequence pixel/timings, GPIO backlight, type/brochage/initialisation du tactile et politique de framebuffer PSRAM/DMA.
+```sh
+cd /home/kaj/Projets/PulseDeck/esp
+pyenv shell 3.12.15    # dans un shell ou pyenv init est actif
+. /home/kaj/esp/esp-idf/export.sh
+idf.py --version       # attendu : ESP-IDF v5.5
+python --version       # attendu : Python 3.12.15
+idf.py set-target esp32s3  # initialisation une fois; modifie sdkconfig
+idf.py build
+```
 
-Cibles de verification **apres** integration materielle : amorcage, PSRAM, framebuffer 480x480, rendu LVGL, tactile, uptime/memoire, stabilite.
+**Ne pas** lancer `pio run -d esp`, ni exporter l'ESP-IDF de `.platformio/packages`. Ne pas lancer `idf.py fullclean` ou de mise a jour automatique des dependances sans accord. Si `pyenv shell` n'est pas disponible, utiliser `eval "$(pyenv init - zsh)"` puis reessayer dans ce shell.
 
-Reference de cablage candidate : https://github.com/NorthernMan54/ESP32-4848S040 (Arduino-GFX / GT911). Broches et timings listes dans PATCH_MANIFEST.md. Le portage ESP-IDF reste a realiser et a valider sur la variante C_I.
+La resolution des composants LVGL/ST7701/GT911 par le gestionnaire ESP-IDF est necessaire lors de la premiere compilation; signaler un echec reseau ou de version, ne pas remplacer arbitrairement les versions.
+
+Le parametre PSRAM `CONFIG_SPIRAM_MODE_OCT` est une **hypothese** de la variante; verifier la variante/flash/PSRAM avant tout flash. Si la carte est QSPI, adapter proprement le menuconfig avec preuve materielle, pas au hasard. Les broches et timings proviennent de NorthernMan54, pas d'une validation physique sur cette carte exacte.
+
+## Premier essai
+
+1. Brancher la carte et relever le port serie par `/dev/serial/by-id/` ou `ls /dev/ttyACM* /dev/ttyUSB*`.
+2. `idf.py -p PORT flash monitor` **uniquement apres compilation reussie et confirmation carte/port**.
+3. Relever les logs de boot, les erreurs LCD/tactile, la couleur, l'orientation, la stabilite et la memoire.
+4. Retourner un diagnostic sous `diagnostics/esp_002/report.md` avec version, commande, statut, erreurs et traces pertinentes (sans secrets).
+
+Le rendu RGB avec copies de surfaces partielles vers framebuffer en PSRAM constitue une implementation initiale non optimisee; performance et absence de tearing a mesurer. Le GT911 n'est pas bloquant si son initialisation echoue.

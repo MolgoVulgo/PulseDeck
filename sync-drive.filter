@@ -24,6 +24,7 @@
 - **/.ruff_cache/**
 - **/.venv/**
 - **/node_modules/**
+- **/managed_components/**
 - **/.next/**
 - **/dist/**
 - **/build/**
