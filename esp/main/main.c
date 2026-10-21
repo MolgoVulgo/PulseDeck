@@ -6,7 +6,8 @@
 #include "freertos/task.h"
 #include "lvgl_port.h"
 #include "touch.h"
-#include "diagnostics.h"
+#include "ui.h"
+#include "esp32_metrics.h"
 
 static const char *TAG = "pulsedeck";
 /* ESP-021 overflowed the default app_main task stack while constructing LVGL widgets.
@@ -34,7 +35,8 @@ static void pd_ui_task(void *arg)
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Tactile indisponible (%s)", esp_err_to_name(err));
     }
-    pd_diagnostics_create();
+    ui_init();
+    pd_esp32_metrics_start();
     TickType_t last_stack_log = xTaskGetTickCount();
     while (true) {
         uint32_t delay_ms = lv_timer_handler();

@@ -5,3 +5,7 @@ CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 # esp-010 experiment: PSRAM bus at 80 MHz. Must also be enabled in existing sdkconfig.
 CONFIG_SPIRAM_SPEED_80M=y
+# ESP03: runtime par tache et identification du temps IDLE sur chaque coeur.
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+CONFIG_FREERTOS_RUN_TIME_COUNTER_TYPE_U64=y
+CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y

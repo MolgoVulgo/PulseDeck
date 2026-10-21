@@ -37,6 +37,17 @@ extern lv_obj_t * ui_esp32_heap_min;
 extern lv_obj_t * ui_esp32_heap;
 extern lv_obj_t * ui_esp32_bloc_libre;
 extern lv_obj_t * ui_esp32_bloc;
+extern lv_obj_t * ui_esp32_panel1;
+extern lv_obj_t * ui_esp32_fps;
+extern lv_obj_t * ui_esp32_lvglrenderms;
+extern lv_obj_t * ui_esp32_label3;
+extern lv_obj_t * ui_esp32_label4;
+extern lv_obj_t * ui_esp32_chiptempc;
+extern lv_obj_t * ui_esp32_wifirssidbm;
+extern lv_obj_t * ui_esp32_uptimesec;
+extern lv_obj_t * ui_esp32_label8;
+extern lv_obj_t * ui_esp32_resetreason;
+extern lv_obj_t * ui_esp32_lvglfps;
 // CUSTOM VARIABLES
 extern lv_obj_t * ui_esp32_system_status;
 extern lv_obj_t * ui_esp32_panel_cpu;
@@ -53,6 +64,12 @@ extern lv_obj_t * ui_esp32_bar_psram;
 extern lv_obj_t * ui_esp32_psram_used_pct;
 extern lv_obj_t * ui_esp32_heap_min_free_kb;
 extern lv_obj_t * ui_esp32_heap_largest_free_kb;
+extern lv_obj_t * ui_esp32_lvgl_render_ms;
+extern lv_obj_t * ui_esp32_chip_temp_c;
+extern lv_obj_t * ui_esp32_wifi_rssi_dbm;
+extern lv_obj_t * ui_esp32_uptime_sec;
+extern lv_obj_t * ui_esp32_reset_reason;
+extern lv_obj_t * ui_esp32_lvgl_fps;
 
 #ifdef __cplusplus
 } /*extern "C"*/

@@ -5,6 +5,12 @@
 
 #include "../ui.h"
 
+lv_obj_t * ui_esp32_lvgl_fps;
+lv_obj_t * ui_esp32_reset_reason;
+lv_obj_t * ui_esp32_uptime_sec;
+lv_obj_t * ui_esp32_wifi_rssi_dbm;
+lv_obj_t * ui_esp32_chip_temp_c;
+lv_obj_t * ui_esp32_lvgl_render_ms;
 lv_obj_t * ui_esp32_heap_largest_free_kb;
 lv_obj_t * ui_esp32_heap_min_free_kb;
 lv_obj_t * ui_esp32_psram_used_pct;
@@ -44,6 +50,17 @@ lv_obj_t * ui_esp32_heap_min = NULL;
 lv_obj_t * ui_esp32_heap = NULL;
 lv_obj_t * ui_esp32_bloc_libre = NULL;
 lv_obj_t * ui_esp32_bloc = NULL;
+lv_obj_t * ui_esp32_panel1 = NULL;
+lv_obj_t * ui_esp32_fps = NULL;
+lv_obj_t * ui_esp32_lvglrenderms = NULL;
+lv_obj_t * ui_esp32_label3 = NULL;
+lv_obj_t * ui_esp32_label4 = NULL;
+lv_obj_t * ui_esp32_chiptempc = NULL;
+lv_obj_t * ui_esp32_wifirssidbm = NULL;
+lv_obj_t * ui_esp32_uptimesec = NULL;
+lv_obj_t * ui_esp32_label8 = NULL;
+lv_obj_t * ui_esp32_resetreason = NULL;
+lv_obj_t * ui_esp32_lvglfps = NULL;
 // event funtions
 
 // build funtions
@@ -71,7 +88,7 @@ void ui_esp32_screen_init(void)
     lv_obj_set_width(ui_esp32_panelcpu, 420);
     lv_obj_set_height(ui_esp32_panelcpu, 140);
     lv_obj_set_x(ui_esp32_panelcpu, 0);
-    lv_obj_set_y(ui_esp32_panelcpu, -120);
+    lv_obj_set_y(ui_esp32_panelcpu, -130);
     lv_obj_set_align(ui_esp32_panelcpu, LV_ALIGN_CENTER);
     lv_obj_remove_flag(ui_esp32_panelcpu, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
@@ -143,7 +160,7 @@ void ui_esp32_screen_init(void)
     lv_obj_set_width(ui_esp32_panelram, 420);
     lv_obj_set_height(ui_esp32_panelram, 140);
     lv_obj_set_x(ui_esp32_panelram, 0);
-    lv_obj_set_y(ui_esp32_panelram, 30);
+    lv_obj_set_y(ui_esp32_panelram, 20);
     lv_obj_set_align(ui_esp32_panelram, LV_ALIGN_CENTER);
     lv_obj_remove_flag(ui_esp32_panelram, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
@@ -232,6 +249,88 @@ void ui_esp32_screen_init(void)
     lv_obj_set_y(ui_esp32_bloc, 100);
     lv_label_set_text(ui_esp32_bloc, "64 KB");
 
+    ui_esp32_panel1 = lv_obj_create(ui_esp32);
+    lv_obj_set_width(ui_esp32_panel1, 420);
+    lv_obj_set_height(ui_esp32_panel1, 100);
+    lv_obj_set_x(ui_esp32_panel1, 0);
+    lv_obj_set_y(ui_esp32_panel1, 150);
+    lv_obj_set_align(ui_esp32_panel1, LV_ALIGN_CENTER);
+    lv_obj_remove_flag(ui_esp32_panel1, LV_OBJ_FLAG_SCROLLABLE);      /// Flags
+
+    ui_esp32_fps = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_fps, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_fps, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_fps, 0);
+    lv_obj_set_y(ui_esp32_fps, -10);
+    lv_label_set_text(ui_esp32_fps, "FPS");
+
+    ui_esp32_lvglrenderms = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_lvglrenderms, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_lvglrenderms, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_lvglrenderms, 0);
+    lv_obj_set_y(ui_esp32_lvglrenderms, 10);
+    lv_obj_set_align(ui_esp32_lvglrenderms, LV_ALIGN_TOP_MID);
+    lv_label_set_text(ui_esp32_lvglrenderms, "text");
+
+    ui_esp32_label3 = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_label3, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_label3, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_label3, 0);
+    lv_obj_set_y(ui_esp32_label3, -10);
+    lv_obj_set_align(ui_esp32_label3, LV_ALIGN_TOP_MID);
+    lv_label_set_text(ui_esp32_label3, "Render");
+
+    ui_esp32_label4 = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_label4, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_label4, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_label4, 0);
+    lv_obj_set_y(ui_esp32_label4, -10);
+    lv_obj_set_align(ui_esp32_label4, LV_ALIGN_TOP_RIGHT);
+    lv_label_set_text(ui_esp32_label4, "Temp.");
+
+    ui_esp32_chiptempc = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_chiptempc, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_chiptempc, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_chiptempc, 0);
+    lv_obj_set_y(ui_esp32_chiptempc, 16);
+    lv_obj_set_align(ui_esp32_chiptempc, LV_ALIGN_TOP_RIGHT);
+    lv_label_set_text(ui_esp32_chiptempc, "text");
+
+    ui_esp32_wifirssidbm = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_wifirssidbm, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_wifirssidbm, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_wifirssidbm, 1);
+    lv_obj_set_y(ui_esp32_wifirssidbm, 55);
+    lv_label_set_text(ui_esp32_wifirssidbm, "text");
+
+    ui_esp32_uptimesec = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_uptimesec, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_uptimesec, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_uptimesec, 191);
+    lv_obj_set_y(ui_esp32_uptimesec, 53);
+    lv_label_set_text(ui_esp32_uptimesec, "text");
+
+    ui_esp32_label8 = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_label8, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_label8, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_label8, 308);
+    lv_obj_set_y(ui_esp32_label8, 55);
+    lv_label_set_text(ui_esp32_label8, "Reset :");
+
+    ui_esp32_resetreason = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_resetreason, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_resetreason, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_resetreason, 363);
+    lv_obj_set_y(ui_esp32_resetreason, 55);
+    lv_label_set_text(ui_esp32_resetreason, "text");
+
+    ui_esp32_lvglfps = lv_label_create(ui_esp32_panel1);
+    lv_obj_set_width(ui_esp32_lvglfps, LV_SIZE_CONTENT);   /// 1
+    lv_obj_set_height(ui_esp32_lvglfps, LV_SIZE_CONTENT);    /// 1
+    lv_obj_set_x(ui_esp32_lvglfps, 4);
+    lv_obj_set_y(ui_esp32_lvglfps, 15);
+    lv_label_set_text(ui_esp32_lvglfps, "28");
+
     ui_esp32_system_status = ui_esp32_systemstatus;
     ui_esp32_panel_cpu = ui_esp32_panelcpu;
     ui_esp32_cpu_freq_mhz = ui_esp32_cpufreqmhz;
@@ -247,6 +346,12 @@ void ui_esp32_screen_init(void)
     ui_esp32_psram_used_pct = ui_esp32_psram;
     ui_esp32_heap_min_free_kb = ui_esp32_heap;
     ui_esp32_heap_largest_free_kb = ui_esp32_bloc;
+    ui_esp32_lvgl_render_ms = ui_esp32_lvglrenderms;
+    ui_esp32_chip_temp_c = ui_esp32_chiptempc;
+    ui_esp32_wifi_rssi_dbm = ui_esp32_wifirssidbm;
+    ui_esp32_uptime_sec = ui_esp32_uptimesec;
+    ui_esp32_reset_reason = ui_esp32_resetreason;
+    ui_esp32_lvgl_fps = ui_esp32_lvglfps;
 
 }
 
@@ -294,5 +399,22 @@ void ui_esp32_screen_destroy(void)
     ui_esp32_bloc_libre = NULL;
     ui_esp32_heap_largest_free_kb = NULL;
     ui_esp32_bloc = NULL;
+    ui_esp32_panel1 = NULL;
+    ui_esp32_fps = NULL;
+    ui_esp32_lvgl_render_ms = NULL;
+    ui_esp32_lvglrenderms = NULL;
+    ui_esp32_label3 = NULL;
+    ui_esp32_label4 = NULL;
+    ui_esp32_chip_temp_c = NULL;
+    ui_esp32_chiptempc = NULL;
+    ui_esp32_wifi_rssi_dbm = NULL;
+    ui_esp32_wifirssidbm = NULL;
+    ui_esp32_uptime_sec = NULL;
+    ui_esp32_uptimesec = NULL;
+    ui_esp32_label8 = NULL;
+    ui_esp32_reset_reason = NULL;
+    ui_esp32_resetreason = NULL;
+    ui_esp32_lvgl_fps = NULL;
+    ui_esp32_lvglfps = NULL;
 
 }
