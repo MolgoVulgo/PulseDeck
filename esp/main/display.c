@@ -150,11 +150,11 @@ esp_err_t pd_display_init(void)
     esp_lcd_rgb_panel_config_t rgb = {
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .timings = {
-            .pclk_hz = 10000000,
+            .pclk_hz = 12000000,
             .h_res = W, .v_res = H,
             .hsync_pulse_width = 8, .hsync_back_porch = 50, .hsync_front_porch = 10,
             .vsync_pulse_width = 8, .vsync_back_porch = 20, .vsync_front_porch = 10,
-            .flags.pclk_active_neg = 1,
+            .flags.pclk_active_neg = 0,
         },
         .data_width = 16, .bits_per_pixel = 16,
         .num_fbs = 1,
@@ -239,6 +239,6 @@ esp_err_t pd_display_init(void)
     lv_display_set_flush_cb(display, flush_cb);
     ESP_LOGI(TAG, "LVGL physical rotation=90 clockwise, handled in flush_cb; LVGL rotation API not used");
     gpio_set_level(GPIO_NUM_38, 1);
-    ESP_LOGI(TAG, "ST7701 initialised 480x480, 10MHz; pin/timing validation pending");
+    ESP_LOGI(TAG, "ST7701 initialised 480x480, 12MHz pclk_active_neg=0; hardware validation pending");
     return ESP_OK;
 }
