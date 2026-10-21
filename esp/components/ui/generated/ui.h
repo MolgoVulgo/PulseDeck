@@ -16,8 +16,7 @@ extern "C" {
 #include "ui_events.h"
 
 ///////////////////// SCREENS ////////////////////
-#include "screens/ui_Start.h"
-#include "screens/ui_Meteo.h"
+#include "screens/ui_esp32.h"
 
 ///////////////////// VARIABLES ////////////////////
 

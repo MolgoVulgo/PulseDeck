@@ -4,3 +4,4 @@ esp/managed_components/**
 diagnostics/**
 esp/ui/backup/**
 esp/ui/cache/**
+esp/ui/autosave/**
