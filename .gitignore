@@ -1,3 +1,6 @@
 REPO_INDEX.json
 esp/build/**
 esp/managed_components/**
+diagnostics/**
+esp/ui/backup/**
+esp/ui/cache/**
