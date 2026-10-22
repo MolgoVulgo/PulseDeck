@@ -46,6 +46,8 @@
 - /tmp/**
 
 # --- PROJET : exclusions confirmées uniquement ---
-# Aucune exclusion projet supplémentaire confirmée.
-
+- /esp/ui/backup/**
+- /esp/ui/cache/**
+- /esp/ui/autosave/**
+- /esp/ui/assets/**
 + /**

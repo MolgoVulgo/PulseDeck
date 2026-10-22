@@ -21,6 +21,7 @@
 
 #define PD_METRICS_PERIOD_MS 1000U
 #define PD_METRICS_LOG_PERIOD_SEC 30ULL
+#define PD_STATUS_INIT_US 2000000LL
 #define PD_RENDER_WINDOW_US 2000000LL
 #define PD_INTERNAL_CAPS (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
 #define PD_PSRAM_CAPS (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
@@ -36,6 +37,9 @@ static float s_render_ms;
 static bool s_fps_valid;
 static bool s_render_valid;
 static uint64_t s_next_log_sec = PD_METRICS_LOG_PERIOD_SEC;
+static int64_t s_status_start_us;
+static bool s_render_hooks_ready;
+static const char *s_logged_status;
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS && CONFIG_FREERTOS_USE_TRACE_FACILITY
 static bool s_cpu_sample_started;
 static uint64_t s_idle_previous[2];
@@ -152,10 +156,27 @@ static float pd_heap_used_percent(uint32_t caps, bool *valid)
     return (float)(total - free_bytes) * 100.0f / (float)total;
 }
 
+/* Statut du service de diagnostic, pas un diagnostic global de tous les futurs
+ * sous-systemes PulseDeck. L'absence de Wi-Fi reste normale a cette etape.
+ * Un ecran statique peut produire 0 rendu/s : ne pas en faire une panne. */
+static const char *pd_status_for_metrics(const pd_esp32_metrics_t *m)
+{
+    const int64_t since_start_us = esp_timer_get_time() - s_status_start_us;
+    if (s_status_start_us == 0 || since_start_us < PD_STATUS_INIT_US) {
+        return "INITIALIZING";
+    }
+    /* Une mesure attendue indisponible est une degradation non bloquante. */
+    if (!s_render_hooks_ready || !m->ram_valid || !m->psram_valid ||
+        !m->cpu_core0_valid || !m->cpu_core1_valid || !m->chip_temp_valid) {
+        return "DEGRADED";
+    }
+    return "RUNNING";
+}
+
 static void pd_collect(pd_esp32_metrics_t *metrics)
 {
     *metrics = (pd_esp32_metrics_t){0};
-    metrics->system_status = "RUNNING";
+    metrics->system_status = "INITIALIZING";
     metrics->cpu_freq_mhz = esp_rom_get_cpu_ticks_per_us();
 
     pd_read_cpu_stats(metrics);
@@ -181,6 +202,7 @@ static void pd_collect(pd_esp32_metrics_t *metrics)
     }
     metrics->uptime_sec = (uint64_t)esp_timer_get_time() / 1000000ULL;
     metrics->reset_reason = pd_reset_text(esp_reset_reason());
+    metrics->system_status = pd_status_for_metrics(metrics);
 }
 
 static int32_t pd_percent_as_bar(float pct)
@@ -236,8 +258,48 @@ static void pd_render(const pd_esp32_metrics_t *metrics)
     pd_label_set_if_changed(ui_esp32_heap_min_free_kb, text);
     snprintf(text, sizeof(text), "%" PRIu32 " KB", metrics->heap_largest_free_kb);
     pd_label_set_if_changed(ui_esp32_heap_largest_free_kb, text);
-    /* Aucun widget nomme n'existe dans l'export SquareLine courant pour les
-     * six autres champs. Ils restent dans la structure et le diagnostic. */
+
+    /* Widgets ajoutes dans l'export SquareLine apres esp_003. Ces pointeurs
+     * sont des alias generes ; ne pas modifier les fichiers SquareLine. */
+    if (metrics->lvgl_fps_valid) {
+        snprintf(text, sizeof(text), "%.1f", (double)metrics->lvgl_fps);
+        pd_label_set_if_changed(ui_esp32_lvgl_fps, text);
+    } else pd_label_set_if_changed(ui_esp32_lvgl_fps, "N/A");
+
+    if (metrics->lvgl_render_valid) {
+        snprintf(text, sizeof(text), "%.1f ms", (double)metrics->lvgl_render_ms);
+        pd_label_set_if_changed(ui_esp32_lvgl_render_ms, text);
+    } else pd_label_set_if_changed(ui_esp32_lvgl_render_ms, "N/A");
+
+    if (metrics->chip_temp_valid) {
+        snprintf(text, sizeof(text), "%.1f C", (double)metrics->chip_temp_c);
+        pd_label_set_if_changed(ui_esp32_chip_temp_c, text);
+    } else pd_label_set_if_changed(ui_esp32_chip_temp_c, "N/A");
+
+    /* Aucun Wi-Fi n'est initialise par le module de metriques : afficher
+     * l'indisponibilite au lieu d'un RSSI fictif. */
+    if (metrics->wifi_rssi_valid) {
+        snprintf(text, sizeof(text), "Wi-Fi %" PRId32 " dBm", metrics->wifi_rssi_dbm);
+        pd_label_set_if_changed(ui_esp32_wifi_rssi_dbm, text);
+    } else pd_label_set_if_changed(ui_esp32_wifi_rssi_dbm, "Wi-Fi N/A");
+
+    /* Format compact pour eviter le chevauchement avec le champ Reset. */
+    if (metrics->uptime_sec < 3600ULL) {
+        snprintf(text, sizeof(text), "Up %" PRIu64 "m%02" PRIu64 "s",
+                 (uint64_t)(metrics->uptime_sec / 60ULL), (uint64_t)(metrics->uptime_sec % 60ULL));
+    } else if (metrics->uptime_sec < 86400ULL) {
+        snprintf(text, sizeof(text), "Up %" PRIu64 "h%02" PRIu64 "m",
+                 (uint64_t)(metrics->uptime_sec / 3600ULL),
+                 (uint64_t)((metrics->uptime_sec / 60ULL) % 60ULL));
+    } else {
+        snprintf(text, sizeof(text), "Up %" PRIu64 "d%" PRIu64 "h",
+                 (uint64_t)(metrics->uptime_sec / 86400ULL),
+                 (uint64_t)((metrics->uptime_sec / 3600ULL) % 24ULL));
+    }
+    pd_label_set_if_changed(ui_esp32_uptime_sec, text);
+    pd_label_set_if_changed(ui_esp32_reset_reason, metrics->reset_reason);
+    /* ui_esp32_ram_used_kb est actuellement associe au titre statique
+     * "RAM Utilisee" dans SquareLine : ne jamais l'ecraser ici. */
 }
 
 static void pd_refresh(lv_timer_t *timer)
@@ -246,6 +308,10 @@ static void pd_refresh(lv_timer_t *timer)
     pd_esp32_metrics_t metrics;
     pd_collect(&metrics);
     pd_render(&metrics);
+    if (!s_logged_status || strcmp(s_logged_status, metrics.system_status) != 0) {
+        ESP_LOGI(TAG, "system_status=%s", metrics.system_status);
+        s_logged_status = metrics.system_status;
+    }
 
     if (metrics.uptime_sec >= s_next_log_sec) {
         ESP_LOGI(TAG,
@@ -279,6 +345,14 @@ static void pd_refresh(lv_timer_t *timer)
 
 void pd_esp32_metrics_start(void)
 {
+    s_status_start_us = esp_timer_get_time();
+    /* INITIALIZING doit etre visible des l'initialisation ; alignement a
+     * droite pour eviter de couper ce texte plus long que RUNNING. */
+    if (ui_esp32_system_status) {
+        lv_obj_align(ui_esp32_system_status, LV_ALIGN_TOP_RIGHT, -10, 10);
+        pd_label_set_if_changed(ui_esp32_system_status, "INITIALIZING");
+    }
+
     temperature_sensor_config_t cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
     esp_err_t err = temperature_sensor_install(&cfg, &s_tsens);
     if (err == ESP_OK) err = temperature_sensor_enable(s_tsens);
@@ -291,12 +365,19 @@ void pd_esp32_metrics_start(void)
     }
 
     lv_display_t *disp = lv_display_get_default();
+    s_render_hooks_ready = (disp != NULL);
     if (disp) {
         lv_display_add_event_cb(disp, pd_render_started, LV_EVENT_RENDER_START, NULL);
         lv_display_add_event_cb(disp, pd_render_finished, LV_EVENT_RENDER_READY, NULL);
     }
     s_window_begin_us = esp_timer_get_time();
-    pd_refresh(NULL);
     lv_timer_t *refresh_timer = lv_timer_create(pd_refresh, PD_METRICS_PERIOD_MS, NULL);
-    if (!refresh_timer) ESP_LOGE(TAG, "Impossible de creer le timer metriques LVGL");
+    if (!refresh_timer) {
+        /* Sans le timer d'actualisation, l'application de metriques est en erreur.
+         * Afficher ERROR directement : aucun rappel periodique ne suivra. */
+        pd_label_set_if_changed(ui_esp32_system_status, "ERROR");
+        ESP_LOGE(TAG, "system_status=ERROR : impossible de creer le timer metriques LVGL");
+        return;
+    }
+    pd_refresh(NULL);
 }
