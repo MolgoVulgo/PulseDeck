@@ -6,3 +6,31 @@ esp/ui/backup/**
 esp/ui/cache/**
 esp/ui/autosave/**
 esp/ui/assets/**
+esp/main/lottie_diag/**
+esp/main/lottie_assets/**
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Outils et configuration locale
+/.agents/
+/.codex/
+/.aws/
+/.env
+/.env.*
+
+# Transport et temporaires
+/bootstrap/
+/patch/
+/web/
+/tmp/
+*.tmp
+*.swp
+*~
+
+# Sauvegarde ESP-IDF
+/esp/sdkconfig.old

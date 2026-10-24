@@ -1,5 +1,7 @@
 # Lecteur Lottie Espressif — icônes météo PulseDeck
 
+> Archive : les dossiers temporaires de tests `esp/main/lottie_diag/` et `esp/main/lottie_assets/` ont été supprimés lors du nettoyage. Les commandes ci-dessous documentent les essais passés et ne sont plus exécutables depuis le dépôt actuel. Les sources restent consultables dans le commit Git `91e7efc`.
+
 Statut (23 octobre 2026) : **moteur de référence retenu**, **validé sur la carte dans un projet ESP-IDF isolé**, **pas encore intégré au firmware principal PulseDeck**. Cette fiche documente la configuration testée et les exigences de migration ; elle ne garantit pas une stabilité de plusieurs heures.
 
 Version de référence anglaise : [`LOTTIE_ESPRESSIF.md`](LOTTIE_ESPRESSIF.md). Configuration matérielle associée : [`LCD_REFERENCE.md`](LCD_REFERENCE.md).

@@ -1,5 +1,7 @@
 # Espressif Lottie player — PulseDeck weather icons
 
+> Historical record: the temporary `esp/main/lottie_diag/` and `esp/main/lottie_assets/` test directories were removed during cleanup. Commands below describe the archived experiments and cannot run from the current checkout. Retrieve them from Git commit `91e7efc` when needed.
+
 Status (2026-10-23): **selected reference engine**, **hardware-validated in an isolated ESP-IDF test**, **not yet integrated into the main PulseDeck firmware**. This document describes the tested configuration and the requirements for subsequent integration; it does not certify long-term operation.
 
 French version: [`LOTTIE_ESPRESSIF.fr.md`](LOTTIE_ESPRESSIF.fr.md). Related hardware configuration: [`LCD_REFERENCE.md`](LCD_REFERENCE.md).

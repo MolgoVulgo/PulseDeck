@@ -1,5 +1,7 @@
 # Test `test_002-4-2` — Lecture Meteocons à moitié de vitesse
 
+> Archive : les dossiers temporaires de tests `esp/main/lottie_diag/` et `esp/main/lottie_assets/` ont été supprimés lors du nettoyage. Les commandes ci-dessous documentent les essais passés et ne sont plus exécutables depuis le dépôt actuel. Les sources restent consultables dans le commit Git `91e7efc`.
+
 ## But
 Reprendre le player Espressif stable de `test_002-4-1` et le ralentir à **50 % de sa vitesse**. Taille inchangée 64×64, JSON original inchangé, pile UI 32 Kio et moteur externe Espressif inchangés.
 

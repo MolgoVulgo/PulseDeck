@@ -1,5 +1,7 @@
 # test_002-4-1 — Espressif Lottie Player, integration independante
 
+> Archive : les dossiers temporaires de tests `esp/main/lottie_diag/` et `esp/main/lottie_assets/` ont été supprimés lors du nettoyage. Les commandes ci-dessous documentent les essais passés et ne sont plus exécutables depuis le dépôt actuel. Les sources restent consultables dans le commit Git `91e7efc`.
+
 ## Pourquoi un projet isole ?
 Le composant `espressif/esp_lv_lottie_player` 0.1.0~1 et le widget `lv_lottie` natif de LVGL 9.5 exportent plusieurs symboles portant le meme nom. Les relier tous deux au firmware PulseDeck principal est incorrect. Le preparateur cree un projet ESP-IDF temporaire sous `/tmp/pulsedeck_external_lottie/` avec la partie d'affichage PulseDeck, les sources UI SquareLine copiees, et une seule implementation Lottie : Espressif. Les fichiers originaux ne sont jamais modifies.
 
