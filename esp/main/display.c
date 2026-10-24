@@ -19,6 +19,7 @@
 static unsigned actual_lines;
 static unsigned failed_flushes;
 static unsigned flush_count;
+static pd_flush_profile_t s_flush_profile;
 static const char *TAG = "pd_display";
 static esp_lcd_panel_handle_t panel;
 static lv_display_t *display;
@@ -60,6 +61,7 @@ static uint32_t sampled_fingerprint(const uint8_t *data, size_t len)
 }
 static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
+    const int64_t flush_begin_us = esp_timer_get_time();
     // ESP-017-1: rotate the actual LVGL RGB565 pixels 90 degrees clockwise.
     // LVGL logical coordinates stay 480x480. This is the ONLY rotation of LVGL;
     // do not also call lv_display_set_rotation() or esp_lcd_panel_swap_xy().
@@ -81,14 +83,31 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
             dst[(size_t)x * W + (size_t)(W - 1 - y)] = src[(size_t)sy * width + sx];
         }
     }
+    const int64_t rotation_end_us = esp_timer_get_time();
     // RGB EDMA sees PSRAM framebuffer; flush CPU cache before completion.
     esp_err_t rc = esp_cache_msync(dst, (size_t)W * H * PIXEL_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    const int64_t sync_end_us = esp_timer_get_time();
+    ++s_flush_profile.count;
+    s_flush_profile.pixels += (uint64_t)width * (uint64_t)height;
+    s_flush_profile.rotate_us += (uint64_t)(rotation_end_us - flush_begin_us);
+    s_flush_profile.sync_us += (uint64_t)(sync_end_us - rotation_end_us);
+    const uint32_t measured_us = (uint32_t)(sync_end_us - flush_begin_us);
+    s_flush_profile.total_us += measured_us;
+    if (measured_us > s_flush_profile.max_us) s_flush_profile.max_us = measured_us;
+    if (rc != ESP_OK) ++s_flush_profile.failures;
     if (rc != ESP_OK && ++failed_flushes <= 8)
         ESP_LOGE(TAG, "ROT90 LVGL cache sync failed: %s", esp_err_to_name(rc));
     if (n <= 20 || n % 250 == 0)
         ESP_LOGI(TAG, "ROT90 LVGL flush #%u area=(%d,%d)-(%ld,%ld) sync=%s", n,
                  x1, y1, (long)area->x2, (long)area->y2, esp_err_to_name(rc));
     lv_display_flush_ready(disp);
+}
+
+void pd_display_flush_profile_take(pd_flush_profile_t *out)
+{
+    if (!out) return;
+    *out = s_flush_profile;
+    memset(&s_flush_profile, 0, sizeof(s_flush_profile));
 }
 
 lv_display_t *pd_display_get(void) { return display; }

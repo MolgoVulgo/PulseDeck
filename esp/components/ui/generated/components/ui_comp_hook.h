@@ -3,24 +3,17 @@
 // LVGL version: 9.5
 // Project name: SquareLine_Project
 
-#ifndef UI_TEST_H
-#define UI_TEST_H
+#ifndef _SQUARELINE_PROJECT_UI_COMP_HOOK_H
+#define _SQUARELINE_PROJECT_UI_COMP_HOOK_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// SCREEN: ui_test
-extern void ui_test_screen_init(void);
-extern void ui_test_screen_destroy(void);
-extern lv_obj_t * ui_test;
-extern lv_obj_t * ui_test_image1;
-// CUSTOM VARIABLES
-extern lv_obj_t * ui_test_Image1;
+void ui_comp_container1_create_hook(lv_obj_t * comp);
 
 #ifdef __cplusplus
 } /*extern "C"*/
 #endif
 
 #endif
-

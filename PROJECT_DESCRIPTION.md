@@ -375,6 +375,12 @@ Initial rules:
 
 ---
 
+### Weather Lottie engine decision (23 October 2026)
+
+For animated weather icons, use **Espressif `esp_lv_lottie_player` with external ThorVG** as the reference implementation. The original two-layer Meteocons `clear-day` JSON was displayed on ESP32-S3 in an **isolated ESP-IDF v5.5 / LVGL 9.5.0** test; a 33 ms frame delay produced an approximately 11.88-second cycle at half speed. The native LVGL Lottie engine must not be linked alongside Espressif's implementation. Create `lv_lottie` in application code inside a SquareLine container; it already inherits from Canvas. The main-firmware integration, long-term stability and memory-leak testing remain pending. See [`docs/esp/LOTTIE_ESPRESSIF.md`](docs/esp/LOTTIE_ESPRESSIF.md) for pinned versions, PSRAM requirements, lifecycle and evidence.
+
+---
+
 ## 10. Planned applications
 
 ### Home

@@ -375,6 +375,12 @@ Règles initiales :
 
 ---
 
+### Décision moteur Lottie météo (23 octobre 2026)
+
+Pour les icônes météo animées, utiliser **Espressif `esp_lv_lottie_player` avec ThorVG externe** comme implémentation de référence. Le JSON Meteocons `clear-day` original, avec ses deux couches, a été affiché sur ESP32-S3 dans un **test ESP-IDF v5.5 / LVGL 9.5.0 isolé**. Le réglage de 33 ms par frame donne un cycle d'environ 11,88 secondes, soit la moitié de la vitesse originale. Ne pas lier le lecteur natif LVGL Lottie simultanément au composant Espressif. Créer `lv_lottie` en code applicatif dans un conteneur SquareLine : le widget hérite déjà de Canvas. L'intégration dans le firmware principal, la stabilité longue durée et les tests de fuite mémoire restent à faire. Détails et preuves : [`docs/esp/LOTTIE_ESPRESSIF.fr.md`](docs/esp/LOTTIE_ESPRESSIF.fr.md).
+
+---
+
 ## 10. Applications envisagées
 
 ### Home

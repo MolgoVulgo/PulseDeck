@@ -13,15 +13,23 @@ extern "C" {
 #include "lvgl.h"
 
 #include "ui_helpers.h"
+#include "components/ui_comp.h"
+#include "components/ui_comp_hook.h"
 #include "ui_events.h"
 
 ///////////////////// SCREENS ////////////////////
-#include "screens/ui_test.h"
+#include "screens/ui_start.h"
+#include "screens/ui_meteo.h"
+#include "screens/ui_esp32.h"
 
 ///////////////////// VARIABLES ////////////////////
 
 // EVENTS
 extern lv_obj_t * ui____initial_actions0;
+
+// IMAGES AND IMAGE SETS
+LV_IMG_DECLARE(ui_img_location_png);    // assets/location.png
+LV_IMG_DECLARE(ui_img_icone_weather_barometer_svg);    // assets/icone_weather/barometer.svg
 
 // FONTS
 LV_FONT_DECLARE(ui_font_Font40);

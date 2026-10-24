@@ -2,6 +2,14 @@
 
 Cible: ESP32-S3, ESP-IDF **v5.5**, LVGL **9.5.0**. Le projet est un projet **ESP-IDF natif**, pas PlatformIO.
 
+Le test `test_002` embarque `esp/ui/assets/meteocons/fill/clear-day.json` depuis les assets locaux (Meteocons Lottie 0.1.0), sans téléchargement au build. Ces assets sont exclus de Git et Drive et doivent être présents sur le poste de compilation. Le profil ESP-IDF `CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE` réserve 1500 Kio à l'application pour accueillir Lottie/ThorVG ; NVS, PHY et l'offset de l'application restent ceux du profil single-app précédent. Ce profil ne fournit pas d'OTA.
+
+## Lecteur Lottie météo retenu
+
+Le moteur de référence pour les icônes animées est **Espressif `esp_lv_lottie_player` + ThorVG externe**, validé sur ESP32-S3 dans les essais isolés `test_002-4-1` (JSON Meteocons complet à sa vitesse d'origine) et `test_002-4-2` (lecture à 50 % : 33 ms/frame). La migration dans le **firmware principal n'est pas encore réalisée** : ne pas confondre les builds de diagnostic sous `/tmp` et `idf.py build` depuis ce dossier.
+
+Guide d'architecture, dépendances, mémoire, SquareLine/Canvas, API de lecture et tests : [`../docs/esp/LOTTIE_ESPRESSIF.fr.md`](../docs/esp/LOTTIE_ESPRESSIF.fr.md) (EN : [`../docs/esp/LOTTIE_ESPRESSIF.md`](../docs/esp/LOTTIE_ESPRESSIF.md)). Les essais Lottie natifs documentés ci-dessus restent historiques.
+
 ## Compiler sur le poste local (Codex)
 
 ```sh

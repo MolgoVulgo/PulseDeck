@@ -5,6 +5,12 @@
 - `components/ui/generated/` : **export SquareLine remplaçable** (`ui.c`, `screens/`, `fonts/`, `filelist.txt`, CMake genere ...).
 - `ui/` : projet SquareLine editable (`SquareLine_Project.spj`, `.slp`, assets). Ne pas confondre avec l'export.
 
+## Icônes météo animées
+
+Pour les nouvelles interfaces, placer un **Panel/Container** SquareLine à l'emplacement de l'icône ; créer le widget **Espressif `lv_lottie`** en code applicatif comme enfant. `lv_lottie` est déjà dérivé de `lv_canvas` : **ne pas ajouter un second Canvas** uniquement pour l'animation. Le widget, les buffers PSRAM et la copie modifiable du JSON relèvent du code applicatif, pas de `generated/`.
+
+Moteur retenu : `esp_lv_lottie_player` avec ThorVG externe. Son succès est validé **dans un projet temporaire isolé**, pas encore dans le build principal. Détails : [`../docs/esp/LOTTIE_ESPRESSIF.fr.md`](../docs/esp/LOTTIE_ESPRESSIF.fr.md).
+
 ## Export
 
 Dans SquareLine Studio, paramétrer **Export UI Files** sur :

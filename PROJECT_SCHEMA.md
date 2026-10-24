@@ -230,6 +230,7 @@ contracts:
     - "Target display hardware: ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 is the UI target; exact version remains unresolved."
     - "Bring-up must validate ST7701 display, touch, PSRAM, Wi-Fi, RGB timings, 480 x 480 rendering and framebuffer stability."
+    - "Weather Lottie reference engine: Espressif esp_lv_lottie_player with external ThorVG, never linked concurrently with native LVGL Lottie/ThorVG; the isolated ESP32-S3 tests validated the original clear-day JSON and a 33 ms/frame half-speed setting. Main-firmware integration and long-term validation remain pending; see docs/esp/LOTTIE_ESPRESSIF.md."
   validation:
     - "V1 must demonstrate a stable Pi <-> ESP32 link."
     - "V1 must demonstrate MQTT outage recovery, retained messages, local cache and fresh/stale/offline states."

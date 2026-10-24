@@ -22,3 +22,6 @@ CONFIG_LV_MEM_POOL_EXPAND_SIZE_KILOBYTES=2048
 # test_002: built-in Lottie widget needs Canvas, ThorVG and vector backend.
 CONFIG_LV_USE_CANVAS=y
 CONFIG_LV_USE_LOTTIE=y
+
+# test_002: Lottie/ThorVG exceeds the default 1 MiB application partition.
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y

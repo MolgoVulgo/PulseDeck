@@ -230,6 +230,7 @@ contracts:
     - "Matériel écran ciblé : ESP32-4848S040C_I, 480 x 480."
     - "LVGL 9 est la cible UI ; sa version exacte reste unresolved."
     - "Le bring-up doit valider écran ST7701, tactile, PSRAM, Wi-Fi, timings RGB, rendu 480 x 480 et stabilité framebuffer."
+    - "Moteur Lottie météo de référence : Espressif esp_lv_lottie_player avec ThorVG externe, jamais lié en parallèle au Lottie/ThorVG natif LVGL ; les tests isolés ESP32-S3 valident le clear-day original et la vitesse réduite via 33 ms/frame. Intégration firmware principal et validation longue durée encore en attente ; voir docs/esp/LOTTIE_ESPRESSIF.fr.md."
   validation:
     - "La V1 doit démontrer une liaison Pi <-> ESP32 stable."
     - "La V1 doit démontrer la reprise après coupure MQTT, retained messages, cache local et états fresh/stale/offline."
