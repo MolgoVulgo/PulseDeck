@@ -5,6 +5,9 @@
 
 #include "../ui.h"
 
+lv_obj_t * ui_meteo_date;
+lv_obj_t * ui_meteo_hours;
+lv_obj_t * ui_meteo;
 lv_obj_t * ui_meteo = NULL;
 lv_obj_t * ui_meteo_label9 = NULL;
 lv_obj_t * ui_meteo_entete = NULL;
@@ -26,6 +29,19 @@ lv_obj_t * ui_meteo_pression = NULL;
 lv_obj_t * ui_meteo_indice_uv = NULL;
 lv_obj_t * ui_meteo_visibilit = NULL;
 // event funtions
+void ui_event_meteo(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_GESTURE &&  lv_indev_get_gesture_dir(lv_indev_active()) == LV_DIR_RIGHT) {
+        lv_indev_wait_release(lv_indev_active());
+        _ui_screen_change(&ui_monitoring, LV_SCREEN_LOAD_ANIM_MOVE_LEFT, 200, 0, &ui_monitoring_screen_init);
+    }
+    if(event_code == LV_EVENT_GESTURE &&  lv_indev_get_gesture_dir(lv_indev_active()) == LV_DIR_LEFT) {
+        lv_indev_wait_release(lv_indev_active());
+        _ui_screen_change(&ui_clock, LV_SCREEN_LOAD_ANIM_MOVE_RIGHT, 200, 0, &ui_clock_screen_init);
+    }
+}
 
 // build funtions
 
@@ -183,6 +199,11 @@ void ui_meteo_screen_init(void)
     lv_obj_set_y(ui_meteo_visibilit, 387);
     lv_obj_remove_flag(ui_meteo_visibilit, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);      /// Flags
 
+    lv_obj_add_event_cb(ui_meteo, ui_event_meteo, LV_EVENT_ALL, NULL);
+    ui_meteo = ui_meteo;
+    ui_meteo_hours = ui_meteo_hours;
+    ui_meteo_date = ui_meteo_date;
+
 }
 
 void ui_meteo_screen_destroy(void)
@@ -191,11 +212,14 @@ void ui_meteo_screen_destroy(void)
 
     // NULL screen variables
     ui_meteo = NULL;
+    ui_meteo = NULL;
     ui_meteo_label9 = NULL;
     ui_meteo_entete = NULL;
     ui_meteo_icone_localisation = NULL;
     ui_meteo_ville = NULL;
     ui_meteo_hours = NULL;
+    ui_meteo_hours = NULL;
+    ui_meteo_date = NULL;
     ui_meteo_date = NULL;
     ui_meteo_meto_actuelle = NULL;
     ui_meteo_iconemeteo = NULL;

@@ -10,7 +10,8 @@
 #include <stdint.h>
 #include <string.h>
 #include "esp_timer.h"
-#include "esp_lcd_panel_rgb.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define W 480
 #define H 480
@@ -26,6 +27,56 @@ static lv_display_t *display;
 static void *draw_buf;
 static uint32_t sampled_fingerprint(const uint8_t *data, size_t len);
 static const uint16_t *rgb_fb;
+// LVGL writes only to the inactive RGB framebuffer. In ESP-IDF v5.5 bounce
+// mode, a VSYNC signal is NOT a confirmation that the RGB driver has stopped
+// reading the old buffer. The on_frame_buf_complete callback is issued after
+// the driver's final bounce-buffer copy from that frame, and after bb_fb_index
+// has been set to cur_fb_index (esp_lcd_panel_rgb.c, fill_bounce_buffer).
+static uint16_t *rgb_fbs[2];
+static unsigned front_fb_idx;
+static SemaphoreHandle_t fb_complete_sem;
+static portMUX_TYPE fb_complete_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t fb_completed_sequence;
+static unsigned swap_timeouts;
+static unsigned swap_failures;
+static uint64_t swap_wait_us_total;
+static uint64_t swap_clone_us_total;
+static uint32_t swap_samples;
+
+static bool pd_on_frame_buf_complete(esp_lcd_panel_handle_t panel_handle,
+                                     const esp_lcd_rgb_panel_event_data_t *event_data, void *user_ctx)
+{
+    BaseType_t higher_priority_woken = pdFALSE;
+    portENTER_CRITICAL_ISR(&fb_complete_lock);
+    ++fb_completed_sequence;
+    portEXIT_CRITICAL_ISR(&fb_complete_lock);
+    if (fb_complete_sem) xSemaphoreGiveFromISR(fb_complete_sem, &higher_priority_woken);
+    return higher_priority_woken == pdTRUE;
+}
+
+static uint32_t pd_completed_sequence_read(void)
+{
+    portENTER_CRITICAL(&fb_complete_lock);
+    uint32_t result = fb_completed_sequence;
+    portEXIT_CRITICAL(&fb_complete_lock);
+    return result;
+}
+
+static bool pd_wait_for_next_dma_frame(uint32_t sequence)
+{
+    const TickType_t timeout = pdMS_TO_TICKS(250);
+    const TickType_t start = xTaskGetTickCount();
+    // A stale semaphore token cannot satisfy this condition; the frame
+    // completion count is sampled only AFTER draw_bitmap() has returned.
+    while (pd_completed_sequence_read() == sequence) {
+        TickType_t elapsed = xTaskGetTickCount() - start;
+        if (elapsed >= timeout || xSemaphoreTake(fb_complete_sem, timeout - elapsed) != pdTRUE) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool framebuffer_accessible;
 uint16_t *pd_display_rgb_fb_get(void) { return framebuffer_accessible ? (uint16_t *)rgb_fb : NULL; }
 static uint32_t total_rows_ok, total_rows_bad;
@@ -74,18 +125,25 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
         lv_display_flush_ready(disp);
         return;
     }
-    uint16_t *dst = (uint16_t *)rgb_fb;
+    uint16_t *dst = rgb_fbs[1U - front_fb_idx];
     const uint16_t *src = (const uint16_t *)px_map;
     // Source(x,y) -> screen(W-1-y,x); pixel data packed per LVGL partial area.
-    for (int sy = 0; sy < height; ++sy) {
-        for (int sx = 0; sx < width; ++sx) {
-            const int x = x1 + sx, y = y1 + sy;
-            dst[(size_t)x * W + (size_t)(W - 1 - y)] = src[(size_t)sy * width + sx];
+    // Iterate physical framebuffer rows first. A rotated column becomes
+    // consecutive PSRAM writes; source reads remain within the LVGL draw buffer.
+    for (int sx = 0; sx < width; ++sx) {
+        uint16_t *out = dst + (size_t)(x1 + sx) * W + (W - 1 - y1);
+        for (int sy = 0; sy < height; ++sy) {
+            *out-- = src[(size_t)sy * width + sx];
         }
     }
     const int64_t rotation_end_us = esp_timer_get_time();
     // RGB EDMA sees PSRAM framebuffer; flush CPU cache before completion.
-    esp_err_t rc = esp_cache_msync(dst, (size_t)W * H * PIXEL_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+    // Each LVGL x-column maps to one complete physical framebuffer row.
+    // Synchronize only the rows touched by the flush; each row is 960 bytes,
+    // hence 64-byte-aligned from the RGB framebuffer base.
+    uint16_t *sync_start = dst + (size_t)x1 * W;
+    size_t sync_bytes = (size_t)width * W * PIXEL_BYTES;
+    esp_err_t rc = esp_cache_msync(sync_start, sync_bytes, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     const int64_t sync_end_us = esp_timer_get_time();
     ++s_flush_profile.count;
     s_flush_profile.pixels += (uint64_t)width * (uint64_t)height;
@@ -97,6 +155,50 @@ static void flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
     if (rc != ESP_OK) ++s_flush_profile.failures;
     if (rc != ESP_OK && ++failed_flushes <= 8)
         ESP_LOGE(TAG, "ROT90 LVGL cache sync failed: %s", esp_err_to_name(rc));
+    if (rc == ESP_OK && lv_display_flush_is_last(disp)) {
+        // Request the new front framebuffer only after all PARTIAL flushes
+        // have finished. In bounce mode, draw_bitmap updates cur_fb_index,
+        // NOT the framebuffer that the driver is currently reading.
+        esp_err_t flip = esp_lcd_panel_draw_bitmap(panel, 0, 0, W, H, dst);
+        if (flip != ESP_OK) {
+            ++swap_failures;
+            ESP_LOGE(TAG, "RGB page flip failed: %s; aborting", esp_err_to_name(flip));
+            abort();
+        }
+        // Read the counter AFTER the request. Even if a frame completion raced
+        // with draw_bitmap(), the next callback necessarily follows the request
+        // and advances bb_fb_index to the requested buffer before signalling.
+        const uint32_t seq_after_request = pd_completed_sequence_read();
+        const int64_t swap_wait_start_us = esp_timer_get_time();
+        if (!pd_wait_for_next_dma_frame(seq_after_request)) {
+            ++swap_timeouts;
+            ESP_LOGE(TAG, "RGB frame-copy completion timeout after page flip; aborting to avoid framebuffer corruption");
+            abort();
+        }
+        const int64_t swap_wait_end_us = esp_timer_get_time();
+        // All reads of the previous framebuffer into the bounce buffers are
+        // finished. It can now become the inactive render target.
+        front_fb_idx = 1U - front_fb_idx;
+        rgb_fb = rgb_fbs[front_fb_idx];
+        uint16_t *inactive = rgb_fbs[1U - front_fb_idx];
+        memcpy(inactive, rgb_fbs[front_fb_idx], (size_t)W * H * PIXEL_BYTES);
+        esp_err_t clone_rc = esp_cache_msync(inactive, (size_t)W * H * PIXEL_BYTES,
+                                              ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+        if (clone_rc != ESP_OK) {
+            ESP_LOGE(TAG, "RGB backbuffer clone cache sync failed: %s", esp_err_to_name(clone_rc));
+            abort();
+        }
+        const int64_t clone_end_us = esp_timer_get_time();
+        swap_wait_us_total += (uint64_t)(swap_wait_end_us - swap_wait_start_us);
+        swap_clone_us_total += (uint64_t)(clone_end_us - swap_wait_end_us);
+        if (++swap_samples % 60 == 0) {
+            ESP_LOGI(TAG, "RGB frame handoff: samples=%lu avg_wait_us=%llu avg_clone_us=%llu timeouts=%u failures=%u",
+                     (unsigned long)swap_samples,
+                     (unsigned long long)(swap_wait_us_total / swap_samples),
+                     (unsigned long long)(swap_clone_us_total / swap_samples),
+                     swap_timeouts, swap_failures);
+        }
+    }
     if (n <= 20 || n % 250 == 0)
         ESP_LOGI(TAG, "ROT90 LVGL flush #%u area=(%d,%d)-(%ld,%ld) sync=%s", n,
                  x1, y1, (long)area->x2, (long)area->y2, esp_err_to_name(rc));
@@ -176,7 +278,7 @@ esp_err_t pd_display_init(void)
             .flags.pclk_active_neg = 0,
         },
         .data_width = 16, .bits_per_pixel = 16,
-        .num_fbs = 1,
+        .num_fbs = 2,
         .bounce_buffer_size_px = W * 10, // two internal SRAM bounce buffers, each 10 lines
         .psram_trans_align = 64,
         .hsync_gpio_num = 16, .vsync_gpio_num = 17,
@@ -217,11 +319,28 @@ esp_err_t pd_display_init(void)
     if (err != ESP_OK) return err;
     // ST7701 returns the underlying RGB handle for non-multiplexed RGB mode.
     // Retrieve once; never interpret the RGB handle's internals directly.
-    void *fb = NULL;
-    esp_err_t fb_err = esp_lcd_rgb_panel_get_frame_buffer(panel, 1, &fb);
-    framebuffer_accessible = (fb_err == ESP_OK && fb != NULL);
-    rgb_fb = (const uint16_t *)fb;
-    ESP_LOGI(TAG, "RGB framebuffer getter=%s ptr=%p enabled=%d", esp_err_to_name(fb_err), fb, framebuffer_accessible);
+    void *fb0 = NULL;
+    void *fb1 = NULL;
+    esp_err_t fb_err = esp_lcd_rgb_panel_get_frame_buffer(panel, 2, &fb0, &fb1);
+    framebuffer_accessible = (fb_err == ESP_OK && fb0 != NULL && fb1 != NULL && fb0 != fb1);
+    if (!framebuffer_accessible) {
+        ESP_LOGE(TAG, "RGB double framebuffer unavailable: %s", esp_err_to_name(fb_err));
+        return fb_err == ESP_OK ? ESP_FAIL : fb_err;
+    }
+    rgb_fbs[0] = fb0;
+    rgb_fbs[1] = fb1;
+    front_fb_idx = 0;
+    rgb_fb = rgb_fbs[0];
+    memset(fb0, 0, (size_t)W * H * PIXEL_BYTES);
+    memset(fb1, 0, (size_t)W * H * PIXEL_BYTES);
+    ESP_ERROR_CHECK(esp_cache_msync(fb0, (size_t)W * H * PIXEL_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M));
+    ESP_ERROR_CHECK(esp_cache_msync(fb1, (size_t)W * H * PIXEL_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M));
+    fb_complete_sem = xSemaphoreCreateBinary();
+    if (!fb_complete_sem) return ESP_ERR_NO_MEM;
+    esp_lcd_rgb_panel_event_callbacks_t cbs = { .on_frame_buf_complete = pd_on_frame_buf_complete };
+    err = esp_lcd_rgb_panel_register_event_callbacks(panel, &cbs, NULL);
+    if (err != ESP_OK) return err;
+    ESP_LOGI(TAG, "RGB double framebuffer fb0=%p fb1=%p with DMA frame-completion handoff", fb0, fb1);
     err = esp_lcd_panel_init(panel);
     if (err != ESP_OK) return err;
     err = esp_lcd_panel_disp_on_off(panel, true);
@@ -236,24 +355,35 @@ esp_err_t pd_display_init(void)
 
     display = lv_display_create(W, H);
     if (!display) return ESP_ERR_NO_MEM;
-    // Manufacturer: INTERNAL | 8BIT, partial buffer 480x200 RGB565.
-    // Leave room for system allocations: fall back to 80 then 40 lines, never silently use PSRAM.
-    const unsigned options[] = {PREFERRED_LINES, 80, 40};
+    // Prefer PSRAM draw storage: the RGB panel framebuffer already resides
+    // in PSRAM, while RGB EDMA uses the driver's internal bounce buffers.
+    // PARTIAL mode does not hand this draw buffer directly to RGB DMA.
     size_t bytes = 0;
-    for (unsigned i = 0; i < sizeof(options)/sizeof(options[0]); ++i) {
-        bytes = W * options[i] * PIXEL_BYTES;
-        draw_buf = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (draw_buf) { actual_lines = options[i]; break; }
-        ESP_LOGW(TAG, "Internal LVGL buffer of %u lines unavailable", options[i]);
+    bool draw_in_psram = false;
+    const unsigned psram_options[] = {240, PREFERRED_LINES, 120};
+    for (unsigned i = 0; i < sizeof(psram_options)/sizeof(psram_options[0]); ++i) {
+        bytes = W * psram_options[i] * PIXEL_BYTES;
+        draw_buf = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (draw_buf) { actual_lines = psram_options[i]; draw_in_psram = true; break; }
+        ESP_LOGW(TAG, "PSRAM LVGL buffer of %u lines unavailable", psram_options[i]);
     }
     if (!draw_buf) {
-        ESP_LOGE(TAG, "No internal LVGL draw buffer available (40 lines minimum)");
+        const unsigned internal_options[] = {80, 40};
+        for (unsigned i = 0; i < sizeof(internal_options)/sizeof(internal_options[0]); ++i) {
+            bytes = W * internal_options[i] * PIXEL_BYTES;
+            draw_buf = heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            if (draw_buf) { actual_lines = internal_options[i]; break; }
+            ESP_LOGW(TAG, "Internal LVGL buffer of %u lines unavailable", internal_options[i]);
+        }
+    }
+    if (!draw_buf) {
+        ESP_LOGE(TAG, "No LVGL draw buffer available (including internal fallback)");
         return ESP_ERR_NO_MEM;
     }
     lv_display_set_color_format(display, LV_COLOR_FORMAT_RGB565);
     lv_display_set_buffers(display, draw_buf, NULL, bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
-    ESP_LOGI(TAG, "LVGL PARTIAL INTERNAL: lines=%u, bytes=%u, ptr=%p, free_internal=%u; RGB timing unchanged",
-             actual_lines, (unsigned)bytes, draw_buf,
+    ESP_LOGI(TAG, "LVGL PARTIAL %s: lines=%u, bytes=%u, ptr=%p, free_internal=%u; RGB timing unchanged",
+             draw_in_psram ? "PSRAM" : "INTERNAL", actual_lines, (unsigned)bytes, draw_buf,
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     lv_display_set_flush_cb(display, flush_cb);
     ESP_LOGI(TAG, "LVGL physical rotation=90 clockwise, handled in flush_cb; LVGL rotation API not used");

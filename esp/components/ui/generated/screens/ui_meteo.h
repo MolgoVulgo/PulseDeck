@@ -13,6 +13,7 @@ extern "C" {
 // SCREEN: ui_meteo
 extern void ui_meteo_screen_init(void);
 extern void ui_meteo_screen_destroy(void);
+extern void ui_event_meteo(lv_event_t * e);
 extern lv_obj_t * ui_meteo;
 extern lv_obj_t * ui_meteo_label9;
 extern lv_obj_t * ui_meteo_entete;
@@ -34,6 +35,9 @@ extern lv_obj_t * ui_meteo_pression;
 extern lv_obj_t * ui_meteo_indice_uv;
 extern lv_obj_t * ui_meteo_visibilit;
 // CUSTOM VARIABLES
+extern lv_obj_t * ui_meteo;
+extern lv_obj_t * ui_meteo_hours;
+extern lv_obj_t * ui_meteo_date;
 
 #ifdef __cplusplus
 } /*extern "C"*/

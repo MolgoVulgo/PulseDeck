@@ -62,6 +62,15 @@ lv_obj_t * ui_esp32_reste = NULL;
 lv_obj_t * ui_esp32_resetreason = NULL;
 lv_obj_t * ui_esp32_lvglfps = NULL;
 // event funtions
+void ui_event_esp32(lv_event_t * e)
+{
+    lv_event_code_t event_code = lv_event_get_code(e);
+
+    if(event_code == LV_EVENT_GESTURE &&  lv_indev_get_gesture_dir(lv_indev_active()) == LV_DIR_LEFT) {
+        lv_indev_wait_release(lv_indev_active());
+        _ui_screen_change(&ui_monitoring, LV_SCREEN_LOAD_ANIM_MOVE_RIGHT, 200, 0, &ui_monitoring_screen_init);
+    }
+}
 
 // build funtions
 
@@ -331,6 +340,7 @@ void ui_esp32_screen_init(void)
     lv_obj_set_y(ui_esp32_lvglfps, 15);
     lv_label_set_text(ui_esp32_lvglfps, "28");
 
+    lv_obj_add_event_cb(ui_esp32, ui_event_esp32, LV_EVENT_ALL, NULL);
     ui_esp32_system_status = ui_esp32_systemstatus;
     ui_esp32_panel_cpu = ui_esp32_panelcpu;
     ui_esp32_cpu_freq_mhz = ui_esp32_cpufreqmhz;

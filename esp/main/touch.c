@@ -16,8 +16,10 @@ static void read_cb(lv_indev_t *indev, lv_indev_data_t *data)
     if (esp_lcd_touch_read_data(tp) == ESP_OK &&
         esp_lcd_touch_get_data(tp, pts, &count, 1) == ESP_OK && count) {
         data->state = LV_INDEV_STATE_PRESSED;
-        data->point.x = pts[0].x;
-        data->point.y = pts[0].y;
+        // Display flush rotates LVGL logical coordinates 90 degrees clockwise.
+        // Apply the inverse mapping to GT911 coordinates after driver mirroring.
+        data->point.x = pts[0].y;
+        data->point.y = 479 - pts[0].x;
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
     }
@@ -51,6 +53,6 @@ esp_err_t pd_touch_init(void)
     lv_indev_set_type(pointer, LV_INDEV_TYPE_POINTER);
     lv_indev_set_display(pointer, pd_display_get());
     lv_indev_set_read_cb(pointer, read_cb);
-    ESP_LOGI(TAG, "GT911 linked (orientation tentative)");
+    ESP_LOGI(TAG, "GT911 linked (inverse software display rotation)");
     return ESP_OK;
 }

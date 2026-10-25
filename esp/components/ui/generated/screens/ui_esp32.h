@@ -13,6 +13,7 @@ extern "C" {
 // SCREEN: ui_esp32
 extern void ui_esp32_screen_init(void);
 extern void ui_esp32_screen_destroy(void);
+extern void ui_event_esp32(lv_event_t * e);
 extern lv_obj_t * ui_esp32;
 extern lv_obj_t * ui_esp32_system;
 extern lv_obj_t * ui_esp32_systemstatus;
